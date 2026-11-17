@@ -26,3 +26,5 @@ These are six proposed backend work packages, not final physical roster. M7 is l
 | CI and central docs | M4/M7 coordinated, designate one writer per file | affected owners |
 
 Never create a second generation orchestrator in M4/M5, duplicate editor validation in M3, duplicate auth business logic in M4 or duplicate RAG retrieval in M6. M1 identity/business ownership; M4 shared auth infrastructure. M6 owns generation selection; M3 consumes selected reference. Exact class names and API routes are candidates until real code audit. Admin ownership gap remains.
+
+Actual-path note (2026-11-17, develop `b03430e`): M3 code exists at `src/BuildMind.Application/Features/PlanEditor/`, `python-services/app/plan_editor/`, `tests/BuildMind.Application.ContractTests/` and `docs/proposals/m3-plan-editor/`. The table above lists proposed paths; reconciliation pending (G18).

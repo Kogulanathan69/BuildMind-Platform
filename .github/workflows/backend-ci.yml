@@ -12,7 +12,14 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - run: dotnet build src/BuildMind.API/BuildMind.API.csproj --configuration Release
+      # Job name kept as dotnet-build so any existing required-check name is unaffected.
+      # The solution includes the API project, so this still covers the previous API build.
+      - name: Restore solution
+        run: dotnet restore BuildMind.sln
+      - name: Build solution
+        run: dotnet build BuildMind.sln --configuration Release --no-restore
+      - name: Run C# tests
+        run: dotnet test BuildMind.sln --configuration Release --no-build --verbosity normal
   python-tests:
     runs-on: ubuntu-latest
     steps:

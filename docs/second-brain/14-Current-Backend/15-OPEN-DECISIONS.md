@@ -17,5 +17,21 @@
 | G13 | Actual CI gates/main branch protection/names | Lead GitHub review |
 | G14 | Google Sheets automation alternative setup | Optional; do not block code |
 | G15 | Performance targets, release support envelope, deployment and recovery | QA/product signoff |
+| G16 | `python-services/app/geometry`, `plans`, `validation` READMEs still state whole-module M6 ownership; V3 splits geometry/land (M2), plans/editor (M3), generation/validation (M6) | **RESOLVED 2026-11-17** — lead approved; geometry/plans/validation READMEs reconciled (BE-M7-D01) |
+| G17 | Smart App Control on the lead's workstation blocks loading unsigned freshly built C# assemblies (test host and API run); local C# test execution and API smoke check blocked | Device owner/lead: choose a policy-compliant execution path (e.g. CI on Linux, separate dev environment, approved code-signing); no bypass |
+| G18 | M3 merged code uses paths differing from V3 proposals (`python-services/app/plan_editor` vs `plans/editor`; `docs/proposals/m3-plan-editor`), and its C# console contract runner is not in `BuildMind.sln` or CI | Lead + M3 (+ M4 for solution/CI): accept actual paths in 10-OWNERSHIP; decide solution/CI inclusion |
 
 Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be explicitly labeled. No unsupported compliance, delivery readiness, or live integration claims.
+
+## Status notes — 2026-11-17 (nothing below resolves a decision)
+- G01: lead currently holds M4 + M7 (lead decision 2026-11-17); remaining allocation **open**.
+- G02: audited 2026-11-17 — see [audit](../17-Progress/07-AUDIT-2026-11-17.md).
+- G03, G04, G11, G13: **open**; lead asked to keep EF Core MySQL provider, disposable DB/test account, error format/API prefix, internal service auth and main/develop divergence open until separately reviewed.
+- G09: admin module ownership **open**.
+- G10: candidate canonical RAG path identified (`C:\BuildMind-PDF-Processor\regulation_retrieval`), not yet explicitly confirmed; RAG repository structure **open** — see [proposal](16-RAG-SOURCE-STRATEGY-PROPOSAL.md).
+
+- 2026-11-17 (D01a): G16 resolved. G17 opened. G03/G04/G09/G10/G11/G13 and final roster remain open.
+
+- 2026-11-17 (develop sync): G13 changed — `main` deleted on the remote; branch `main-→-develop` at former main `d606f00`; `origin/HEAD` dangling locally. Still open. G18 opened.
+
+- 2026-11-17 (lead): default branch intentionally changed to `develop`; the former `main` was accidentally renamed to `main-→-develop`. G13 stays open until the production branch name and protection rules are corrected. G17 and G18 stay open after D01a CI verification.

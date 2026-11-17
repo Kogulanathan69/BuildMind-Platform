@@ -15,3 +15,6 @@ Get-ChildItem src -Recurse -Filter *.csproj
 Get-ChildItem python-services -Force
 ```
 Inspect current repository and `.env.example` redacting values. Local installation commands are conditional after approval; use project venv (not global packages). Existing smoke commands historically: `dotnet build src/BuildMind.API/BuildMind.API.csproj`; in python-services `\.venv\Scripts\python.exe -m pytest` (use `.\.venv\Scripts\python.exe` in PowerShell). Verify DB port/target and credentials securely; do not print secrets. Use separate disposable DB for tests. Do not claim MySQL integrated merely because server installed. C# /health liveness separate readiness. Ports/config names discover from actual appsettings and environment; proposed configuration keys tracked after audit.
+
+## Solution commands (from BE-M4-D01a, 2026-11-17)
+`dotnet restore BuildMind.sln`, `dotnet build BuildMind.sln`, `dotnet test BuildMind.sln`. CI runs the same in Release on ubuntu-latest. On the lead's Windows workstation, Smart App Control (inbox policy `{0283ac0f-fff1-49ae-ada1-8a933130cad6}`) blocked the test host and a direct run of the newly built `BuildMind.API.dll`; restore/build are unaffected. See G17.

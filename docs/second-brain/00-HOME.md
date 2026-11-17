@@ -22,6 +22,8 @@ Start at [Active V3 guide](14-Current-Backend/00-START-HERE.md). This is the sin
 - [14-GIT-DELIVERY](14-Current-Backend/14-GIT-DELIVERY.md)
 - [15-OPEN-DECISIONS](14-Current-Backend/15-OPEN-DECISIONS.md)
 - [16-RAG-SOURCE-STRATEGY-PROPOSAL](14-Current-Backend/16-RAG-SOURCE-STRATEGY-PROPOSAL.md) (proposal)
+- [17-SHARED-CONVENTIONS-PROPOSAL](14-Current-Backend/17-SHARED-CONVENTIONS-PROPOSAL.md) (proposals + lead decision record 2026-11-18)
+- [18-MYSQL-PROVIDER-STUDY](14-Current-Backend/18-MYSQL-PROVIDER-STUDY.md) (study; conditional testing approval only)
 
 ## Team and AI development
 - [Member plans (M1–M7)](15-Member-Plans/00-INDEX.md)

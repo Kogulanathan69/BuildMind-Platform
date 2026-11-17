@@ -1,3 +1,5 @@
+> **HISTORICAL V2 — superseded where inconsistent.** Do not execute old paths, ownership, payment or technology choices. See [current V3 home](../00-HOME.md).
+
 # Database and EF Core migration ownership
 
 **Current proposed target: MySQL 8.x.** Older vault documents mention MSSQL; see [[15-OPEN-DECISIONS-AND-RECONCILIATION]]. No actual schema is claimed implemented.

@@ -1,3 +1,5 @@
+> **HISTORICAL V2 — superseded where inconsistent.** Do not execute old paths, ownership, payment or technology choices. See [current V3 home](../00-HOME.md).
+
 # Bootstrap, protected branches and CI
 
 **Existing repositories were not audited for this package. Do not blindly overwrite existing source.**

@@ -1,3 +1,5 @@
+> **HISTORICAL V2 — superseded where inconsistent.** Do not execute old paths, ownership, payment or technology choices. See [current V3 home](../00-HOME.md).
+
 # Seven members × seven days: exact implementation assignments
 
 Planning board only; estimates require team confirmation. All tasks must link to issue ID, owner, branch, PR, tests and daily deliverable. Every developer maintains their own unit tests.

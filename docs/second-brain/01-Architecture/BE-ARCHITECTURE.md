@@ -1,3 +1,5 @@
+> **HISTORICAL V2 — superseded where inconsistent.** Do not execute old paths, ownership, payment or technology choices. See [current V3 home](../00-HOME.md).
+
 # C#/.NET backend architecture
 
 > **Status:** Proposed knowledge design

@@ -1,3 +1,5 @@
+> **HISTORICAL V2 — superseded where inconsistent.** Do not execute old paths, ownership, payment or technology choices. See [current V3 home](../00-HOME.md).
+
 # End-to-end file-level connection flows
 
 All route names below are **proposed contract examples** until approved and implemented. Replace sample paths once real OpenAPI is merged.

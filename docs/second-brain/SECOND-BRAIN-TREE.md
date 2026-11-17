@@ -1,43 +1,89 @@
-# BuildMind BE Second Brain — Master Tree
+# Document index
 
-Home: [[00-HOME]]
+[Current home](00-HOME.md)
 
-## Common authoritative project-context snapshots
-- [[PROJECT-OVERVIEW]]
-- [[PROJECT-SCOPE]]
-- [[FUNCTIONAL-REQUIREMENTS]]
-- [[USER-FLOW]]
-- [[SRI-LANKAN-BUILDING-RULES]]
-- [[REGULATORY-SOURCES]]
-- [[SYSTEM-ARCHITECTURE]]
-- [[PROJECT-QA]]
-- [[PROJECT-DECISIONS]]
-- [[PROJECT-GAPS]]
-
-## BE domain knowledge
-- [[BE-ARCHITECTURE]]
-- [[TECHNOLOGY-STACK]]
-- [[PROJECT-LIFECYCLE]]
-- [[DATA-MODEL]]
-- [[API-BOUNDARIES]]
-- [[SURVEY-PIPELINE]]
-- [[JURISDICTION]]
-- [[RULES-ENGINE]]
-- [[AI-PLAN-GENERATION]]
-- [[CUSTOMER-CHATBOT]]
-- [[FLOOR-PLAN-GEOMETRY]]
-- [[PAYMENT-DOWNLOAD]]
-- [[BE-TEST-SCENARIOS]]
-
-## Q&A, evidence and decisions
-- [[QUESTIONS-AND-ANSWERS]]
-- [[KNOWLEDGE-GAPS]]
-- [[EVIDENCE-REGISTER]]
-- [[DECISION-REGISTER]]
-- [[CHANGE-LOG]]
-
-These shared document copies are snapshots; update both vaults if the common scope changes.
-
-
-## New: 7-member Clean Architecture ownership and GitHub workflow
-See [[00-START-HERE]] inside `13-Implementation-Blueprint/`. New docs reflect current proposed scope; older notes are preserved as historical context. See [[15-OPEN-DECISIONS-AND-RECONCILIATION]].
+- [00-HOME-V2-HISTORICAL.md](00-HOME-V2-HISTORICAL.md)
+- [00-HOME.md](00-HOME.md)
+- [00-Shared-Project-Context/FUNCTIONAL-REQUIREMENTS.md](00-Shared-Project-Context/FUNCTIONAL-REQUIREMENTS.md)
+- [00-Shared-Project-Context/PROJECT-DECISIONS.md](00-Shared-Project-Context/PROJECT-DECISIONS.md)
+- [00-Shared-Project-Context/PROJECT-GAPS.md](00-Shared-Project-Context/PROJECT-GAPS.md)
+- [00-Shared-Project-Context/PROJECT-OVERVIEW.md](00-Shared-Project-Context/PROJECT-OVERVIEW.md)
+- [00-Shared-Project-Context/PROJECT-QA.md](00-Shared-Project-Context/PROJECT-QA.md)
+- [00-Shared-Project-Context/PROJECT-SCOPE.md](00-Shared-Project-Context/PROJECT-SCOPE.md)
+- [00-Shared-Project-Context/REGULATORY-SOURCES.md](00-Shared-Project-Context/REGULATORY-SOURCES.md)
+- [00-Shared-Project-Context/SRI-LANKAN-BUILDING-RULES.md](00-Shared-Project-Context/SRI-LANKAN-BUILDING-RULES.md)
+- [00-Shared-Project-Context/SYSTEM-ARCHITECTURE.md](00-Shared-Project-Context/SYSTEM-ARCHITECTURE.md)
+- [00-Shared-Project-Context/USER-FLOW.md](00-Shared-Project-Context/USER-FLOW.md)
+- [01-Architecture/BE-ARCHITECTURE.md](01-Architecture/BE-ARCHITECTURE.md)
+- [01-Architecture/TECHNOLOGY-STACK.md](01-Architecture/TECHNOLOGY-STACK.md)
+- [02-Domain/DATA-MODEL.md](02-Domain/DATA-MODEL.md)
+- [02-Domain/PROJECT-LIFECYCLE.md](02-Domain/PROJECT-LIFECYCLE.md)
+- [03-API/API-BOUNDARIES.md](03-API/API-BOUNDARIES.md)
+- [04-Survey/SURVEY-PIPELINE.md](04-Survey/SURVEY-PIPELINE.md)
+- [05-Location/JURISDICTION.md](05-Location/JURISDICTION.md)
+- [06-Rules/RULES-ENGINE.md](06-Rules/RULES-ENGINE.md)
+- [07-AI/AI-PLAN-GENERATION.md](07-AI/AI-PLAN-GENERATION.md)
+- [07-AI/CUSTOMER-CHATBOT.md](07-AI/CUSTOMER-CHATBOT.md)
+- [08-Plan/FLOOR-PLAN-GEOMETRY.md](08-Plan/FLOOR-PLAN-GEOMETRY.md)
+- [09-Payment/PAYMENT-DOWNLOAD.md](09-Payment/PAYMENT-DOWNLOAD.md)
+- [10-Quality/BE-TEST-SCENARIOS.md](10-Quality/BE-TEST-SCENARIOS.md)
+- [11-QA/EVIDENCE-REGISTER.md](11-QA/EVIDENCE-REGISTER.md)
+- [11-QA/KNOWLEDGE-GAPS.md](11-QA/KNOWLEDGE-GAPS.md)
+- [11-QA/QUESTIONS-AND-ANSWERS.md](11-QA/QUESTIONS-AND-ANSWERS.md)
+- [12-Decisions/CHANGE-LOG.md](12-Decisions/CHANGE-LOG.md)
+- [12-Decisions/DECISION-REGISTER.md](12-Decisions/DECISION-REGISTER.md)
+- [13-Implementation-Blueprint/00-START-HERE.md](13-Implementation-Blueprint/00-START-HERE.md)
+- [13-Implementation-Blueprint/01-SOLUTION-AND-DEPENDENCIES.md](13-Implementation-Blueprint/01-SOLUTION-AND-DEPENDENCIES.md)
+- [13-Implementation-Blueprint/02-COMPLETE-FOLDER-TREE.md](13-Implementation-Blueprint/02-COMPLETE-FOLDER-TREE.md)
+- [13-Implementation-Blueprint/03-FILE-OWNERSHIP-REGISTER.md](13-Implementation-Blueprint/03-FILE-OWNERSHIP-REGISTER.md)
+- [13-Implementation-Blueprint/04-MEMBER-DAILY-WORK.md](13-Implementation-Blueprint/04-MEMBER-DAILY-WORK.md)
+- [13-Implementation-Blueprint/05-API-AND-DATA-FLOWS.md](13-Implementation-Blueprint/05-API-AND-DATA-FLOWS.md)
+- [13-Implementation-Blueprint/06-GIT-BRANCH-PR-CONFLICT-POLICY.md](13-Implementation-Blueprint/06-GIT-BRANCH-PR-CONFLICT-POLICY.md)
+- [13-Implementation-Blueprint/07-INTERFACE-CONTRACTS.md](13-Implementation-Blueprint/07-INTERFACE-CONTRACTS.md)
+- [13-Implementation-Blueprint/08-DATABASE-AND-MIGRATIONS.md](13-Implementation-Blueprint/08-DATABASE-AND-MIGRATIONS.md)
+- [13-Implementation-Blueprint/09-TESTING-AND-QUALITY-GATES.md](13-Implementation-Blueprint/09-TESTING-AND-QUALITY-GATES.md)
+- [13-Implementation-Blueprint/10-CHANGE-CONTROL-AND-HANDOFFS.md](13-Implementation-Blueprint/10-CHANGE-CONTROL-AND-HANDOFFS.md)
+- [13-Implementation-Blueprint/11-SECURITY-AND-MVP-SCOPE.md](13-Implementation-Blueprint/11-SECURITY-AND-MVP-SCOPE.md)
+- [13-Implementation-Blueprint/12-REPO-BOOTSTRAP-AND-CI.md](13-Implementation-Blueprint/12-REPO-BOOTSTRAP-AND-CI.md)
+- [13-Implementation-Blueprint/13-EXAMPLE-VERTICAL-SLICES.md](13-Implementation-Blueprint/13-EXAMPLE-VERTICAL-SLICES.md)
+- [13-Implementation-Blueprint/14-TEAM-CHECKLISTS-AND-TEMPLATES.md](13-Implementation-Blueprint/14-TEAM-CHECKLISTS-AND-TEMPLATES.md)
+- [13-Implementation-Blueprint/15-OPEN-DECISIONS-AND-RECONCILIATION.md](13-Implementation-Blueprint/15-OPEN-DECISIONS-AND-RECONCILIATION.md)
+- [13-Implementation-Blueprint/16-OBSIDIAN-OWNERSHIP-NAVIGATION.md](13-Implementation-Blueprint/16-OBSIDIAN-OWNERSHIP-NAVIGATION.md)
+- [14-Current-Backend/00-START-HERE.md](14-Current-Backend/00-START-HERE.md)
+- [14-Current-Backend/01-SCOPE-DECISIONS.md](14-Current-Backend/01-SCOPE-DECISIONS.md)
+- [14-Current-Backend/02-BUSINESS-AND-FUNCTIONAL.md](14-Current-Backend/02-BUSINESS-AND-FUNCTIONAL.md)
+- [14-Current-Backend/03-ARCHITECTURE.md](14-Current-Backend/03-ARCHITECTURE.md)
+- [14-Current-Backend/04-DATABASE.md](14-Current-Backend/04-DATABASE.md)
+- [14-Current-Backend/05-API-CONTRACTS.md](14-Current-Backend/05-API-CONTRACTS.md)
+- [14-Current-Backend/06-WORKFLOWS.md](14-Current-Backend/06-WORKFLOWS.md)
+- [14-Current-Backend/07-GEOMETRY.md](14-Current-Backend/07-GEOMETRY.md)
+- [14-Current-Backend/08-RAG.md](14-Current-Backend/08-RAG.md)
+- [14-Current-Backend/09-ADMIN.md](14-Current-Backend/09-ADMIN.md)
+- [14-Current-Backend/10-OWNERSHIP.md](14-Current-Backend/10-OWNERSHIP.md)
+- [14-Current-Backend/11-SECURITY.md](14-Current-Backend/11-SECURITY.md)
+- [14-Current-Backend/12-QA.md](14-Current-Backend/12-QA.md)
+- [14-Current-Backend/13-ENVIRONMENT.md](14-Current-Backend/13-ENVIRONMENT.md)
+- [14-Current-Backend/14-GIT-DELIVERY.md](14-Current-Backend/14-GIT-DELIVERY.md)
+- [14-Current-Backend/15-OPEN-DECISIONS.md](14-Current-Backend/15-OPEN-DECISIONS.md)
+- [15-Member-Plans/00-INDEX.md](15-Member-Plans/00-INDEX.md)
+- [15-Member-Plans/M1-AUTH-PROJECTS.md](15-Member-Plans/M1-AUTH-PROJECTS.md)
+- [15-Member-Plans/M2-SURVEY-LAND.md](15-Member-Plans/M2-SURVEY-LAND.md)
+- [15-Member-Plans/M3-PLAN-EDITOR.md](15-Member-Plans/M3-PLAN-EDITOR.md)
+- [15-Member-Plans/M4-INFRASTRUCTURE.md](15-Member-Plans/M4-INFRASTRUCTURE.md)
+- [15-Member-Plans/M5-REQUIREMENTS-REPORTS.md](15-Member-Plans/M5-REQUIREMENTS-REPORTS.md)
+- [15-Member-Plans/M6-AI-GENERATION.md](15-Member-Plans/M6-AI-GENERATION.md)
+- [15-Member-Plans/M7-RAG-INTEGRATION.md](15-Member-Plans/M7-RAG-INTEGRATION.md)
+- [16-AI-Development/01-DEVELOPMENT-RULES.md](16-AI-Development/01-DEVELOPMENT-RULES.md)
+- [16-AI-Development/02-CODING-STANDARDS.md](16-AI-Development/02-CODING-STANDARDS.md)
+- [16-AI-Development/03-PROMPTS-AND-AGENT-PATTERNS.md](16-AI-Development/03-PROMPTS-AND-AGENT-PATTERNS.md)
+- [16-AI-Development/04-M4-M7-IMPLEMENTATION-ROADMAP.md](16-AI-Development/04-M4-M7-IMPLEMENTATION-ROADMAP.md)
+- [16-AI-Development/05-CHANGE-REQUEST-TEMPLATES.md](16-AI-Development/05-CHANGE-REQUEST-TEMPLATES.md)
+- [17-Progress/01-BASELINE.md](17-Progress/01-BASELINE.md)
+- [17-Progress/02-TASK-REGISTER.md](17-Progress/02-TASK-REGISTER.md)
+- [17-Progress/03-EVIDENCE-REGISTER.md](17-Progress/03-EVIDENCE-REGISTER.md)
+- [17-Progress/04-SESSION-HANDOVER.md](17-Progress/04-SESSION-HANDOVER.md)
+- [17-Progress/05-CHANGE-LOG.md](17-Progress/05-CHANGE-LOG.md)
+- [17-Progress/06-SOURCES.md](17-Progress/06-SOURCES.md)
+- [README-V2-HISTORICAL.md](README-V2-HISTORICAL.md)
+- [README.md](README.md)
+- [SECOND-BRAIN-TREE-V2-HISTORICAL.md](SECOND-BRAIN-TREE-V2-HISTORICAL.md)

@@ -12,7 +12,7 @@ Do not consider an endpoint implemented until code, integration tests and PR evi
 | Survey upload/extraction, land/location | M2 | ASP.NET → Python (internal) | Proposed | Not started |
 | Requirements, dashboard, design method | M5 | ASP.NET | Proposed | Not started |
 | Generation jobs, three 2D alternatives, selection | M6 | ASP.NET → Python (internal) | Proposed | Not started |
-| Plan editor, edit validation, AI edit proposals, versions, confirmation | M3 (M6 authoritative validation) | ASP.NET → Python (internal) | Proposed | Not started |
+| Plan editor, edit validation, AI edit proposals, versions, confirmation | M3 (M6 authoritative validation) | ASP.NET → Python (internal) | Proposed; M3 draft geometry contract in [`docs/proposals/m3-plan-editor`](proposals/m3-plan-editor/GEOMETRY-CONTRACT-PROPOSAL.md) (canonical approval pending, G07) | Provisional Application contracts/services and Python `plan_editor` engine merged (`b03430e`); **no public or internal HTTP route yet** |
 | Preliminary report, architect requests | M5 | ASP.NET | Proposed | Not started |
 | Regulatory evidence retrieval / citations | M7 (M4: shared C# client infrastructure) | ASP.NET → RAG (internal) | Candidate route `POST /regulations/retrieve`; assistant route TBD | Not started. Existing RAG engine exposes a Python function, **no HTTP route** (see [08-RAG](second-brain/14-Current-Backend/08-RAG.md)) |
 | Health: liveness `GET /health` | M4 | ASP.NET | Proposed (current body shape below) | **Implemented and verified 2026-11-17** |

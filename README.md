@@ -4,7 +4,7 @@ Preliminary AI-assisted **2D** residential planning for Sri Lanka — ASP.NET Co
 
 **MVP scope:** land/survey input, home requirements, three distinct feasible 2D alternatives (or a truthful failure), validated editing, explicit confirmation and a preliminary report. **3D and construction cost estimation are out of scope** (D311). Outputs are preliminary and never an official approval (D312).
 
-**Current state (verified 2026-11-17):** starter skeleton only — four C# projects build and the API serves `GET /health`; Python FastAPI serves `GET /health`. No database integration, business features or C# tests yet. See the [audit](docs/second-brain/17-Progress/07-AUDIT-2026-11-17.md).
+**Current state (2026-11-17, develop `b03430e` + M4 foundation branch):** four C# projects in `BuildMind.sln`; the API serves `GET /health` (liveness only). M3 provisional plan-editor contracts (C# Application) and Python `plan_editor` engine are merged without HTTP routes. No database integration, authentication or production feature endpoints yet. See the [audit](docs/second-brain/17-Progress/07-AUDIT-2026-11-17.md) and [progress](docs/second-brain/17-Progress/02-TASK-REGISTER.md).
 
 Start here: [`docs/TEAM-START-HERE.md`](docs/TEAM-START-HERE.md) and the [Second Brain V3](docs/second-brain/00-HOME.md). AI agents: read `CLAUDE.md` / `AGENTS.md`.
 

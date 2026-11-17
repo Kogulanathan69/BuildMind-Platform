@@ -2,13 +2,13 @@
 
 > Reconciled 2026-11-17 (BE-M7-D01) with [V3 ownership](../../../docs/second-brain/14-Current-Backend/10-OWNERSHIP.md). Previously this file assigned all feature slices (including floor plans, revisions and confirmations) to M5; that V2-era assignment is superseded.
 
-**No feature folders are implemented yet.** Folder names below are V3 candidates, not existing code; confirm exact names with the owner before creating them.
+**Existing feature code (as of develop `b03430e`):** `PlanEditor/` (M3) — provisional contracts, versioning and confirmation behind ports, no endpoints/DI/persistence; see [`PlanEditor/README.md`](PlanEditor/README.md). All other folder names below are V3 candidates, not existing code; confirm exact names with the owner before creating them.
 
 | Candidate feature folder | Owner slot |
 | --- | --- |
 | `Auth`, `Users`, `Projects` | M1 |
 | `Survey`, `Land` | M2 |
-| `PlanEditor`, `PlanVersions` (incl. confirmation) | M3 |
+| `PlanEditor` (exists, provisional; includes versioning and confirmation) | M3 |
 | `Requirements`, `Dashboard`, `Reports`, `ArchitectRequests` | M5 |
 | `Generation` (jobs, alternatives, selection) | M6 |
 | Regulatory evidence use cases | M7 (shared client infrastructure from M4) |

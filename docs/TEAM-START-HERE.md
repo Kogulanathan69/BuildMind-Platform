@@ -56,7 +56,7 @@ Angular (separate frontend repo) → `BuildMind.API` → `BuildMind.Application`
 4. Open a PR into `develop`. The team lead merges after independent review, CI and QA gates. No automatic merge from a commit.
 5. Never push directly to `main` or `develop`; never force-push shared branches.
 
-Branch protection, owner-only merge enforcement and CI gate names are **not verified** (G13). `origin/main` currently has divergent history from `develop` (recorded in the [2026-11-17 audit](second-brain/17-Progress/07-AUDIT-2026-11-17.md)); resolution is pending.
+Branch protection, owner-only merge enforcement and CI gate names are **not verified** (G13). As of the 2026-11-17 fetch, `main` no longer exists on the remote and a branch named `main-→-develop` points at the former `main` commit `d606f00` (earlier divergence recorded in the [2026-11-17 audit](second-brain/17-Progress/07-AUDIT-2026-11-17.md)). Default-branch and protection state are unverified; resolution is pending (G13).
 
 ## Definition of done
 

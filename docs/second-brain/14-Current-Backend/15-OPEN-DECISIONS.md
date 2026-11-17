@@ -17,5 +17,16 @@
 | G13 | Actual CI gates/main branch protection/names | Lead GitHub review |
 | G14 | Google Sheets automation alternative setup | Optional; do not block code |
 | G15 | Performance targets, release support envelope, deployment and recovery | QA/product signoff |
+| G16 | `python-services/app/geometry`, `plans`, `validation` READMEs still state whole-module M6 ownership; V3 splits geometry/land (M2), plans/editor (M3), generation/validation (M6) | **RESOLVED 2026-11-17** — lead approved; geometry/plans/validation READMEs reconciled (BE-M7-D01) |
+| G17 | Smart App Control on the lead's workstation blocks loading unsigned freshly built C# assemblies (test host and API run); local C# test execution and API smoke check blocked | Device owner/lead: choose a policy-compliant execution path (e.g. CI on Linux, separate dev environment, approved code-signing); no bypass |
 
 Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be explicitly labeled. No unsupported compliance, delivery readiness, or live integration claims.
+
+## Status notes — 2026-11-17 (nothing below resolves a decision)
+- G01: lead currently holds M4 + M7 (lead decision 2026-11-17); remaining allocation **open**.
+- G02: audited 2026-11-17 — see [audit](../17-Progress/07-AUDIT-2026-11-17.md).
+- G03, G04, G11, G13: **open**; lead asked to keep EF Core MySQL provider, disposable DB/test account, error format/API prefix, internal service auth and main/develop divergence open until separately reviewed.
+- G09: admin module ownership **open**.
+- G10: candidate canonical RAG path identified (`C:\BuildMind-PDF-Processor\regulation_retrieval`), not yet explicitly confirmed; RAG repository structure **open** — see [proposal](16-RAG-SOURCE-STRATEGY-PROPOSAL.md).
+
+- 2026-11-17 (D01a): G16 resolved. G17 opened. G03/G04/G09/G10/G11/G13 and final roster remain open.

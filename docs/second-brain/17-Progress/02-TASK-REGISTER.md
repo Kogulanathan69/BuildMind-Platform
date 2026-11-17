@@ -1,6 +1,6 @@
 # Daily backend task register
 
-Initial planning register; reconcile actual current code before marking status. Each task refers to individual plan with acceptance details. 49 work packages = 42 M1–M6 + 7 M7. Status is not-started in this register until evidence entered.
+Initial planning register; reconcile actual current code before marking status. Each task refers to individual plan with acceptance details. 49 work packages = 42 M1–M6 + 7 M7. Status is not-started in this register until evidence entered. Updated 2026-11-17 for BE-M4-D01, BE-M4-D01a (added) and BE-M7-D01/D02/D04 only.
 
 | Task ID | Slot | Day | Deliverable / objective | Status | Evidence |
 |---|---|---:|---|---|---|
@@ -25,7 +25,8 @@ Initial planning register; reconcile actual current code before marking status. 
 | BE-M3-D05 | M3 | 5 | AI edit proposals and Apply/Reject Keep AI changes user-controlled, validated and revision-aware. | NOT STARTED | — |
 | BE-M3-D06 | M3 | 6 | Save plan and version history Persist only valid or explicitly permitted draft states with atomic version handling. | NOT STARTED | — |
 | BE-M3-D07 | M3 | 7 | Final confirmation and editor regression Confirm the exact saved revision and pass it to the report owner. | NOT STARTED | — |
-| BE-M4-D01 | M4 | 1 | Extend existing foundation and unblock the team Use the merged develop starter; publish shared contracts early. | NOT STARTED | — |
+| BE-M4-D01 | M4 | 1 | Extend existing foundation and unblock the team Use the merged develop starter; publish shared contracts early. | IN PROGRESS — skeleton verified; D01a implemented (see next row); shared conventions (error shape, CORS, config keys), provider compatibility start and contract agreements remain | EV-20261117-01..04, [audit](07-AUDIT-2026-11-17.md) |
+| BE-M4-D01a | M4 | 1 | Foundation hardening: classic solution, layer DI registration, composition root, test project, architecture/health/readiness/DI tests, CI test step | IMPLEMENTED — VERIFICATION BLOCKED: restore/build/audit pass; 22 C# test cases authored but **not executed** (local Smart App Control block, G17; CI not yet run); API health smoke blocked locally | EV-20261117-07..14 |
 | BE-M4-D02 | M4 | 2 | MySQL and identity/security foundation Enable real database integration for the first feature modules. | NOT STARTED | — |
 | BE-M4-D03 | M4 | 3 | Feature schema and migrations Coordinate schema changes so six developers can work safely in parallel. | NOT STARTED | — |
 | BE-M4-D04 | M4 | 4 | Global error handling and shared security Harden API infrastructure consistently across module endpoints. | NOT STARTED | — |
@@ -46,10 +47,10 @@ Initial planning register; reconcile actual current code before marking status. 
 | BE-M6-D05 | M6 | 5 | Three alternatives and generation job orchestration Deliver C# public generation lifecycle backed by actual Python output. | NOT STARTED | — |
 | BE-M6-D06 | M6 | 6 | Comparison, selection and editor validation support Enable safe alternative selection and authoritative validation for edited candidates. | NOT STARTED | — |
 | BE-M6-D07 | M6 | 7 | Generation and validation regression Verify supported planning flow and report realistic limitations. | NOT STARTED | — |
-| BE-M7-D01 | M7 | 1 | Audit repos/RAG and approve contracts | NOT STARTED | — |
-| BE-M7-D02 | M7 | 2 | Corpus and retrieval evidence verification | NOT STARTED | — |
+| BE-M7-D01 | M7 | 1 | Audit repos/RAG and approve contracts | REVIEW — audit done; docs reconciliation applied 2026-11-17, awaiting lead review; contracts not approved | EV-20261117-01..06, [audit](07-AUDIT-2026-11-17.md) |
+| BE-M7-D02 | M7 | 2 | Corpus and retrieval evidence verification | NOT STARTED — historical 93-test log only; not re-run | EV-20261117-05 |
 | BE-M7-D03 | M7 | 3 | Evidence schema and jurisdiction handling | NOT STARTED | — |
-| BE-M7-D04 | M7 | 4 | Existing RAG service integration | NOT STARTED | — |
+| BE-M7-D04 | M7 | 4 | Existing RAG service integration | BLOCKED — RAG source not version-controlled, no HTTP route; G10/G11 open | [audit](07-AUDIT-2026-11-17.md) |
 | BE-M7-D05 | M7 | 5 | M6 evidence integration | NOT STARTED | — |
 | BE-M7-D06 | M7 | 6 | Cross-service QA and review | NOT STARTED | — |
 | BE-M7-D07 | M7 | 7 | E2E and delivery gate | NOT STARTED | — |

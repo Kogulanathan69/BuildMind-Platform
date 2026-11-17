@@ -33,3 +33,5 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
 - 2026-11-17 (D01a): G16 resolved. G17 opened. G03/G04/G09/G10/G11/G13 and final roster remain open.
 
 - 2026-11-17 (develop sync): G13 changed — `main` deleted on the remote; branch `main-→-develop` at former main `d606f00`; `origin/HEAD` dangling locally. Still open. G18 opened.
+
+- 2026-11-17 (lead): default branch intentionally changed to `develop`; the former `main` was accidentally renamed to `main-→-develop`. G13 stays open until the production branch name and protection rules are corrected. G17 and G18 stay open after D01a CI verification.

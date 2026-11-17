@@ -22,3 +22,18 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - **Blocked (G17):** Smart App Control blocks the freshly built `BuildMind.API.dll` for both the test host and a direct run, so C# tests were not executed and D01a liveness was not confirmed locally. No bypass attempted (no SAC change, no alternate host, signing or file moves). One diagnostic: unchanged baseline source built in scratchpad ran normally (different folder, so cause not isolated); scratchpad copy deleted.
 - BE-M4-D01 remains IN PROGRESS. D01a is not DONE until its tests execute and pass (CI or approved environment) and are reviewed.
 - Next action (lead): decide G17 execution path; review diff; approve commit/push to the feature branch so CI can run the C# tests. Do not start BE-M4-D02 before approval.
+
+## 2026-11-17 — D01a commits, develop sync, push and CI
+- Fetched over HTTP/1.1: `origin/develop` = `b03430e` (M3 provisional plan editor, PR #7). Remote `main` no longer exists; branch `main-→-develop` points at former main `d606f00` (G13). New remote branches `feature/m1-auth-projects`, `feature/m3-plan-editor`.
+- Inventory before commit: 36 files = 13 code/config/CI + 23 Markdown (earlier "15 code files" count wrongly included two READMEs). No secrets, PDFs, datasets, indexes or build artifacts; no file overlap with M3.
+- Commits (explicit paths): `BE-M7-D01` docs reconciliation; `BE-M4-D01a` foundation + tests + progress records; `BE-M7-D01` M3-alignment docs (G18 opened). Rebased onto `b03430e` without conflicts; branch never previously pushed, so no force push. Pushed `feature/m4-infrastructure` = `c37029e`.
+- PR #8 (`feature/m4-infrastructure` → `develop`) exists, created outside this session, **not draft**. CI run 44070194073: `dotnet-build` and `python-tests` success.
+- Not yet verified: actual C# test counts (expected 22) and CI pytest count — logs need repo-admin access. D01a stays VERIFICATION PENDING; G17 stays open.
+- Next action (lead): read the `Run C# tests` and pytest summaries from the run log (or grant a read path), optionally convert PR #8 to draft, review. Do not merge automatically; do not start BE-M4-D02.
+
+## 2026-11-17 — D01a CI evidence recorded
+- Source: lead retrieved the job logs via ChatGPT's GitHub connector (the agent's unauthenticated log download returned 403). Run [https://github.com/Kogulanathan69/BuildMind-Platform/actions/runs/44070194073](https://github.com/Kogulanathan69/BuildMind-Platform/actions/runs/44070194073).
+- C# job [133994148264](https://github.com/Kogulanathan69/BuildMind-Platform/actions/runs/44070194073/job/133994148264): "Test Run Successful. Total tests: 22, Passed: 22" — matches the 22 authored cases. Python job [133994148554](https://github.com/Kogulanathan69/BuildMind-Platform/actions/runs/44070194073/job/133994148554): "42 passed, 1 warning in 0.32s". Combined 64 passing tests.
+- Status: BE-M4-D01a **CI VERIFIED — INDEPENDENT CODE REVIEW PENDING**; BE-M4-D01 stays IN PROGRESS. Third docs commit `c37029e` reviewed and accepted by the lead.
+- Open: G17 (local Windows execution blocked by Smart App Control), G18 (M3 console contract runner not in solution/CI and not part of these counts), G13 (default branch intentionally `develop`; former `main` accidentally renamed to `main-→-develop`; production branch name and protection to be corrected).
+- These Second Brain updates are committed as docs only ("docs: record verified M4 foundation CI test results") on `feature/m4-infrastructure`, with lead approval. No source change or merge. BE-M4-D02 not started; D01b proposed, awaiting approval.

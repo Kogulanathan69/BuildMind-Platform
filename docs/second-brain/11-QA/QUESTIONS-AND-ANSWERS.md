@@ -1,3 +1,5 @@
+> **HISTORICAL V2 — superseded where inconsistent.** Do not execute old paths, ownership, payment or technology choices. See [current V3 home](../00-HOME.md).
+
 # BE Second Brain – Question & Answer Register
 
 ### BE-Q-001: When may initial rules checks run?

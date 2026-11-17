@@ -1,3 +1,5 @@
+> **HISTORICAL V2 — superseded where inconsistent.** Do not execute old paths, ownership, payment or technology choices. See [current V3 home](../00-HOME.md).
+
 # How files connect — 4 concrete examples
 
 ## Survey Upload (M2 ↔ M5 ↔ M6)

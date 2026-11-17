@@ -1,0 +1,55 @@
+# Daily backend task register
+
+Initial planning register; reconcile actual current code before marking status. Each task refers to individual plan with acceptance details. 49 work packages = 42 M1–M6 + 7 M7. Status is not-started in this register until evidence entered.
+
+| Task ID | Slot | Day | Deliverable / objective | Status | Evidence |
+|---|---|---:|---|---|---|
+| BE-M1-D01 | M1 | 1 | Identity and project foundation Review the existing develop branch; implement only your feature files and agree shared contracts. | NOT STARTED | — |
+| BE-M1-D02 | M1 | 2 | Register, login and JWT Deliver the core authentication APIs so the login/register frontend can integrate. | NOT STARTED | — |
+| BE-M1-D03 | M1 | 3 | Project CRUD and owner isolation Allow an authenticated customer to create and reopen their own project. | NOT STARTED | — |
+| BE-M1-D04 | M1 | 4 | Password recovery Deliver secure recovery APIs; agree email delivery configuration rather than assume it exists. | NOT STARTED | — |
+| BE-M1-D05 | M1 | 5 | Profile and session lifecycle Expose authenticated self-service profile and reliable session behavior. | NOT STARTED | — |
+| BE-M1-D06 | M1 | 6 | Project lifecycle and integration Make project ownership reusable and prevent invalid state changes. | NOT STARTED | — |
+| BE-M1-D07 | M1 | 7 | Security regression and handoff Finish the identity/project module and deliver evidence, not unverified claims. | NOT STARTED | — |
+| BE-M2-D01 | M2 | 1 | Survey contracts and land models Prepare backend data contracts and safe storage before implementing extraction. | NOT STARTED | — |
+| BE-M2-D02 | M2 | 2 | Secure survey upload API Accept supported survey documents and persist private storage metadata safely. | NOT STARTED | — |
+| BE-M2-D03 | M2 | 3 | Survey extraction pipeline Read supported files into structured fields with uncertainty handling. | NOT STARTED | — |
+| BE-M2-D04 | M2 | 4 | Boundary geometry and coordinate normalization Produce valid candidate polygon geometry for land confirmation. | NOT STARTED | — |
+| BE-M2-D05 | M2 | 5 | Location, area and perimeter Calculate land metrics from the confirmed coordinate model and save location information. | NOT STARTED | — |
+| BE-M2-D06 | M2 | 6 | Boundary edits and explicit confirmation Validate edited boundary atomically and confirm only the accepted revision. | NOT STARTED | — |
+| BE-M2-D07 | M2 | 7 | Survey/land end-to-end QA Verify secure ingestion and hand off valid land to the planning engine. | NOT STARTED | — |
+| BE-M3-D01 | M3 | 1 | Plan schema and editor backend foundation Agree canonical geometry model before building transformations. | NOT STARTED | — |
+| BE-M3-D02 | M3 | 2 | Room add, remove and move operations Implement deterministic backend command application on a copy of base geometry. | NOT STARTED | — |
+| BE-M3-D03 | M3 | 3 | Room resize and wall topology Implement geometry edits with safe, deterministic neighbor handling. | NOT STARTED | — |
+| BE-M3-D04 | M3 | 4 | Doors, windows and opening operations Support editor element placement and backend validation. | NOT STARTED | — |
+| BE-M3-D05 | M3 | 5 | AI edit proposals and Apply/Reject Keep AI changes user-controlled, validated and revision-aware. | NOT STARTED | — |
+| BE-M3-D06 | M3 | 6 | Save plan and version history Persist only valid or explicitly permitted draft states with atomic version handling. | NOT STARTED | — |
+| BE-M3-D07 | M3 | 7 | Final confirmation and editor regression Confirm the exact saved revision and pass it to the report owner. | NOT STARTED | — |
+| BE-M4-D01 | M4 | 1 | Extend existing foundation and unblock the team Use the merged develop starter; publish shared contracts early. | NOT STARTED | — |
+| BE-M4-D02 | M4 | 2 | MySQL and identity/security foundation Enable real database integration for the first feature modules. | NOT STARTED | — |
+| BE-M4-D03 | M4 | 3 | Feature schema and migrations Coordinate schema changes so six developers can work safely in parallel. | NOT STARTED | — |
+| BE-M4-D04 | M4 | 4 | Global error handling and shared security Harden API infrastructure consistently across module endpoints. | NOT STARTED | — |
+| BE-M4-D05 | M4 | 5 | C# to Python service integration Enable authorized and reliable internal requests without exposing Python directly to customers. | NOT STARTED | — |
+| BE-M4-D06 | M4 | 6 | Concurrency, transactions and database security Support version-safe persistence for editor, land and generation modules. | NOT STARTED | — |
+| BE-M4-D07 | M4 | 7 | Infrastructure regression and release readiness Verify the integrated shared backend and hand over setup instructions. | NOT STARTED | — |
+| BE-M5-D01 | M5 | 1 | Requirements and business workflow models Define the server-side requirements model and snapshot contracts. | NOT STARTED | — |
+| BE-M5-D02 | M5 | 2 | Customer dashboard API Provide authentic owner-scoped summary data for the dashboard. | NOT STARTED | — |
+| BE-M5-D03 | M5 | 3 | Ground-floor requirements persistence Save and retrieve the actual customer room requirements. | NOT STARTED | — |
+| BE-M5-D04 | M5 | 4 | Additional spaces and room relationships Extend the requirement revision with optional choices and preferences. | NOT STARTED | — |
+| BE-M5-D05 | M5 | 5 | Summary, design method and readiness Deliver a trustworthy requirements snapshot for generation. | NOT STARTED | — |
+| BE-M5-D06 | M5 | 6 | Preliminary PDF report generation Render actual plan/requirements evidence into a version-specific downloadable report. | NOT STARTED | — |
+| BE-M5-D07 | M5 | 7 | Architect requests and final workflow QA Complete consent-based request workflow and report handoff. | NOT STARTED | — |
+| BE-M6-D01 | M6 | 1 | Generation and validation contracts Agree exact schemas and supported fixture scope before writing algorithms. | NOT STARTED | — |
+| BE-M6-D02 | M6 | 2 | Buildable footprint and feasibility Determine if supported known constraints permit a preliminary building footprint. | NOT STARTED | — |
+| BE-M6-D03 | M6 | 3 | Room placement and adjacency algorithms Build deterministic, inspectable baseline layouts for supported cases. | NOT STARTED | — |
+| BE-M6-D04 | M6 | 4 | Layout diversity and backend heuristics Generate meaningfully different alternatives and authoritative core validation. | NOT STARTED | — |
+| BE-M6-D05 | M6 | 5 | Three alternatives and generation job orchestration Deliver C# public generation lifecycle backed by actual Python output. | NOT STARTED | — |
+| BE-M6-D06 | M6 | 6 | Comparison, selection and editor validation support Enable safe alternative selection and authoritative validation for edited candidates. | NOT STARTED | — |
+| BE-M6-D07 | M6 | 7 | Generation and validation regression Verify supported planning flow and report realistic limitations. | NOT STARTED | — |
+| BE-M7-D01 | M7 | 1 | Audit repos/RAG and approve contracts | NOT STARTED | — |
+| BE-M7-D02 | M7 | 2 | Corpus and retrieval evidence verification | NOT STARTED | — |
+| BE-M7-D03 | M7 | 3 | Evidence schema and jurisdiction handling | NOT STARTED | — |
+| BE-M7-D04 | M7 | 4 | Existing RAG service integration | NOT STARTED | — |
+| BE-M7-D05 | M7 | 5 | M6 evidence integration | NOT STARTED | — |
+| BE-M7-D06 | M7 | 6 | Cross-service QA and review | NOT STARTED | — |
+| BE-M7-D07 | M7 | 7 | E2E and delivery gate | NOT STARTED | — |

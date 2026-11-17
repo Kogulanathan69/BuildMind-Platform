@@ -1,3 +1,5 @@
+> **HISTORICAL V2 — superseded where inconsistent.** Do not execute old paths, ownership, payment or technology choices. See [current V3 home](../00-HOME.md).
+
 # BuildMind Backend — Implementation Blueprint / Start Here
 
 > **Version:** 2.0 draft, 2026-11-16. **Nature:** Proposed implementation and team coordination architecture, NOT a claim that these folders/classes/API endpoints already exist. The original Second Brain documents under folders 00–12 are preserved as historical source snapshots. The current decisions below supersede conflicting older technology/scope references for this proposed implementation; formal ADR approval and repository inspection still required.

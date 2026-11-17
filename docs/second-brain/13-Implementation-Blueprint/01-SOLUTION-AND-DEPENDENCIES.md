@@ -1,3 +1,5 @@
+> **HISTORICAL V2 — superseded where inconsistent.** Do not execute old paths, ownership, payment or technology choices. See [current V3 home](../00-HOME.md).
+
 # Solution architecture and dependency direction
 
 ## Repo boundary (recommended two repos or mono-repo; decide at kickoff)

@@ -1,3 +1,5 @@
+> **HISTORICAL V2 — superseded where inconsistent.** Do not execute old paths, ownership, payment or technology choices. See [current V3 home](../00-HOME.md).
+
 # Proposed complete backend source folder and file map
 
 All files below are **planned examples**, not claims about the currently cloned repository. Feature namespaces can be adjusted via a reviewed ADR. Exactly one primary owner is assigned in [[03-FILE-OWNERSHIP-REGISTER]].

@@ -1,0 +1,3 @@
+# V3 change log
+
+2026-11-17 — V3 documentation proposal. Preserved 48 original Markdown notes with historical warnings (three historical navigation files renamed; current navigation regenerated). Added current decisions, architecture, logical MySQL data model, proposed API register, workflow/geometry, admin gaps, RAG integration, ownership, security/testing, environment, Git workflow, six detailed member plans and M7 proposal, agent instructions and progress registers. No code/DB/remote changes. Need team approval and actual repository verification. Legacy content is intentionally not silently rewritten; V3 decisions supersede inconsistent historical notes.

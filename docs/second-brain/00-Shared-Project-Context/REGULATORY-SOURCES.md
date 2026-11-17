@@ -1,3 +1,5 @@
+> **HISTORICAL V2 — superseded where inconsistent.** Do not execute old paths, ownership, payment or technology choices. See [current V3 home](../00-HOME.md).
+
 # Regulatory Source Register
 
 **Status:** Candidate sources only. No per-clause values have been verified in this starter repository.

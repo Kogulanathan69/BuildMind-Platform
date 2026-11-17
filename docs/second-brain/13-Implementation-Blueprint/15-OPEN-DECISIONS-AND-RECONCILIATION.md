@@ -1,3 +1,5 @@
+> **HISTORICAL V2 — superseded where inconsistent.** Do not execute old paths, ownership, payment or technology choices. See [current V3 home](../00-HOME.md).
+
 # Older documentation vs current working blueprint
 
 The original folder 00–12 files remain unchanged except new navigation links in three entry pages. They are historical source snapshots; some have **MSSQL confirmed**, **FastAPI recommended**, **payment-gated download** and other earlier choices.

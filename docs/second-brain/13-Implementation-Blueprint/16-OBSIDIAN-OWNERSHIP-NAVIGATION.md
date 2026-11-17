@@ -1,3 +1,5 @@
+> **HISTORICAL V2 — superseded where inconsistent.** Do not execute old paths, ownership, payment or technology choices. See [current V3 home](../00-HOME.md).
+
 # Member quick navigation
 
 - M4: [[01-SOLUTION-AND-DEPENDENCIES]] · [[03-FILE-OWNERSHIP-REGISTER]] · [[08-DATABASE-AND-MIGRATIONS]] · [[12-REPO-BOOTSTRAP-AND-CI]]

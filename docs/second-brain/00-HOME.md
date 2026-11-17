@@ -1,45 +1,45 @@
-# BuildMind BE Second Brain
+# BuildMind Backend Second Brain V3.0
 
-> **Purpose:** Internal backend team knowledge.
-> **Scope:** C#/.NET, MSSQL, API contracts, rules engine, AI orchestration, payments and persistence.
-> **Source status:** Draft knowledge, **not** proof of implemented code.
+**Current working knowledge • AI-ready documentation pack • Proposed implementation baseline**
 
-## Start here
-- [[SECOND-BRAIN-TREE]] — full navigation map
-- [[PROJECT-OVERVIEW]] — purpose and MVP
-- [[USER-FLOW]] — end-to-end journey
-- [[FUNCTIONAL-REQUIREMENTS]] — FR-01–FR-13
-- [[QUESTIONS-AND-ANSWERS]] — ten domain Q&As
-- [[KNOWLEDGE-GAPS]] — unresolved information
-- [[EVIDENCE-REGISTER]] — verified code references (none yet)
+Start at [Active V3 guide](14-Current-Backend/00-START-HERE.md). This is the single navigation entry point for backend development. Read only current notes as instructions; earlier V2 docs are historical references with supersession notices.
 
-## Main BE knowledge
-- [[BE-ARCHITECTURE]]
-- [[TECHNOLOGY-STACK]]
-- [[PROJECT-LIFECYCLE]]
-- [[DATA-MODEL]]
-- [[API-BOUNDARIES]]
-- [[SURVEY-PIPELINE]]
-- [[JURISDICTION]]
-- [[RULES-ENGINE]]
-- [[AI-PLAN-GENERATION]]
-- [[CUSTOMER-CHATBOT]]
-- [[FLOOR-PLAN-GEOMETRY]]
-- [[PAYMENT-DOWNLOAD]]
-- [[BE-TEST-SCENARIOS]]
+## Current backend knowledge
+- [00-START-HERE](14-Current-Backend/00-START-HERE.md)
+- [01-SCOPE-DECISIONS](14-Current-Backend/01-SCOPE-DECISIONS.md)
+- [02-BUSINESS-AND-FUNCTIONAL](14-Current-Backend/02-BUSINESS-AND-FUNCTIONAL.md)
+- [03-ARCHITECTURE](14-Current-Backend/03-ARCHITECTURE.md)
+- [04-DATABASE](14-Current-Backend/04-DATABASE.md)
+- [05-API-CONTRACTS](14-Current-Backend/05-API-CONTRACTS.md)
+- [06-WORKFLOWS](14-Current-Backend/06-WORKFLOWS.md)
+- [07-GEOMETRY](14-Current-Backend/07-GEOMETRY.md)
+- [08-RAG](14-Current-Backend/08-RAG.md)
+- [09-ADMIN](14-Current-Backend/09-ADMIN.md)
+- [10-OWNERSHIP](14-Current-Backend/10-OWNERSHIP.md)
+- [11-SECURITY](14-Current-Backend/11-SECURITY.md)
+- [12-QA](14-Current-Backend/12-QA.md)
+- [13-ENVIRONMENT](14-Current-Backend/13-ENVIRONMENT.md)
+- [14-GIT-DELIVERY](14-Current-Backend/14-GIT-DELIVERY.md)
+- [15-OPEN-DECISIONS](14-Current-Backend/15-OPEN-DECISIONS.md)
 
-## Golden workflow
-Survey upload → Mapbox location → house requirements → **initial rules analysis** → AI 3 plans **or** manual draw → plan validation/edit → paid download.
+## Team and AI development
+- [Member plans (M1–M7)](15-Member-Plans/00-INDEX.md)
+- [AI development rules](16-AI-Development/01-DEVELOPMENT-RULES.md)
+- [Coding standards](16-AI-Development/02-CODING-STANDARDS.md)
+- [Prompts and agent patterns](16-AI-Development/03-PROMPTS-AND-AGENT-PATTERNS.md)
+- [Lead roadmap](16-AI-Development/04-M4-M7-IMPLEMENTATION-ROADMAP.md)
+- [Templates](16-AI-Development/05-CHANGE-REQUEST-TEMPLATES.md)
 
-## Knowledge reliability
-- **Confirmed requirement**: explicitly established in project scope/flow.
-- **Recommended/Proposed**: technical design suggestion; not approved implementation.
-- **Unknown/Gap**: absent evidence.
-- For numeric Sri Lankan regulation claims, require verified authoritative provision + local applicability.
+## Development memory
+- [Baseline](17-Progress/01-BASELINE.md)
+- [Daily task register](17-Progress/02-TASK-REGISTER.md)
+- [Evidence](17-Progress/03-EVIDENCE-REGISTER.md)
+- [Session handover](17-Progress/04-SESSION-HANDOVER.md)
+- [Change log](17-Progress/05-CHANGE-LOG.md)
+- [Sources](17-Progress/06-SOURCES.md)
 
-## How to open
-Open this folder (not its parent) in Obsidian as a vault. Start with [[SECOND-BRAIN-TREE]]. Internal wikilinks appear in Graph View. OpenAI/Copilot is optional and not included as a preconfigured account or API key.
+## Historical
+- [V2 home](00-HOME-V2-HISTORICAL.md) — older choices, not current instructions.
+- [Full document tree](SECOND-BRAIN-TREE.md)
 
-
-## New: 7-member Clean Architecture ownership and GitHub workflow
-See [[00-START-HERE]] inside `13-Implementation-Blueprint/`. New docs reflect current proposed scope; older notes are preserved as historical context. See [[15-OPEN-DECISIONS-AND-RECONCILIATION]].
+Obsidian: open the `docs/second-brain` folder as a vault. Use graph or linked notes; Claude/Codex read the same local Markdown via root instructions. This vault does not install external search, embeddings or MCP.

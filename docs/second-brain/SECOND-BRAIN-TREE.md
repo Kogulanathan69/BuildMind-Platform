@@ -66,6 +66,8 @@
 - [14-Current-Backend/14-GIT-DELIVERY.md](14-Current-Backend/14-GIT-DELIVERY.md)
 - [14-Current-Backend/15-OPEN-DECISIONS.md](14-Current-Backend/15-OPEN-DECISIONS.md)
 - [14-Current-Backend/16-RAG-SOURCE-STRATEGY-PROPOSAL.md](14-Current-Backend/16-RAG-SOURCE-STRATEGY-PROPOSAL.md)
+- [14-Current-Backend/17-SHARED-CONVENTIONS-PROPOSAL.md](14-Current-Backend/17-SHARED-CONVENTIONS-PROPOSAL.md)
+- [14-Current-Backend/18-MYSQL-PROVIDER-STUDY.md](14-Current-Backend/18-MYSQL-PROVIDER-STUDY.md)
 - [15-Member-Plans/00-INDEX.md](15-Member-Plans/00-INDEX.md)
 - [15-Member-Plans/M1-AUTH-PROJECTS.md](15-Member-Plans/M1-AUTH-PROJECTS.md)
 - [15-Member-Plans/M2-SURVEY-LAND.md](15-Member-Plans/M2-SURVEY-LAND.md)

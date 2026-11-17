@@ -1,6 +1,6 @@
 # Daily backend task register
 
-Initial planning register; reconcile actual current code before marking status. Each task refers to individual plan with acceptance details. 49 work packages = 42 M1–M6 + 7 M7. Status is not-started in this register until evidence entered. Updated 2026-11-17 for BE-M4-D01, BE-M4-D01a (added) and BE-M7-D01/D02/D04 only.
+Initial planning register; reconcile actual current code before marking status. Each task refers to individual plan with acceptance details. 49 work packages = 42 M1–M6 + 7 M7. Status is not-started in this register until evidence entered. Updated 2026-11-17 for BE-M4-D01, BE-M4-D01a, BE-M4-D01b (added) and BE-M7-D01/D02/D04 only.
 
 | Task ID | Slot | Day | Deliverable / objective | Status | Evidence |
 |---|---|---:|---|---|---|
@@ -26,7 +26,9 @@ Initial planning register; reconcile actual current code before marking status. 
 | BE-M3-D06 | M3 | 6 | Save plan and version history Persist only valid or explicitly permitted draft states with atomic version handling. | NOT STARTED | — |
 | BE-M3-D07 | M3 | 7 | Final confirmation and editor regression Confirm the exact saved revision and pass it to the report owner. | NOT STARTED | — |
 | BE-M4-D01 | M4 | 1 | Extend existing foundation and unblock the team Use the merged develop starter; publish shared contracts early. | IN PROGRESS — skeleton verified; D01a implemented (see next row); shared conventions (error shape, CORS, config keys), provider compatibility start and contract agreements remain | EV-20261117-01..04, [audit](07-AUDIT-2026-11-17.md) |
-| BE-M4-D01a | M4 | 1 | Foundation hardening: classic solution, layer DI registration, composition root, test project, architecture/health/readiness/DI tests, CI test step | **CI VERIFIED — INDEPENDENT CODE REVIEW PENDING**: `c37029e` (PR #8 → develop), Actions run 44070194073: C# 22 total / 22 passed; Python 42 passed. Local Windows execution still blocked (G17); M3 console contract runner not included in these counts (G18) | EV-20261117-07..19 |
+| BE-M4-D01a | M4 | 1 | Foundation hardening: classic solution, layer DI registration, composition root, test project, architecture/health/readiness/DI tests, CI test step | **MERGED + CI VERIFIED — RETROSPECTIVE INDEPENDENT REVIEW OUTSTANDING** (G19): PR #8 squash-merged as `183ecf9`; post-merge run 44074803430: C# 22/22, Python 42 passed; local Windows execution blocked (G17); M3 runner excluded (G18) | EV-20261117-07..23 |
+| BE-M4-D01b | M4/M7 | 1 | Shared conventions + infrastructure boundaries proposal, MySQL provider study, M3 runner integration proposal; STEP 03-A…G decision finalization (docs only) | **DOCUMENTATION FINALIZED — PENDING PR REVIEW AND MERGE**: lead decisions recorded 2026-11-18 (C1, C3, C4, C5, C8, C9, C10 approved; C11b approved as design; G03 conditional testing approval); G03/G04/G18/G20 and consumer items open | EV-20261117-24..27, EV-20261118-01..07 |
+| BE-M4-D01c | M4 | 1 | Shared infrastructure implementation (Problem Details, error codes, `/api/v1` group, typed options, `TimeProvider`, `ICurrentUser`, launch settings) — plan in 17-SHARED-CONVENTIONS-PROPOSAL §19 | **IMPLEMENTATION PROPOSED — AUTHORIZING DECISIONS RECORDED** (C1, C3, C4, C5, C8, C9, C10 approved 2026-11-18); **pending separate execution approval**; not started | — |
 | BE-M4-D02 | M4 | 2 | MySQL and identity/security foundation Enable real database integration for the first feature modules. | NOT STARTED | — |
 | BE-M4-D03 | M4 | 3 | Feature schema and migrations Coordinate schema changes so six developers can work safely in parallel. | NOT STARTED | — |
 | BE-M4-D04 | M4 | 4 | Global error handling and shared security Harden API infrastructure consistently across module endpoints. | NOT STARTED | — |

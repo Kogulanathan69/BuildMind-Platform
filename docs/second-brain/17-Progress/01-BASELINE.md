@@ -18,3 +18,5 @@ These are historical conversation observations, not a current live repo audit. S
 | Google Sheets sync | authorization blocked in reported session | BLOCKED / OPTIONAL |
 
 Inspect current branch and commit first. Do not transfer historical passes to current task completion. Add current evidence after tests. All new daily cards are NOT STARTED for this plan only (not a statement that no team member has coded anything).
+
+Current audit (2026-11-17): see [07-AUDIT-2026-11-17](07-AUDIT-2026-11-17.md). It re-verified the C# build, Python health test and C# `/health` runtime at `ef9cbf3`; MySQL integration, CI runs and RAG tests remain unverified.

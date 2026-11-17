@@ -1,3 +1,18 @@
-# M5 feature slices
+# Application feature slices
 
-Feature folders are **not implemented**. M5 adds requirements, floor plans, revisions, confirmations, reports and architect requests here; each with request/response DTOs, validation and tests. Cross-module persistence adapter changes go through M4.
+> Reconciled 2026-11-17 (BE-M7-D01) with [V3 ownership](../../../docs/second-brain/14-Current-Backend/10-OWNERSHIP.md). Previously this file assigned all feature slices (including floor plans, revisions and confirmations) to M5; that V2-era assignment is superseded.
+
+**No feature folders are implemented yet.** Folder names below are V3 candidates, not existing code; confirm exact names with the owner before creating them.
+
+| Candidate feature folder | Owner slot |
+| --- | --- |
+| `Auth`, `Users`, `Projects` | M1 |
+| `Survey`, `Land` | M2 |
+| `PlanEditor`, `PlanVersions` (incl. confirmation) | M3 |
+| `Requirements`, `Dashboard`, `Reports`, `ArchitectRequests` | M5 |
+| `Generation` (jobs, alternatives, selection) | M6 |
+| Regulatory evidence use cases | M7 (shared client infrastructure from M4) |
+
+Each slice owns its request/response DTOs, validation, handlers and tests. Shared abstractions in `../Abstractions/` and any persistence, DI or migration change are coordinated by M4. Do not duplicate another slot's business logic.
+
+Existing code note: `../Abstractions/IProjectRepository.cs` is a starter interface for the M1 project domain; it has no implementation (verified 2026-11-17).

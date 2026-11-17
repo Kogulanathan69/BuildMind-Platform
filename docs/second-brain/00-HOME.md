@@ -21,6 +21,7 @@ Start at [Active V3 guide](14-Current-Backend/00-START-HERE.md). This is the sin
 - [13-ENVIRONMENT](14-Current-Backend/13-ENVIRONMENT.md)
 - [14-GIT-DELIVERY](14-Current-Backend/14-GIT-DELIVERY.md)
 - [15-OPEN-DECISIONS](14-Current-Backend/15-OPEN-DECISIONS.md)
+- [16-RAG-SOURCE-STRATEGY-PROPOSAL](14-Current-Backend/16-RAG-SOURCE-STRATEGY-PROPOSAL.md) (proposal)
 
 ## Team and AI development
 - [Member plans (M1–M7)](15-Member-Plans/00-INDEX.md)
@@ -37,6 +38,7 @@ Start at [Active V3 guide](14-Current-Backend/00-START-HERE.md). This is the sin
 - [Session handover](17-Progress/04-SESSION-HANDOVER.md)
 - [Change log](17-Progress/05-CHANGE-LOG.md)
 - [Sources](17-Progress/06-SOURCES.md)
+- [Audit 2026-11-17](17-Progress/07-AUDIT-2026-11-17.md)
 
 ## Historical
 - [V2 home](00-HOME-V2-HISTORICAL.md) — older choices, not current instructions.

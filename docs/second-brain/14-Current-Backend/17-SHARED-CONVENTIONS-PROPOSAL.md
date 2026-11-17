@@ -412,3 +412,26 @@ Revalidated on develop `183ecf9` (read-only): `tests/BuildMind.Application.Contr
 | C11b readiness | IMPLEMENTATION PENDING (BE-M4-D04) | NOT EXECUTED |
 | G03 provider | Not installed; spike not authorized | NOT EXECUTED |
 | G18 runner | Not in solution/CI | NOT EXECUTED |
+
+## 21. Implementation references — BE-M4-D01c (2026-11-18)
+
+Status: **IMPLEMENTED — BUILD VERIFIED; TEST EXECUTION PENDING (Linux CI)** on `feature/m4-shared-infrastructure` (from develop `3f8f439`, uncommitted). Implements only the approved portions of C1, C3, C4, C5, C8, C9, C10 (§20). Not implemented: C2, C5b, C6 (CORS), C7 (OpenAPI), C11b readiness, C12, JWT/A1/A2, `/internal/v1`, database, external service calls.
+
+| Decision | Implementation | Source |
+|---|---|---|
+| C1 | `/api/v1` route group; feature modules implement `IApiEndpointModule` and are mapped from DI (no `Program.cs` edits needed); no product modules registered; `/health` unchanged and unversioned | `src/BuildMind.API/Routing/*`, `Program.cs` |
+| C3 | `AddProblemDetails` + `IExceptionHandler` (`GlobalExceptionHandler`) + `UseExceptionHandler` + `UseStatusCodePages`; every problem gets `type` (`urn:buildmind:problem:<code>`), `title`, `status`, `instance`, `code`, `traceId`; unsafe extension keys removed; fixed safe `detail` texts in all environments | `src/BuildMind.API/Errors/*` |
+| C3 mapping | `BadHttpRequestException` keeps its 4xx; `UnauthenticatedAccessException` → 401; client-aborted request → 499 without body; all other exceptions (incl. `ArgumentException`, server-side `OperationCanceledException`) → 500 `INTERNAL_ERROR`. **No 504 mapping** (no approved dependency failure type yet) | `GlobalExceptionHandler.cs` |
+| C4 | `ApiProblems.ValidationFailed` (400 `VALIDATION_FAILED` + `errors`), `ApiProblems.DomainRuleViolation` (422 + feature UPPER_SNAKE code + caller-named extensions; no diagnostic schema frozen) | `ApiProblems.cs` |
+| C5 | `SharedErrorCodes` (14 approved codes) in Application; status→code defaults; W3C `Activity` trace ID with `TraceIdentifier` fallback; client correlation headers ignored | `Application/Abstractions/Errors/*`, `TraceIdentifiers.cs` |
+| C8 | `ServicesOptions` / `InternalServiceOptions` (Infrastructure) with validation (absolute http/https, no credentials/query/fragment, timeout 1–300 s, URL required only when `Enabled`); bound and `ValidateOnStart` in the API composition root; disabled services never block start-up; no connections opened | `Infrastructure/Configuration/*`, `API/Configuration/*`, `ApiServiceCollectionExtensions.cs`, `appsettings.json` |
+| C9 | `UserSecretsId` in `BuildMind.API.csproj`; no secrets created or stored; `appsettings.json` secret-free | `BuildMind.API.csproj` |
+| C10 | Structured `[LoggerMessage]` logging with `TraceId`; outside Development the exception **type only** is logged (messages may hold secrets); logged paths use the escaped URI form (no CR/LF injection); framework `ExceptionHandlerMiddleware` diagnostics suppressed **only** when `GlobalExceptionHandler` handled the exception (`ExceptionHandlerOptions.SuppressDiagnosticsCallback`, matching the .NET 10 default) so handler failures still reach logs; console scopes on; no HTTP/body logging registered | `GlobalExceptionHandler.cs`, `ApiServiceCollectionExtensions.cs`, `appsettings.json` |
+| Shared | `TimeProvider.System` (`TryAddSingleton`, Infrastructure); `ICurrentUser` (Application) + `HttpContextCurrentUser` (API, scoped) reading only authenticated identities, fail-closed on missing/malformed/empty/conflicting identifiers, no assumed roles | `Infrastructure/DependencyInjection.cs`, `Application/Abstractions/ICurrentUser.cs`, `API/Security/*` |
+| Dev | `Properties/launchSettings.json` with **proposed** port `http://localhost:5080` (not confirmed with the frontend) | `src/BuildMind.API/Properties/launchSettings.json` |
+
+**Dependency note:** binding options inside Infrastructure would need `Microsoft.Extensions.Options.ConfigurationExtensions` 10.0.12 (not installed, not approved); binding is therefore in the API composition root and no package was added.
+
+**STEP 04-J security review corrections (2026-11-18):** (1) replaced the blanket `ExceptionHandlerMiddleware` log-category suppression with the narrow `SuppressDiagnosticsCallback`; (2) `ICurrentUser` takes identifier and roles from exactly one authenticated identity (no cross-identity role mixing; several identifier-bearing identities fail closed); (3) any HTTP 500 problem — including endpoint-supplied ones — is reduced to generic `title`/`detail`, `code` (well-formed feature code or `INTERNAL_ERROR`) and `traceId`; (4) `instance` and logged paths use the escaped URI form. Regression tests added (9 cases; 126 total).
+
+**Known limitations:** non-500 problems keep endpoint-supplied `detail` and extensions — removing a few known-unsafe extension names is a backstop, not a guarantee, so endpoints must not put sensitive data there; if an exception occurs after the response started, the framework (not BuildMind) records its diagnostic including the exception; Production exception logs omit messages and stack traces, reducing diagnosability until a redaction approach is approved; problem bodies are written only when the client accepts JSON (`Accept` negotiation by the framework); claim names for `ICurrentUser` are provisional (M1).

@@ -21,6 +21,8 @@ Cross-cutting conventions — `/api/v1` prefix, response/status rules, RFC 9457 
 | Health: readiness `GET /health/ready` | M4 | ASP.NET | Proposed | Not implemented (returns 404, verified 2026-11-17) |
 | Python internal `GET /health` | M6 bootstrap custodian | FastAPI (internal) | Starter | **Implemented; covered by Python CI** (42 passed on develop `183ecf9`, incl. M3 tests) |
 | Admin / staff / proposal routes | Unassigned (G09) | ASP.NET | Not defined | Not started |
+| Shared error responses (RFC 9457, codes, traceId) — all API routes | M4 | ASP.NET | **APPROVED** (C3/C4/C5, 2026-11-18) | Implemented on `feature/m4-shared-infrastructure` — build verified; tests pending Linux CI; not merged |
+| `/api/v1` route group (product API root) | M4 | ASP.NET | **APPROVED** (C1) | Implemented (no product endpoints yet) — build verified; tests pending CI; not merged |
 
 Frontend consumers are tracked by the frontend repository; this register does not assign them.
 

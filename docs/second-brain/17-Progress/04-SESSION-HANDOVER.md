@@ -60,3 +60,11 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - BE-M4-D01b: documentation finalized, pending PR review and merge. BE-M4-D01c: implementation proposed, authorizing decisions recorded, pending separate execution approval. BE-M4-D01 work package **not complete**.
 - Commit/push/PR evidence (commit SHA, remote HEAD, PR number, CI run) is reported in the STEP 03-G execution report and will be added to the evidence register in the next documentation update (a commit cannot record its own SHA).
 - No source, dependency, database, CI or RAG change; no merge; D01c and D02 not started.
+
+## 2026-11-18 — BE-M4-D01c shared infrastructure (STEP 04-A…I)
+- develop fast-forwarded to `3f8f439` (PR #10, squash, merged with no recorded review, 2 s after CI). New branch `feature/m4-shared-infrastructure`; earlier M4 branches preserved.
+- Implemented (uncommitted): shared error codes, RFC 9457 Problem Details + global exception handler + status-code pages, validation helpers, `/api/v1` route group with DI-registered endpoint modules, typed `Services` options with start-up validation, `TimeProvider.System`, `ICurrentUser` + claims adapter, User Secrets ID, logging safety, launch settings (proposed port). Details: [17 §21](../14-Current-Backend/17-SHARED-CONVENTIONS-PROPOSAL.md).
+- Tests: 117 C# cases (65 methods) in 11 classes; local execution **BLOCKED** (Smart App Control; EV-20261118-12); Python 42 passed. Builds 0 warnings/0 errors; no new packages; no vulnerable packages.
+- Not implemented (pending decisions): CORS, OpenAPI, JWT/A1/A2, readiness, database, internal service calls, `/internal/v1`, M3 runner wiring.
+- No source outside M4 scope, no CI/DB/RAG change; nothing staged, committed or pushed.
+- Next action (lead): approve STEP 04-J (commit, push, PR, Linux CI); arrange independent review (PR #8, PR #10, this slice).

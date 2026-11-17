@@ -18,3 +18,8 @@ Inspect current repository and `.env.example` redacting values. Local installati
 
 ## Solution commands (from BE-M4-D01a, 2026-11-17)
 `dotnet restore BuildMind.sln`, `dotnet build BuildMind.sln`, `dotnet test BuildMind.sln`. CI runs the same in Release on ubuntu-latest. On the lead's Windows workstation, Smart App Control (inbox policy `{0283ac0f-fff1-49ae-ada1-8a933130cad6}`) blocked the test host and a direct run of the newly built `BuildMind.API.dll`; restore/build are unaffected. See G17.
+
+## Configuration keys and User Secrets (BE-M4-D01c, 2026-11-18)
+Implemented keys (secret-free defaults in `src/BuildMind.API/appsettings.json`): `Services:Python:Enabled|BaseUrl|TimeoutSeconds` and `Services:Rag:Enabled|BaseUrl|TimeoutSeconds` (both disabled; BaseUrl empty; timeouts 10 s / 5 s; environment variables use `__`, e.g. `Services__Python__BaseUrl`). Start-up fails only when a service is enabled without a valid URL or a value is invalid. Local secrets for future keys (e.g. `ConnectionStrings:BuildMind`, `Jwt:SigningKey`) belong in .NET User Secrets for `src/BuildMind.API` (`dotnet user-secrets set <key> <value> --project src/BuildMind.API`); never commit or print them. Proposed local API URL `http://localhost:5080` (`launchSettings.json`) is not confirmed with the frontend.
+
+Local C# test execution (2026-11-18): Smart App Control blocked different freshly built assemblies on different builds (`BuildMind.Infrastructure.dll`, `BuildMind.Domain.dll`, then the test assembly itself). Linux CI remains the execution path (G17).

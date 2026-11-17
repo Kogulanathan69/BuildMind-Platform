@@ -66,3 +66,9 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
   - G18: Option B recorded as preferred (A fallback, C long-term). **Open** — no M3 approval claimed.
   - G20: recommendations recorded only. **Open**.
   - Unchanged and **open**: G01, G09, G10, G11, G13, G17, G19. G14 deferred.
+
+- 2026-11-18 (BE-M4-D01c, nothing resolved):
+  - **New governance finding (recorded under G19's theme, not a new decision):** PR #10 (BE-M4-D01b docs) was squash-merged as `3f8f439a44b6dd43226e44d94daa94c94c31019a` by the repository owner at 19:58:38 UTC, 37 s after creation and 2 s after its CI run completed ([run 44164246514](https://github.com/Kogulanathan69/BuildMind-Platform/actions/runs/44164246514)), with **no recorded review**. Same pattern as PR #8. Independent review of PR #8 and PR #10 remains outstanding; no approval or waiver recorded.
+  - G17: local C# runs blocked different assemblies across rebuilds (Infrastructure, Domain, then the test assembly). **Open**; Smart App Control remains enabled.
+  - C8 dependency note: Infrastructure-level options binding would require `Microsoft.Extensions.Options.ConfigurationExtensions` 10.0.12 — not installed; binding kept in the API composition root.
+  - G01, G03, G04 (C2, C5b, C6, C7, C12, `/internal/v1`, feature diagnostics, A1, A2), G09, G10, G11, G13, G18, G19, G20: **open**. G14 deferred.

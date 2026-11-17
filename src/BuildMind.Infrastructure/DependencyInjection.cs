@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace BuildMind.Infrastructure;
 
@@ -8,9 +9,10 @@ namespace BuildMind.Infrastructure;
 /// called once by the API composition root.
 /// </summary>
 /// <remarks>
-/// Owned by M4. Intentionally registers nothing yet: persistence (BE-M4-D02), internal service
-/// clients (BE-M4-D05) and storage adapters are added in later approved slices. Configuration is
-/// accepted now so later adapters bind settings here rather than in the API project.
+/// Owned by M4. Persistence (BE-M4-D02), internal service clients (BE-M4-D05) and storage adapters
+/// are added in later approved slices. Configuration option types live in
+/// <c>BuildMind.Infrastructure.Configuration</c>; their binding and start-up validation are wired in the
+/// API composition root because this project does not reference the options-binding packages.
 /// </remarks>
 public static class DependencyInjection
 {
@@ -20,6 +22,9 @@ public static class DependencyInjection
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
+
+        // Shared clock (BCL). Services take TimeProvider so tests can supply deterministic time.
+        services.TryAddSingleton(TimeProvider.System);
 
         return services;
     }

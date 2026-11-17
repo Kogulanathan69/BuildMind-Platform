@@ -21,7 +21,13 @@ public enum PlanEditorDependencyOperation
     Compute,
     Persistence,
     Transaction,
+    CandidatePersistence,
+    CandidateApplyTransaction,
+    CandidateRejectTransaction,
+    CandidateExpireTransaction,
     Validation,
     AiProposal,
-    ReportPublication
+    ReportPublication,
+    RevisionRead,
+    ApplicableInputsRead
 }

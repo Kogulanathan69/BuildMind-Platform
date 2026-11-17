@@ -18,16 +18,25 @@ public static class PlanEditorFailureMapper
             "The plan changed before this request was completed.", PlanEditorDiagnosticSeverity.Error, correlationId),
         CandidatePreviewResultStatus.StaleInputs => Failure(PlanEditorErrorCodes.CandidateBindingMismatch,
             "The candidate inputs are no longer current.", PlanEditorDiagnosticSeverity.Error, correlationId),
+        CandidatePreviewResultStatus.InvalidDependencyResponse => Failure(PlanEditorErrorCodes.InvalidDependencyResponse,
+            "A required service returned an invalid response.", PlanEditorDiagnosticSeverity.Critical, correlationId),
         CandidatePreviewResultStatus.InvalidCommand => Failure(PlanEditorErrorCodes.InvalidEditCommand,
             "The edit command is invalid.", PlanEditorDiagnosticSeverity.Error, correlationId),
         CandidatePreviewResultStatus.DependencyUnavailable => Retryable(PlanEditorErrorCodes.DependencyUnavailable,
             "A required service is temporarily unavailable.", correlationId),
         CandidatePreviewResultStatus.CandidateRejected => Failure(PlanEditorErrorCodes.InvalidDependencyResponse,
             "The edit candidate could not be accepted.", PlanEditorDiagnosticSeverity.Error, correlationId),
+        CandidatePreviewResultStatus.PersistenceOutcomeUnknown => Conditional(
+            PlanEditorErrorCodes.PersistenceOutcomeUnknown,
+            "Candidate persistence has an unknown outcome and must be reconciled before retry.", correlationId),
         CandidatePreviewResultStatus.ValidationUnavailable => Retryable(PlanEditorErrorCodes.ValidationUnavailable,
             "Authoritative validation is temporarily unavailable.", correlationId),
         CandidatePreviewResultStatus.ValidationRejected => Failure(PlanEditorErrorCodes.ValidationEvidenceInvalid,
             "The validation evidence could not be accepted.", PlanEditorDiagnosticSeverity.Critical, correlationId),
+        CandidatePreviewResultStatus.DependencyTimeout => Retryable(PlanEditorErrorCodes.DependencyTimeout,
+            "A required service timed out.", correlationId),
+        CandidatePreviewResultStatus.UnexpectedInternalFailure => Failure(PlanEditorErrorCodes.UnexpectedInternalFailure,
+            "The operation could not be completed.", PlanEditorDiagnosticSeverity.Critical, correlationId),
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, "A successful result has no failure diagnostic.")
     };
 
@@ -50,6 +59,10 @@ public static class PlanEditorFailureMapper
             "The plan changed before this candidate was applied.", PlanEditorDiagnosticSeverity.Error, correlationId),
         CandidateActionStatus.StaleInputs => Failure(PlanEditorErrorCodes.CandidateBindingMismatch,
             "The candidate inputs are no longer current.", PlanEditorDiagnosticSeverity.Error, correlationId),
+        CandidateActionStatus.InvalidDependencyResponse => Failure(PlanEditorErrorCodes.InvalidDependencyResponse,
+            "A required service returned an invalid response.", PlanEditorDiagnosticSeverity.Critical, correlationId),
+        CandidateActionStatus.DependencyUnavailable => Retryable(PlanEditorErrorCodes.DependencyUnavailable,
+            "A required service is temporarily unavailable.", correlationId),
         CandidateActionStatus.GeometryTampered => Failure(PlanEditorErrorCodes.CandidateTampered,
             "The candidate snapshot failed its integrity check.", PlanEditorDiagnosticSeverity.Critical, correlationId),
         CandidateActionStatus.ValidationUnavailable => Retryable(PlanEditorErrorCodes.ValidationUnavailable,
@@ -65,6 +78,13 @@ public static class PlanEditorFailureMapper
         CandidateActionStatus.PersistenceFailure => new(
             PlanEditorErrorCodes.TransactionFailure, "The operation could not be saved.",
             PlanEditorDiagnosticSeverity.Critical, true, correlationId, null, PlanEditorRetrySafety.Conditional),
+        CandidateActionStatus.TransactionOutcomeUnknown => Conditional(
+            PlanEditorErrorCodes.TransactionOutcomeUnknown,
+            "The transaction outcome is unknown and must be reconciled before retry.", correlationId),
+        CandidateActionStatus.DependencyTimeout => Retryable(PlanEditorErrorCodes.DependencyTimeout,
+            "A required service timed out.", correlationId),
+        CandidateActionStatus.UnexpectedInternalFailure => Failure(PlanEditorErrorCodes.UnexpectedInternalFailure,
+            "The operation could not be completed.", PlanEditorDiagnosticSeverity.Critical, correlationId),
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, "A successful result has no failure diagnostic.")
     };
 
@@ -83,6 +103,20 @@ public static class PlanEditorFailureMapper
             "The validation evidence could not be accepted.", PlanEditorDiagnosticSeverity.Critical, correlationId),
         AppendRevisionStatus.DuplicateCommand => Failure(PlanEditorErrorCodes.DuplicateCommand,
             "This edit command has already been submitted.", PlanEditorDiagnosticSeverity.Error, correlationId),
+        AppendRevisionStatus.TransactionOutcomeUnknown => Conditional(
+            PlanEditorErrorCodes.TransactionOutcomeUnknown,
+            "The revision transaction outcome is unknown and must be reconciled before retry.",
+            correlationId),
+        AppendRevisionStatus.InvalidDependencyResponse => Failure(
+            PlanEditorErrorCodes.InvalidDependencyResponse,
+            "A required service returned an invalid revision snapshot.",
+            PlanEditorDiagnosticSeverity.Critical, correlationId),
+        AppendRevisionStatus.DependencyTimeout => Retryable(PlanEditorErrorCodes.DependencyTimeout,
+            "A required service timed out.", correlationId),
+        AppendRevisionStatus.DependencyUnavailable => Retryable(PlanEditorErrorCodes.DependencyUnavailable,
+            "A required service is temporarily unavailable.", correlationId),
+        AppendRevisionStatus.UnexpectedInternalFailure => Failure(PlanEditorErrorCodes.UnexpectedInternalFailure,
+            "The operation could not be completed.", PlanEditorDiagnosticSeverity.Critical, correlationId),
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, "A successful result has no failure diagnostic.")
     };
 
@@ -109,7 +143,33 @@ public static class PlanEditorFailureMapper
             PlanEditorDiagnosticSeverity.Warning, true, correlationId, null, PlanEditorRetrySafety.Never),
         ConfirmationStatus.AlreadyConfirmed => Failure(PlanEditorErrorCodes.ConfirmationAlreadyExists,
             "This exact plan revision is already confirmed.", PlanEditorDiagnosticSeverity.Error, correlationId),
+        ConfirmationStatus.TransactionOutcomeUnknown => Conditional(
+            PlanEditorErrorCodes.TransactionOutcomeUnknown,
+            "The confirmation transaction outcome is unknown and must be reconciled before retry.",
+            correlationId),
+        ConfirmationStatus.InvalidDependencyResponse => Failure(
+            PlanEditorErrorCodes.InvalidDependencyResponse,
+            "A required service returned an invalid confirmation dependency response.",
+            PlanEditorDiagnosticSeverity.Critical, correlationId),
+        ConfirmationStatus.DependencyTimeout => Retryable(PlanEditorErrorCodes.DependencyTimeout,
+            "A required service timed out.", correlationId),
+        ConfirmationStatus.DependencyUnavailable => Retryable(PlanEditorErrorCodes.DependencyUnavailable,
+            "A required service is temporarily unavailable.", correlationId),
+        ConfirmationStatus.UnexpectedInternalFailure => Failure(PlanEditorErrorCodes.UnexpectedInternalFailure,
+            "The operation could not be completed.", PlanEditorDiagnosticSeverity.Critical, correlationId),
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, "A successful result has no failure diagnostic.")
+    };
+
+    public static PlanEditorDiagnostic FromConfirmationPublication(
+        ConfirmationPublicationStatus status,
+        string? correlationId = null) => status switch
+    {
+        ConfirmationPublicationStatus.OutcomeUnknown => Conditional(
+            PlanEditorErrorCodes.ReportPublicationFailure,
+            "The plan is confirmed, but report publication must be reconciled before delivery is retried.",
+            correlationId),
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(status), status, "A successful or unattempted publication has no failure diagnostic.")
     };
 
     public static PlanEditorDiagnostic FromDependencyException(
@@ -121,6 +181,27 @@ public static class PlanEditorFailureMapper
         ArgumentNullException.ThrowIfNull(exception);
         if (exception is OperationCanceledException && callerCancellationToken.IsCancellationRequested)
             throw exception;
+        if (operation is PlanEditorDependencyOperation.Persistence or
+            PlanEditorDependencyOperation.Transaction or
+            PlanEditorDependencyOperation.CandidatePersistence or
+            PlanEditorDependencyOperation.CandidateApplyTransaction or
+            PlanEditorDependencyOperation.CandidateRejectTransaction or
+            PlanEditorDependencyOperation.CandidateExpireTransaction or
+            PlanEditorDependencyOperation.ReportPublication)
+            return Conditional(
+                operation is PlanEditorDependencyOperation.ReportPublication
+                    ? PlanEditorErrorCodes.ReportPublicationFailure
+                    : operation is PlanEditorDependencyOperation.Persistence or
+                    PlanEditorDependencyOperation.CandidatePersistence
+                    ? PlanEditorErrorCodes.PersistenceOutcomeUnknown
+                    : PlanEditorErrorCodes.TransactionOutcomeUnknown,
+                operation is PlanEditorDependencyOperation.ReportPublication
+                    ? "Report publication has an unknown outcome and requires reconciliation before retry."
+                    : operation is PlanEditorDependencyOperation.Persistence or
+                    PlanEditorDependencyOperation.CandidatePersistence
+                    ? "Persistence has an unknown outcome and must be reconciled before retry."
+                    : "The transaction outcome is unknown and must be reconciled before retry.",
+                correlationId);
         if (exception is TimeoutException or OperationCanceledException)
             return new(PlanEditorErrorCodes.DependencyTimeout, "A required service timed out.",
                 PlanEditorDiagnosticSeverity.Error, true, correlationId, null, PlanEditorRetrySafety.Safe);
@@ -131,20 +212,8 @@ public static class PlanEditorFailureMapper
             return Failure(PlanEditorErrorCodes.InvalidDependencyResponse,
                 "A required service returned an invalid response.", PlanEditorDiagnosticSeverity.Critical, correlationId);
 
-        return operation switch
-        {
-            PlanEditorDependencyOperation.Persistence => Conditional(
-                PlanEditorErrorCodes.PersistenceFailure, "The operation could not be saved.", correlationId),
-            PlanEditorDependencyOperation.Transaction => Conditional(
-                PlanEditorErrorCodes.TransactionFailure, "The operation could not be completed atomically.", correlationId),
-            PlanEditorDependencyOperation.ReportPublication => Conditional(
-                PlanEditorErrorCodes.ReportPublicationFailure, "The confirmed plan report could not be published.", correlationId),
-            PlanEditorDependencyOperation.AiProposal => Failure(
-                PlanEditorErrorCodes.AiProposalInvalid, "The AI proposal could not be accepted.",
-                PlanEditorDiagnosticSeverity.Error, correlationId),
-            _ => Failure(PlanEditorErrorCodes.UnexpectedInternalFailure,
-                "The operation could not be completed.", PlanEditorDiagnosticSeverity.Critical, correlationId)
-        };
+        return Failure(PlanEditorErrorCodes.UnexpectedInternalFailure,
+            "The operation could not be completed.", PlanEditorDiagnosticSeverity.Critical, correlationId);
     }
 
     public static int ProposedHttpStatus(PlanEditorDiagnostic diagnostic) => diagnostic.Code switch
@@ -160,6 +229,7 @@ public static class PlanEditorFailureMapper
         PlanEditorErrorCodes.DependencyUnavailable or PlanEditorErrorCodes.ValidationUnavailable => 503,
         PlanEditorErrorCodes.DependencyTimeout => 504,
         PlanEditorErrorCodes.PersistenceFailure or PlanEditorErrorCodes.TransactionFailure or
+            PlanEditorErrorCodes.PersistenceOutcomeUnknown or PlanEditorErrorCodes.TransactionOutcomeUnknown or
             PlanEditorErrorCodes.ReportPublicationFailure or PlanEditorErrorCodes.UnexpectedInternalFailure => 500,
         _ => 422
     };

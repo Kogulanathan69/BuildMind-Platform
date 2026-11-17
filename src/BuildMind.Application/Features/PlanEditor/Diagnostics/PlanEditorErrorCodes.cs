@@ -47,6 +47,8 @@ public static class PlanEditorErrorCodes
     public const string InvalidDependencyResponse = "INVALID_DEPENDENCY_RESPONSE";
     public const string PersistenceFailure = "PERSISTENCE_FAILURE";
     public const string TransactionFailure = "TRANSACTION_FAILURE";
+    public const string PersistenceOutcomeUnknown = "PERSISTENCE_OUTCOME_UNKNOWN";
+    public const string TransactionOutcomeUnknown = "TRANSACTION_OUTCOME_UNKNOWN";
     public const string AiProposalInvalid = "AI_PROPOSAL_INVALID";
     public const string ReportPublicationFailure = "REPORT_PUBLICATION_FAILURE";
     public const string UnexpectedInternalFailure = "UNEXPECTED_INTERNAL_FAILURE";
@@ -65,7 +67,8 @@ public static class PlanEditorErrorCodes
         RequirementRevisionChanged, GeometryHashMismatch, ValidationUnavailable, ValidationEvidenceInvalid,
         ValidationEvidenceExpired, BlockingValidationIssues, WarningAcknowledgementRequired,
         DependencyUnavailable, DependencyTimeout, InvalidDependencyResponse, PersistenceFailure,
-        TransactionFailure, AiProposalInvalid, ReportPublicationFailure, UnexpectedInternalFailure,
+        TransactionFailure, PersistenceOutcomeUnknown, TransactionOutcomeUnknown, AiProposalInvalid,
+        ReportPublicationFailure, UnexpectedInternalFailure,
         ConfirmationBlocked, ConfirmationAlreadyExists
     ];
 }

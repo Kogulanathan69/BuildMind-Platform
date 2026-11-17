@@ -171,9 +171,9 @@ Run("immutable revision and stale-write protection", () =>
     var json = JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions);
     var hash = PlanRevisionService.ComputeGeometryHash(json);
     var validation = Validation(hash);
-    var baseRevision = Revision(geometry, "sha256:base", 1);
+    var baseRevision = Revision(geometry, hash, 1);
     var store = new MemoryRevisionStore(baseRevision);
-    var service = new PlanRevisionService(store, new ValidationVerifier(ValidationEvidenceStatus.Verified), TimeProvider.System);
+    var service = new PlanRevisionService(new OwnershipGate(true), store, new ValidationVerifier(ValidationEvidenceStatus.Verified), TimeProvider.System);
     var command = new CreatePlanRevisionCommand(
         geometry.ProjectId, geometry.PlanId, baseRevision.RevisionId, geometry,
         validation, Guid.NewGuid(), "contract test");
@@ -191,10 +191,9 @@ Run("revision fails closed when authoritative validation is unavailable", () =>
     var geometry = MinimalGeometry(0);
     var json = JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions);
     var hash = PlanRevisionService.ComputeGeometryHash(json);
-    var baseRevision = Revision(geometry, "sha256:base", 1);
+    var baseRevision = Revision(geometry, hash, 1);
     var store = new MemoryRevisionStore(baseRevision);
-    var service = new PlanRevisionService(
-        store, new ValidationVerifier(ValidationEvidenceStatus.Unavailable), TimeProvider.System);
+    var service = new PlanRevisionService(new OwnershipGate(true), store, new ValidationVerifier(ValidationEvidenceStatus.Unavailable), TimeProvider.System);
     var result = service.CreateAsync(
         new(geometry.ProjectId, geometry.PlanId, baseRevision.RevisionId, geometry,
             Validation(hash), Guid.NewGuid(), "must not persist"),
@@ -209,9 +208,9 @@ Run("duplicate edit command replay is rejected atomically", () =>
 {
     var geometry = MinimalGeometry(0);
     var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
-    var baseRevision = Revision(geometry, "sha256:base", 1);
+    var baseRevision = Revision(geometry, hash, 1);
     var store = new MemoryRevisionStore(baseRevision);
-    var service = new PlanRevisionService(store, new ValidationVerifier(ValidationEvidenceStatus.Verified), TimeProvider.System);
+    var service = new PlanRevisionService(new OwnershipGate(true), store, new ValidationVerifier(ValidationEvidenceStatus.Verified), TimeProvider.System);
     var commandId = Guid.NewGuid();
     var first = service.CreateAsync(
         new(geometry.ProjectId, geometry.PlanId, baseRevision.RevisionId, geometry, Validation(hash), commandId, "first"),
@@ -228,9 +227,9 @@ Run("concurrent edits allow one winner", () =>
 {
     var geometry = MinimalGeometry(0);
     var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
-    var baseRevision = Revision(geometry, "sha256:base", 1);
+    var baseRevision = Revision(geometry, hash, 1);
     var store = new MemoryRevisionStore(baseRevision);
-    var service = new PlanRevisionService(store, new ValidationVerifier(ValidationEvidenceStatus.Verified), TimeProvider.System);
+    var service = new PlanRevisionService(new OwnershipGate(true), store, new ValidationVerifier(ValidationEvidenceStatus.Verified), TimeProvider.System);
     Task<AppendRevisionResult> Create(string summary) => service.CreateAsync(
         new(geometry.ProjectId, geometry.PlanId, baseRevision.RevisionId, geometry,
             Validation(hash), Guid.NewGuid(), summary), Guid.NewGuid());
@@ -238,6 +237,166 @@ Run("concurrent edits allow one winner", () =>
     Assert(results.Count(item => item.Status == AppendRevisionStatus.Created) == 1, "Expected one concurrent winner.");
     Assert(results.Count(item => item.Status == AppendRevisionStatus.RevisionConflict) == 1, "Expected one stale conflict.");
 });
+
+foreach (var restore in new[] { false, true })
+{
+    foreach (var scenario in new[]
+    {
+        "authorized",
+        "empty actor",
+        "non-owner",
+        "cross-project",
+        "ownership failure"
+    })
+    {
+        var operation = restore ? "restore" : "create";
+
+        Run($"M3 revision ownership security - {operation} - {scenario}", () =>
+        {
+            var geometry = MinimalGeometry(0);
+            var json = JsonSerializer.Serialize(
+                geometry, PlanEditorJson.StrictOptions);
+
+            var hash = PlanRevisionService.ComputeGeometryHash(json);
+            var validation = Validation(hash);
+
+            var owner = Guid.NewGuid();
+
+            var baseRevision = Revision(
+                geometry, hash, 1, validation);
+
+            var store = new TestPlanRevisionStore(baseRevision);
+
+            var actor = scenario switch
+            {
+                "empty actor" => Guid.Empty,
+                "non-owner" => Guid.NewGuid(),
+                _ => owner
+            };
+
+            var requestedProject = scenario == "cross-project"
+                ? Guid.NewGuid()
+                : geometry.ProjectId;
+
+            var ownershipCalls = 0;
+            var verificationCalls = 0;
+
+            var ownership = new TestProjectOwnershipGate(
+                (project, user, _) =>
+                {
+                    ownershipCalls++;
+
+                    if (scenario == "ownership failure")
+                        throw new InvalidOperationException(
+                            "Explicit ownership test failure.");
+
+                    return Task.FromResult(
+                        project == geometry.ProjectId &&
+                        user == owner);
+                });
+
+            var verifier = new TestPlanValidationEvidenceVerifier(
+                (_, _, _, _, _) =>
+                {
+                    verificationCalls++;
+                    return Task.FromResult(
+                        ValidationEvidenceStatus.Verified);
+                });
+
+            var guardedStore = new RevisionSecurityTrackingStore(store);
+
+            var service = new PlanRevisionService(
+                ownership,
+                guardedStore,
+                verifier,
+                TimeProvider.System);
+
+            Task<AppendRevisionResult> Execute() => restore
+                ? service.RestoreAsync(
+                    requestedProject,
+                    geometry.PlanId,
+                    baseRevision.RevisionId,
+                    baseRevision.RevisionId,
+                    validation,
+                    actor)
+                : service.CreateAsync(
+                    new CreatePlanRevisionCommand(
+                        requestedProject,
+                        geometry.PlanId,
+                        baseRevision.RevisionId,
+                        geometry,
+                        validation,
+                        Guid.NewGuid(),
+                        "ownership security test"),
+                    actor);
+
+            {
+                var result = Execute().GetAwaiter().GetResult();
+
+                var expectedStatus = scenario == "authorized"
+                    ? AppendRevisionStatus.Created
+                    : scenario == "ownership failure"
+                        ? AppendRevisionStatus.UnexpectedInternalFailure
+                        : AppendRevisionStatus.Unauthorized;
+
+                Assert(result.Status == expectedStatus,
+                    $"Unexpected revision status: {result.Status}");
+
+                if (scenario == "authorized")
+                {
+                    Assert(result.Revision?.CreatedBy == owner,
+                        "Trusted actor identity was not preserved.");
+
+                    Assert(result.Revision?.ParentRevisionId ==
+                        baseRevision.RevisionId,
+                        "Immutable parent revision was not preserved.");
+                }
+                else
+                {
+                    Assert(result.Revision is null,
+                        "Unauthorized request disclosed revision data.");
+                }
+            }
+
+            var allowed = scenario == "authorized";
+
+            Assert(ownershipCalls ==
+                (scenario == "empty actor" ? 0 :
+                    allowed ? (restore ? 3 : 2) : 1),
+                "Unexpected ownership check count.");
+
+            Assert(verificationCalls == (allowed ? 1 : 0),
+                "Unauthorized request reached validation.");
+
+            if (!allowed)
+            {
+                Assert(guardedStore.ReadCalls == 0,
+                    "Unauthorized request accessed revision data.");
+
+                Assert(guardedStore.AppendCalls == 0,
+                    "Unauthorized request attempted a write.");
+            }
+            else
+            {
+                Assert(guardedStore.AppendCalls == 1,
+                    "Authorized request did not append exactly once.");
+            }
+
+            var history = store.GetHistoryAsync(
+                geometry.ProjectId,
+                geometry.PlanId,
+                default).GetAwaiter().GetResult();
+
+            Assert(history.Count == (allowed ? 2 : 1),
+                "Revision history was unexpectedly modified.");
+
+            Assert(history.Any(item =>
+                item.RevisionId == baseRevision.RevisionId &&
+                item.GeometryJson == baseRevision.GeometryJson),
+                "Original revision was not preserved.");
+        });
+    }
+}
 
 Run("exact revision confirmation and acknowledgement", () =>
 {
@@ -331,8 +490,11 @@ Run("confirmation transaction failure does not publish report", () =>
         new OwnershipGate(true), new MemoryRevisionStore(revision),
         new InputSource(geometry.LandRevisionId, geometry.RequirementsRevisionId),
         new FreshnessPolicy(true), new ConfirmationTransaction(throwFailure: true), sink, TimeProvider.System);
-    AssertThrows<InvalidOperationException>(() => service.ConfirmAsync(
-        new(geometry.ProjectId, geometry.PlanId, revision.RevisionId, hash, true), Guid.NewGuid()).GetAwaiter().GetResult());
+    var result = service.ConfirmAsync(
+        new(geometry.ProjectId, geometry.PlanId, revision.RevisionId, hash, true), Guid.NewGuid()).Result;
+    Assert(result.Status == ConfirmationStatus.TransactionOutcomeUnknown &&
+        result.ExpectedConfirmationId.HasValue && result.ExpectedRevisionId == revision.RevisionId,
+        "Transaction exception did not preserve an indeterminate confirmation identity.");
     Assert(sink.PublishedRevisionId is null, "Report was published after transaction failure.");
 });
 
@@ -458,16 +620,293 @@ Run("M4 compute client exposes unavailability and cancellation", () =>
 Run("M4 persistence failure leaves revision history unchanged", () =>
 {
     var geometry = MinimalGeometry(0);
-    var baseRevision = Revision(geometry, "sha256:base", 1);
+    var hash = PlanRevisionService.ComputeGeometryHash(
+        JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+
+    var baseRevision = Revision(geometry, hash, 1);
     var store = new TestPlanRevisionStore(baseRevision) { ThrowOnAppend = true };
-    var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
-    var service = new PlanRevisionService(store, new TestPlanValidationEvidenceVerifier(
-        (_, _, _, _, _) => Task.FromResult(ValidationEvidenceStatus.Verified)), TimeProvider.System);
-    AssertThrows<InvalidOperationException>(() => service.CreateAsync(
+    var trackedStore = new RevisionSecurityTrackingStore(store);
+
+    var service = new PlanRevisionService(
+        new OwnershipGate(true),
+        trackedStore,
+        new TestPlanValidationEvidenceVerifier(
+            (_, _, _, _, _) => Task.FromResult(ValidationEvidenceStatus.Verified)),
+        TimeProvider.System);
+
+    var commandId = Guid.NewGuid();
+
+    var result = service.CreateAsync(
         new(geometry.ProjectId, geometry.PlanId, baseRevision.RevisionId, geometry,
-            Validation(hash), Guid.NewGuid(), "must roll back"), Guid.NewGuid()).GetAwaiter().GetResult());
+            Validation(hash), commandId, "uncertain append"),
+        Guid.NewGuid()).GetAwaiter().GetResult();
+
+    Assert(result.Status == AppendRevisionStatus.TransactionOutcomeUnknown,
+        "Persistence exception did not produce an unknown outcome.");
+
+    Assert(result.Revision is null,
+        "Uncertain transaction returned a successful revision.");
+
+    Assert(result.ExpectedRevisionId.HasValue &&
+        result.ExpectedRevisionId.Value != Guid.Empty &&
+        result.ExpectedRevisionId.Value != baseRevision.RevisionId,
+        "Expected reconciliation revision identity is invalid.");
+
+    Assert(result.ExpectedEditCommandId == commandId,
+        "Reconciliation command identity was not preserved.");
+
+    Assert(trackedStore.AppendCalls == 1,
+        "Persistence failure triggered an unexpected retry.");
+
+    Assert(trackedStore.ReadCalls == 2,
+        "Expected exactly two pre-mutation reads and no reconciliation read.");
+
     Assert(store.GetHistoryAsync(geometry.ProjectId, geometry.PlanId, default).Result.Count == 1,
         "Persistence failure changed revision history.");
+});
+
+Run("revision base and restore source reject defective repository snapshots", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var json = JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions);
+    var hash = PlanRevisionService.ComputeGeometryHash(json);
+    var baseline = Revision(geometry, hash, 1, Validation(hash));
+
+    var foreignGeometryJson = json.Replace(
+        geometry.ProjectId.ToString(), Guid.NewGuid().ToString(), StringComparison.OrdinalIgnoreCase);
+    var foreignGeometryHash = PlanRevisionService.ComputeGeometryHash(foreignGeometryJson);
+    var invalidNested = JsonNode.Parse(json)!.AsObject();
+    invalidNested["floors"] = null;
+    var invalidNestedJson = invalidNested.ToJsonString();
+    var invalidNestedHash = PlanRevisionService.ComputeGeometryHash(invalidNestedJson);
+
+    Func<PlanRevisionSnapshot, PlanRevisionSnapshot?>[] corruptions =
+    [
+        _ => null,
+        r => r with { RevisionId = Guid.NewGuid() },
+        r => r with { ProjectId = Guid.NewGuid() },
+        r => r with { PlanId = Guid.NewGuid() },
+        r => r with { GeometrySchemaVersion = "unsupported" },
+        r => r with { LandRevisionId = Guid.NewGuid() },
+        r => r with { RequirementsRevisionId = Guid.NewGuid() },
+        r => r with { GeometryHash = "sha256:incorrect" },
+        r => r with { Validation = Validation("sha256:incorrect") },
+        r => r with { GeometryJson = "null", GeometryHash = PlanRevisionService.ComputeGeometryHash("null"),
+            Validation = Validation(PlanRevisionService.ComputeGeometryHash("null")) },
+        r => r with { GeometryJson = "{malformed" },
+        r => r with { GeometryJson = foreignGeometryJson, GeometryHash = foreignGeometryHash,
+            Validation = Validation(foreignGeometryHash) },
+        r => r with { GeometryJson = invalidNestedJson, GeometryHash = invalidNestedHash,
+            Validation = Validation(invalidNestedHash) },
+        r => r with { VersionNumber = 0 },
+        r => r with { VersionNumber = long.MaxValue }
+    ];
+
+    foreach (var corrupt in corruptions)
+    {
+        var createStore = new AdversarialRevisionStore(baseline)
+        {
+            ReadTransform = (_, revision) => revision is null ? null : corrupt(revision)
+        };
+        var service = RevisionAuditService(createStore);
+        var result = service.CreateAsync(
+            new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, geometry,
+                Validation(hash), Guid.NewGuid(), "integrity"), Guid.NewGuid()).Result;
+        Assert(result.Status is AppendRevisionStatus.NotFound or AppendRevisionStatus.InvalidDependencyResponse,
+            "Defective base snapshot reached append.");
+        Assert(createStore.AppendCalls == 0 && createStore.HistoryCount == 1,
+            "Defective base snapshot mutated history.");
+
+        var restoreStore = new AdversarialRevisionStore(baseline)
+        {
+            ReadTransform = (_, revision) => revision is null ? null : corrupt(revision)
+        };
+        var restore = RevisionAuditService(restoreStore).RestoreAsync(
+            geometry.ProjectId, geometry.PlanId, baseline.RevisionId, baseline.RevisionId,
+            Validation(hash), Guid.NewGuid()).Result;
+        Assert(restore.Status is AppendRevisionStatus.NotFound or AppendRevisionStatus.InvalidDependencyResponse,
+            "Defective restore source reached append.");
+        Assert(restoreStore.AppendCalls == 0 && restoreStore.HistoryCount == 1,
+            "Defective restore source mutated history.");
+    }
+});
+
+Run("revision append preserves late ownership and cancellation boundaries", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var hash = PlanRevisionService.ComputeGeometryHash(
+        JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+    var baseline = Revision(geometry, hash, 1, Validation(hash));
+    var ownershipCalls = 0;
+    var revokedStore = new AdversarialRevisionStore(baseline);
+    var revoked = new PlanRevisionService(
+        new TestProjectOwnershipGate((_, _, _) => Task.FromResult(++ownershipCalls == 1)),
+        revokedStore, new ValidationVerifier(ValidationEvidenceStatus.Verified), TimeProvider.System);
+    var command = new CreatePlanRevisionCommand(
+        geometry.ProjectId, geometry.PlanId, baseline.RevisionId, geometry,
+        Validation(hash), Guid.NewGuid(), "revoked");
+    Assert(revoked.CreateAsync(command, Guid.NewGuid()).Result.Status == AppendRevisionStatus.Unauthorized &&
+        revokedStore.AppendCalls == 0, "Ownership revocation reached append.");
+
+    using var before = new CancellationTokenSource();
+    before.Cancel();
+    var cancelledStore = new AdversarialRevisionStore(baseline);
+    AssertThrows<OperationCanceledException>(() => RevisionAuditService(cancelledStore)
+        .CreateAsync(command, Guid.NewGuid(), before.Token).GetAwaiter().GetResult());
+    Assert(cancelledStore.AppendCalls == 0, "Pre-mutation cancellation reached append.");
+
+    var dependencyStore = new AdversarialRevisionStore(baseline)
+        { Failure = RevisionAppendFailure.DependencyCancellation };
+    var dependencyResult = RevisionAuditService(dependencyStore)
+        .CreateAsync(command, Guid.NewGuid()).Result;
+    Assert(dependencyResult.Status == AppendRevisionStatus.TransactionOutcomeUnknown &&
+        dependencyStore.AppendCalls == 1, "Dependency cancellation was fabricated as rollback.");
+
+    using var during = new CancellationTokenSource();
+    var duringStore = new AdversarialRevisionStore(baseline)
+        { Failure = RevisionAppendFailure.CallerCancellationAfterCommit, CancellationSource = during };
+    AssertThrows<OperationCanceledException>(() => RevisionAuditService(duringStore)
+        .CreateAsync(command, Guid.NewGuid(), during.Token).GetAwaiter().GetResult());
+    Assert(duringStore.AppendCalls == 1 && duringStore.HistoryCount == 2,
+        "Post-commit caller cancellation did not preserve actual state.");
+});
+
+Run("revision append exceptions require reconciliation without retry", () =>
+{
+    foreach (var failure in new[]
+    {
+        RevisionAppendFailure.Timeout,
+        RevisionAppendFailure.Transport,
+        RevisionAppendFailure.Unexpected,
+        RevisionAppendFailure.AcknowledgementLostAfterCommit
+    })
+    {
+        var geometry = MinimalGeometry(0);
+        var hash = PlanRevisionService.ComputeGeometryHash(
+            JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+        var baseline = Revision(geometry, hash, 1, Validation(hash));
+        var store = new AdversarialRevisionStore(baseline) { Failure = failure };
+        var commandId = Guid.NewGuid();
+        var result = RevisionAuditService(store).CreateAsync(
+            new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, geometry,
+                Validation(hash), commandId, failure.ToString()), Guid.NewGuid()).Result;
+        Assert(result.Status == AppendRevisionStatus.TransactionOutcomeUnknown && result.Revision is null &&
+            result.ExpectedRevisionId == store.LastProposed?.RevisionId &&
+            result.ExpectedEditCommandId == commandId,
+            "Append exception lost local reconciliation identity or fabricated an outcome.");
+        Assert(store.AppendCalls == 1 && store.ReadCalls == 2,
+            "Append exception triggered replay or reconciliation read.");
+        Assert(store.HistoryCount ==
+            (failure == RevisionAppendFailure.AcknowledgementLostAfterCommit ? 2 : 1),
+            "Actual mutation state did not match the injected failure boundary.");
+    }
+});
+
+Run("revision append validates exact acknowledgement and redacts foreign payloads", () =>
+{
+    Func<AppendRevisionResult, AppendRevisionResult?>[] corruptions =
+    [
+        _ => null,
+        r => r with { Status = (AppendRevisionStatus)int.MaxValue },
+        r => r with { Status = AppendRevisionStatus.TransactionOutcomeUnknown },
+        r => r with { Revision = null },
+        r => r with { Revision = r.Revision! with { RevisionId = Guid.NewGuid() } },
+        r => r with { Revision = r.Revision! with { ProjectId = Guid.NewGuid() } },
+        r => r with { Revision = r.Revision! with { PlanId = Guid.NewGuid() } },
+        r => r with { Revision = r.Revision! with { ParentRevisionId = Guid.NewGuid() } },
+        r => r with { Revision = r.Revision! with { VersionNumber = r.Revision.VersionNumber + 1 } },
+        r => r with { Revision = r.Revision! with { GeometrySchemaVersion = "wrong" } },
+        r => r with { Revision = r.Revision! with { GeometryJson = "{}" } },
+        r => r with { Revision = r.Revision! with { GeometryHash = "sha256:wrong" } },
+        r => r with { Revision = r.Revision! with { LandRevisionId = Guid.NewGuid() } },
+        r => r with { Revision = r.Revision! with { RequirementsRevisionId = Guid.NewGuid() } },
+        r => r with { Revision = r.Revision! with { Validation = Validation(r.Revision.GeometryHash) } },
+        r => r with { Revision = r.Revision! with { EditCommandId = Guid.NewGuid() } },
+        r => r with { Revision = r.Revision! with { CreatedBy = Guid.NewGuid() } },
+        r => r with { Revision = r.Revision! with { CreatedAtUtc = r.Revision.CreatedAtUtc.AddTicks(1) } },
+        r => r with { Revision = r.Revision! with { ChangeSummary = "foreign" } },
+        r => r with { Status = AppendRevisionStatus.RevisionConflict },
+        r => r with { ExpectedRevisionId = Guid.NewGuid(), ExpectedEditCommandId = Guid.NewGuid() }
+    ];
+
+    foreach (var corrupt in corruptions)
+    {
+        var geometry = MinimalGeometry(0);
+        var hash = PlanRevisionService.ComputeGeometryHash(
+            JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+        var baseline = Revision(geometry, hash, 1, Validation(hash));
+        var store = new AdversarialRevisionStore(baseline) { ResponseTransform = corrupt };
+        var commandId = Guid.NewGuid();
+        var result = RevisionAuditService(store).CreateAsync(
+            new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, geometry,
+                Validation(hash), commandId, "exact acknowledgement"), Guid.NewGuid()).Result;
+        Assert(result.Status == AppendRevisionStatus.TransactionOutcomeUnknown && result.Revision is null &&
+            result.ExpectedRevisionId == store.LastProposed?.RevisionId &&
+            result.ExpectedEditCommandId == commandId,
+            "Malformed acknowledgement was trusted or exposed foreign data.");
+        Assert(store.AppendCalls == 1 && store.ReadCalls == 2 && store.HistoryCount == 2,
+            "Malformed acknowledgement caused replay, reconciliation read, or extra mutation.");
+    }
+
+    var validGeometry = MinimalGeometry(0);
+    var validHash = PlanRevisionService.ComputeGeometryHash(
+        JsonSerializer.Serialize(validGeometry, PlanEditorJson.StrictOptions));
+    var validBase = Revision(validGeometry, validHash, 1, Validation(validHash));
+    var validStore = new AdversarialRevisionStore(validBase);
+    var valid = RevisionAuditService(validStore).CreateAsync(
+        new(validGeometry.ProjectId, validGeometry.PlanId, validBase.RevisionId, validGeometry,
+            Validation(validHash), Guid.NewGuid(), "valid"), Guid.NewGuid()).Result;
+    Assert(valid.Status == AppendRevisionStatus.Created && valid.Revision == validStore.LastProposed &&
+        valid.Revision?.ParentRevisionId == validBase.RevisionId && valid.Revision.VersionNumber == 2,
+        "Valid exact acknowledgement was rejected.");
+});
+
+Run("revision verifier unknown status fails as invalid dependency response", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var hash = PlanRevisionService.ComputeGeometryHash(
+        JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+    var baseline = Revision(geometry, hash, 1, Validation(hash));
+    var store = new AdversarialRevisionStore(baseline);
+    var service = new PlanRevisionService(new OwnershipGate(true), store,
+        new ValidationVerifier((ValidationEvidenceStatus)int.MaxValue), TimeProvider.System);
+    var result = service.CreateAsync(
+        new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, geometry,
+            Validation(hash), Guid.NewGuid(), "unknown verifier"), Guid.NewGuid()).Result;
+    Assert(result.Status == AppendRevisionStatus.InvalidDependencyResponse && store.AppendCalls == 0,
+        "Unknown validation status reached persistence.");
+});
+
+Run("revision and confirmation prerequisite failures stop before mutation", () =>
+{
+    foreach (var item in new (Exception Error, AppendRevisionStatus Revision, ConfirmationStatus Confirmation)[]
+    {
+        (new TimeoutException("private"), AppendRevisionStatus.DependencyTimeout, ConfirmationStatus.DependencyTimeout),
+        (new HttpRequestException("private"), AppendRevisionStatus.DependencyUnavailable, ConfirmationStatus.DependencyUnavailable),
+        (new OperationCanceledException("private"), AppendRevisionStatus.DependencyTimeout, ConfirmationStatus.DependencyTimeout),
+        (new InvalidOperationException("private"), AppendRevisionStatus.UnexpectedInternalFailure, ConfirmationStatus.UnexpectedInternalFailure)
+    })
+    {
+        var geometry = MinimalGeometry(0);
+        var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+        var baseline = Revision(geometry, hash, 1, Validation(hash));
+        var revisionStore = new ConfirmationAuditStore(baseline) { SelectedException = item.Error };
+        var revision = RevisionAuditService(revisionStore).CreateAsync(
+            new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, geometry,
+                Validation(hash), Guid.NewGuid(), "dependency"), Guid.NewGuid()).Result;
+        Assert(revision.Status == item.Revision, "Revision prerequisite failure was misclassified.");
+
+        var confirmationCalls = 0;
+        var publishCalls = 0;
+        var confirmationStore = new ConfirmationAuditStore(baseline) { SelectedException = item.Error };
+        var confirmation = ConfirmationAuditService(confirmationStore,
+            new TestFinalConfirmationTransaction((c, _, _) =>
+            { confirmationCalls++; return Task.FromResult(new ConfirmationResult(ConfirmationStatus.Confirmed, c)); }),
+            new TestConfirmedPlanSnapshotSink((_, _, _) => { publishCalls++; return Task.CompletedTask; }))
+            .ConfirmAsync(new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), Guid.NewGuid()).Result;
+        Assert(confirmation.Status == item.Confirmation && confirmationCalls == 0 && publishCalls == 0,
+            "Confirmation prerequisite failure reached mutation or publication.");
+    }
 });
 
 Run("M6 validation test double rejects mismatched authoritative evidence", () =>
@@ -495,10 +934,316 @@ Run("M5 report publication failure remains visible after confirmed transaction",
         new TestFinalConfirmationTransaction((confirmation, _, _) =>
             Task.FromResult(new ConfirmationResult(ConfirmationStatus.Confirmed, confirmation))),
         sink, TimeProvider.System);
-    AssertThrows<InvalidOperationException>(() => service.ConfirmAsync(
-        new(geometry.ProjectId, geometry.PlanId, revision.RevisionId, hash, true), Guid.NewGuid())
-        .GetAwaiter().GetResult());
+    var result = service.ConfirmAsync(
+        new(geometry.ProjectId, geometry.PlanId, revision.RevisionId, hash, true), Guid.NewGuid()).Result;
+    Assert(result.Status == ConfirmationStatus.Confirmed &&
+        result.PublicationStatus == ConfirmationPublicationStatus.OutcomeUnknown,
+        "Publication failure incorrectly changed confirmed transaction state.");
     Assert(sink.PublishedRevisionId is null, "Failed report publication was recorded as delivered.");
+});
+
+Run("confirmation rejects defective selected and current revision snapshots", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var json = JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions);
+    var hash = PlanRevisionService.ComputeGeometryHash(json);
+    var baseline = Revision(geometry, hash, 1, Validation(hash));
+    var invalidNested = JsonNode.Parse(json)!.AsObject();
+    invalidNested["floors"] = null;
+    var invalidJson = invalidNested.ToJsonString();
+    var invalidHash = PlanRevisionService.ComputeGeometryHash(invalidJson);
+    var foreignGeometryJson = json.Replace(
+        geometry.ProjectId.ToString(), Guid.NewGuid().ToString(), StringComparison.OrdinalIgnoreCase);
+    var foreignGeometryHash = PlanRevisionService.ComputeGeometryHash(foreignGeometryJson);
+    Func<PlanRevisionSnapshot, PlanRevisionSnapshot?>[] corruptions =
+    [
+        _ => null,
+        r => r with { RevisionId = Guid.NewGuid() },
+        r => r with { ProjectId = Guid.NewGuid() },
+        r => r with { PlanId = Guid.NewGuid() },
+        r => r with { VersionNumber = 0 },
+        r => r with { GeometrySchemaVersion = "unsupported" },
+        r => r with { GeometryJson = "null", GeometryHash = PlanRevisionService.ComputeGeometryHash("null"),
+            Validation = Validation(PlanRevisionService.ComputeGeometryHash("null")) },
+        r => r with { GeometryJson = "{malformed" },
+        r => r with { GeometryJson = invalidJson, GeometryHash = invalidHash, Validation = Validation(invalidHash) },
+        r => r with { GeometryJson = foreignGeometryJson, GeometryHash = foreignGeometryHash,
+            Validation = Validation(foreignGeometryHash) },
+        r => r with { GeometryHash = "sha256:wrong" },
+        r => r with { LandRevisionId = Guid.NewGuid() },
+        r => r with { RequirementsRevisionId = Guid.NewGuid() },
+        r => r with { Validation = Validation("sha256:wrong") },
+        r => r with { Validation = null! }
+    ];
+    foreach (var corrupt in corruptions)
+    {
+        var transactionCalls = 0;
+        var publishCalls = 0;
+        var store = new ConfirmationAuditStore(baseline)
+            { SelectedTransform = r => r is null ? null : corrupt(r) };
+        var result = ConfirmationAuditService(store,
+            new TestFinalConfirmationTransaction((c, _, _) =>
+            { transactionCalls++; return Task.FromResult(new ConfirmationResult(ConfirmationStatus.Confirmed, c)); }),
+            new TestConfirmedPlanSnapshotSink((_, _, _) => { publishCalls++; return Task.CompletedTask; }))
+            .ConfirmAsync(new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), Guid.NewGuid()).Result;
+        Assert(result.Status is ConfirmationStatus.RevisionNotFound or ConfirmationStatus.InvalidDependencyResponse &&
+            transactionCalls == 0 && publishCalls == 0,
+            "Defective selected revision reached confirmation or publication.");
+    }
+
+    var inconsistent = new ConfirmationAuditStore(baseline)
+        { CurrentTransform = (_, r) => r with { ChangeSummary = "foreign" } };
+    Assert(ConfirmationAuditService(inconsistent).ConfirmAsync(
+        new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), Guid.NewGuid()).Result.Status
+        == ConfirmationStatus.InvalidDependencyResponse,
+        "Inconsistent selected/current snapshots were accepted.");
+
+    var noncanonicalJson = json + "  \r\n";
+    var noncanonicalHash = PlanRevisionService.ComputeGeometryHash(noncanonicalJson);
+    var noncanonical = baseline with
+    {
+        GeometryJson = noncanonicalJson, GeometryHash = noncanonicalHash,
+        Validation = Validation(noncanonicalHash)
+    };
+    var valid = ConfirmationAuditService(new ConfirmationAuditStore(noncanonical)).ConfirmAsync(
+        new(geometry.ProjectId, geometry.PlanId, noncanonical.RevisionId, noncanonicalHash, true), Guid.NewGuid()).Result;
+    Assert(valid.Status == ConfirmationStatus.Confirmed,
+        "Valid noncanonical JSON with an exact stored hash was rejected.");
+});
+
+Run("confirmation revalidates authorization revision inputs and freshness", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+    var baseline = Revision(geometry, hash, 1, Validation(hash));
+    var actor = Guid.NewGuid();
+
+    var ownershipCalls = 0;
+    var revokedTransactionCalls = 0;
+    var revoked = ConfirmationAuditService(new ConfirmationAuditStore(baseline),
+        new TestFinalConfirmationTransaction((c, _, _) =>
+        { revokedTransactionCalls++; return Task.FromResult(new ConfirmationResult(ConfirmationStatus.Confirmed, c)); }),
+        ownership: new TestProjectOwnershipGate((_, _, _) => Task.FromResult(++ownershipCalls == 1)));
+    Assert(revoked.ConfirmAsync(new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), actor)
+        .Result.Status == ConfirmationStatus.Unauthorized && revokedTransactionCalls == 0,
+        "Revoked ownership reached transaction.");
+
+    var failingOwnershipCalls = 0;
+    var ownershipFailureTransactionCalls = 0;
+    var ownershipFailure = ConfirmationAuditService(new ConfirmationAuditStore(baseline),
+        new TestFinalConfirmationTransaction((c, _, _) =>
+        { ownershipFailureTransactionCalls++; return Task.FromResult(new ConfirmationResult(ConfirmationStatus.Confirmed, c)); }),
+        ownership: new TestProjectOwnershipGate((_, _, _) =>
+        {
+            if (++failingOwnershipCalls == 2) throw new InvalidOperationException("private ownership failure");
+            return Task.FromResult(true);
+        }));
+    var ownershipFailureResult = ownershipFailure.ConfirmAsync(
+        new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), actor).Result;
+    Assert(ownershipFailureResult.Status == ConfirmationStatus.UnexpectedInternalFailure &&
+        ownershipFailureTransactionCalls == 0, "Ownership dependency failure reached transaction or escaped.");
+
+    var changedCurrent = new ConfirmationAuditStore(baseline)
+        { CurrentTransform = (call, r) => call == 2 ? r with { RevisionId = Guid.NewGuid() } : r };
+    Assert(ConfirmationAuditService(changedCurrent).ConfirmAsync(
+        new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), actor).Result.Status
+        == ConfirmationStatus.NotCurrentRevision, "Changed current revision reached transaction.");
+
+    var inputCalls = 0;
+    var changedInputs = new TestApplicableInputRevisionSource((_, _) => Task.FromResult(
+        ++inputCalls == 1
+            ? new ApplicableInputRevisions(geometry.LandRevisionId, geometry.RequirementsRevisionId)
+            : new ApplicableInputRevisions(Guid.NewGuid(), geometry.RequirementsRevisionId)));
+    Assert(ConfirmationAuditService(new ConfirmationAuditStore(baseline), inputs: changedInputs).ConfirmAsync(
+        new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), actor).Result.Status
+        == ConfirmationStatus.StaleInputs, "Changed input revisions reached transaction.");
+
+    inputCalls = 0;
+    var changedRequirements = new TestApplicableInputRevisionSource((_, _) => Task.FromResult(
+        ++inputCalls == 1
+            ? new ApplicableInputRevisions(geometry.LandRevisionId, geometry.RequirementsRevisionId)
+            : new ApplicableInputRevisions(geometry.LandRevisionId, Guid.NewGuid())));
+    Assert(ConfirmationAuditService(new ConfirmationAuditStore(baseline), inputs: changedRequirements).ConfirmAsync(
+        new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), actor).Result.Status
+        == ConfirmationStatus.StaleInputs, "Changed requirements revision reached transaction.");
+
+    var freshnessCalls = 0;
+    var freshness = new DynamicFreshnessPolicy(_ => ++freshnessCalls == 1);
+    Assert(ConfirmationAuditService(new ConfirmationAuditStore(baseline), freshness: freshness).ConfirmAsync(
+        new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), actor).Result.Status
+        == ConfirmationStatus.ValidationStale, "Validation that became stale reached transaction.");
+
+    using var cancelled = new CancellationTokenSource();
+    cancelled.Cancel();
+    AssertThrows<OperationCanceledException>(() => ConfirmationAuditService(new ConfirmationAuditStore(baseline))
+        .ConfirmAsync(new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), actor, cancelled.Token)
+        .GetAwaiter().GetResult());
+});
+
+Run("confirmation transaction uncertainty preserves local identity without publication", () =>
+{
+    Func<PlanConfirmationSnapshot, ConfirmationResult?>[] responses =
+    [
+        _ => null,
+        _ => new ConfirmationResult((ConfirmationStatus)int.MaxValue),
+        c => new ConfirmationResult(ConfirmationStatus.TransactionOutcomeUnknown)
+            { ExpectedConfirmationId = Guid.NewGuid(), ExpectedRevisionId = Guid.NewGuid() },
+        _ => new ConfirmationResult(ConfirmationStatus.Confirmed),
+        c => new ConfirmationResult(ConfirmationStatus.AlreadyConfirmed, c)
+    ];
+    foreach (var response in responses)
+    {
+        var geometry = MinimalGeometry(0);
+        var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+        var baseline = Revision(geometry, hash, 1, Validation(hash));
+        var transactionCalls = 0;
+        var publishCalls = 0;
+        PlanConfirmationSnapshot? proposed = null;
+        var service = ConfirmationAuditService(new ConfirmationAuditStore(baseline),
+            new TestFinalConfirmationTransaction((c, _, _) =>
+            { transactionCalls++; proposed = c; return Task.FromResult(response(c)!); }),
+            new TestConfirmedPlanSnapshotSink((_, _, _) => { publishCalls++; return Task.CompletedTask; }));
+        var result = service.ConfirmAsync(
+            new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), Guid.NewGuid()).Result;
+        Assert(result.Status == ConfirmationStatus.TransactionOutcomeUnknown && result.Confirmation is null &&
+            result.ExpectedConfirmationId == proposed!.ConfirmationId &&
+            result.ExpectedRevisionId == baseline.RevisionId && transactionCalls == 1 && publishCalls == 0,
+            "Malformed transaction response was trusted, replayed, published, or exposed.");
+    }
+
+    foreach (var failure in new[] { "timeout", "transport", "dependency-cancel", "unexpected", "commit-lost" })
+    {
+        var geometry = MinimalGeometry(0);
+        var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+        var baseline = Revision(geometry, hash, 1, Validation(hash));
+        var calls = 0;
+        var committed = false;
+        var transaction = new TestFinalConfirmationTransaction((_, _, _) =>
+        {
+            calls++;
+            if (failure == "commit-lost") committed = true;
+            throw failure switch
+            {
+                "timeout" => new TimeoutException("private"),
+                "transport" or "commit-lost" => new HttpRequestException("private"),
+                "dependency-cancel" => new OperationCanceledException("private"),
+                _ => new InvalidOperationException("private")
+            };
+        });
+        var result = ConfirmationAuditService(new ConfirmationAuditStore(baseline), transaction).ConfirmAsync(
+            new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), Guid.NewGuid()).Result;
+        Assert(result.Status == ConfirmationStatus.TransactionOutcomeUnknown && calls == 1 &&
+            (failure != "commit-lost" || committed), "Transaction exception fabricated rollback or retried.");
+    }
+
+    var cancelledGeometry = MinimalGeometry(0);
+    var cancelledHash = PlanRevisionService.ComputeGeometryHash(
+        JsonSerializer.Serialize(cancelledGeometry, PlanEditorJson.StrictOptions));
+    var cancelledRevision = Revision(cancelledGeometry, cancelledHash, 1, Validation(cancelledHash));
+    using var cancelled = new CancellationTokenSource();
+    var cancelledCalls = 0;
+    var cancelledPublishes = 0;
+    var cancelledService = ConfirmationAuditService(new ConfirmationAuditStore(cancelledRevision),
+        new TestFinalConfirmationTransaction((_, _, token) =>
+        {
+            cancelledCalls++;
+            cancelled.Cancel();
+            throw new OperationCanceledException("caller", token);
+        }),
+        new TestConfirmedPlanSnapshotSink((_, _, _) =>
+        { cancelledPublishes++; return Task.CompletedTask; }));
+    AssertThrows<OperationCanceledException>(() => cancelledService.ConfirmAsync(
+        new(cancelledGeometry.ProjectId, cancelledGeometry.PlanId, cancelledRevision.RevisionId,
+            cancelledHash, true), Guid.NewGuid(), cancelled.Token).GetAwaiter().GetResult());
+    Assert(cancelledCalls == 1 && cancelledPublishes == 0,
+        "Caller cancellation during transaction retried or published.");
+});
+
+Run("confirmation validates every acknowledgement field", () =>
+{
+    Func<PlanConfirmationSnapshot, PlanConfirmationSnapshot>[] corruptions =
+    [
+        c => c with { ConfirmationId = Guid.NewGuid() },
+        c => c with { ProjectId = Guid.NewGuid() },
+        c => c with { PlanId = Guid.NewGuid() },
+        c => c with { ConfirmedRevisionId = Guid.NewGuid() },
+        c => c with { GeometryHash = "sha256:wrong" },
+        c => c with { ValidationId = Guid.NewGuid() },
+        c => c with { ConfirmedBy = Guid.NewGuid() },
+        c => c with { ConfirmedAtUtc = c.ConfirmedAtUtc.AddTicks(1) },
+        c => c with { WarningAcknowledgement = !c.WarningAcknowledgement }
+    ];
+    foreach (var corrupt in corruptions)
+    {
+        var geometry = MinimalGeometry(0);
+        var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+        var baseline = Revision(geometry, hash, 1, Validation(hash));
+        var publishCalls = 0;
+        var service = ConfirmationAuditService(new ConfirmationAuditStore(baseline),
+            new TestFinalConfirmationTransaction((c, _, _) => Task.FromResult(
+                new ConfirmationResult(ConfirmationStatus.Confirmed, corrupt(c)))),
+            new TestConfirmedPlanSnapshotSink((_, _, _) => { publishCalls++; return Task.CompletedTask; }));
+        var result = service.ConfirmAsync(
+            new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), Guid.NewGuid()).Result;
+        Assert(result.Status == ConfirmationStatus.TransactionOutcomeUnknown && result.Confirmation is null &&
+            publishCalls == 0, "Contradictory confirmation acknowledgement was accepted or published.");
+    }
+});
+
+Run("confirmed publication uncertainty never implies transaction rollback", () =>
+{
+    foreach (var failure in new[] { "throw", "timeout", "dependency-cancel", "delivered-lost" })
+    {
+        var geometry = MinimalGeometry(0);
+        var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+        var baseline = Revision(geometry, hash, 1, Validation(hash));
+        var transactionCalls = 0;
+        var publishCalls = 0;
+        var delivered = false;
+        var transaction = new TestFinalConfirmationTransaction((c, _, _) =>
+        { transactionCalls++; return Task.FromResult(new ConfirmationResult(ConfirmationStatus.Confirmed, c)); });
+        var sink = new TestConfirmedPlanSnapshotSink((_, _, _) =>
+        {
+            publishCalls++;
+            if (failure == "delivered-lost") delivered = true;
+            throw failure switch
+            {
+                "timeout" => new TimeoutException("private"),
+                "dependency-cancel" => new OperationCanceledException("private"),
+                _ => new InvalidOperationException("private")
+            };
+        });
+        var result = ConfirmationAuditService(new ConfirmationAuditStore(baseline), transaction, sink).ConfirmAsync(
+            new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), Guid.NewGuid()).Result;
+        Assert(result.Status == ConfirmationStatus.Confirmed && result.Confirmation is not null &&
+            result.PublicationStatus == ConfirmationPublicationStatus.OutcomeUnknown &&
+            transactionCalls == 1 && publishCalls == 1 &&
+            (failure != "delivered-lost" || delivered),
+            "Publication uncertainty fabricated rollback, delivery success, or retry.");
+    }
+
+
+    var cancelledGeometry = MinimalGeometry(0);
+    var cancelledHash = PlanRevisionService.ComputeGeometryHash(
+        JsonSerializer.Serialize(cancelledGeometry, PlanEditorJson.StrictOptions));
+    var cancelledRevision = Revision(cancelledGeometry, cancelledHash, 1, Validation(cancelledHash));
+    using var cancelled = new CancellationTokenSource();
+    var cancelledTransactionCalls = 0;
+    var cancelledPublicationCalls = 0;
+    var cancelledService = ConfirmationAuditService(new ConfirmationAuditStore(cancelledRevision),
+        new TestFinalConfirmationTransaction((confirmation, _, _) =>
+        { cancelledTransactionCalls++; return Task.FromResult(new ConfirmationResult(ConfirmationStatus.Confirmed, confirmation)); }),
+        new TestConfirmedPlanSnapshotSink((_, _, token) =>
+        {
+            cancelledPublicationCalls++;
+            cancelled.Cancel();
+            throw new OperationCanceledException("caller", token);
+        }));
+    AssertThrows<OperationCanceledException>(() => cancelledService.ConfirmAsync(
+        new(cancelledGeometry.ProjectId, cancelledGeometry.PlanId, cancelledRevision.RevisionId,
+            cancelledHash, true), Guid.NewGuid(), cancelled.Token).GetAwaiter().GetResult());
+    Assert(cancelledTransactionCalls == 1 && cancelledPublicationCalls == 1,
+        "Caller cancellation after verified confirmation replayed transaction or publication.");
 });
 
 Run("M7 AI proposal test double exposes unavailable and malformed proposals", () =>
@@ -525,10 +1270,201 @@ Run("M7 AI proposal test double exposes unavailable and malformed proposals", ()
     }));
 });
 
+Run("GVR-11 stored revision and evidence identities cannot be empty", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+    var baseline = Revision(geometry, hash, 1);
+    var evidenceNode = JsonSerializer.SerializeToNode(Validation(hash), PlanEditorJson.StrictOptions)!.AsObject();
+    evidenceNode["validationId"] = Guid.Empty.ToString();
+    var emptyEvidence = evidenceNode.Deserialize<PlanValidationReferenceDto>(PlanEditorJson.StrictOptions)!;
+    foreach (var corrupt in new[] { baseline with { RevisionId = Guid.Empty },
+        baseline with { Validation = emptyEvidence }, baseline with { Validation = null! } })
+    {
+        foreach (var restore in new[] { false, true })
+        {
+            var store = new AdversarialRevisionStore(corrupt);
+            var service = RevisionAuditService(store);
+            var result = restore
+                ? service.RestoreAsync(geometry.ProjectId, geometry.PlanId, corrupt.RevisionId, corrupt.RevisionId,
+                    Validation(hash), Guid.NewGuid()).GetAwaiter().GetResult()
+                : service.CreateAsync(new(geometry.ProjectId, geometry.PlanId, corrupt.RevisionId, geometry,
+                    Validation(hash), Guid.NewGuid(), "identity"), Guid.NewGuid()).GetAwaiter().GetResult();
+            Assert(result.Status == AppendRevisionStatus.InvalidDependencyResponse && store.AppendCalls == 0 &&
+                store.HistoryCount == 1, "Invalid stored identity reached mutation.");
+        }
+    }
+});
+
+Run("GVR-11 and GVR-12 incoming empty or null validation identity fails before verifier", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+    var baseline = Revision(geometry, hash, 1);
+    var node = JsonSerializer.SerializeToNode(Validation(hash), PlanEditorJson.StrictOptions)!.AsObject();
+    node["validationId"] = Guid.Empty.ToString();
+    var empty = node.Deserialize<PlanValidationReferenceDto>(PlanEditorJson.StrictOptions)!;
+    foreach (var evidence in new PlanValidationReferenceDto?[] { null, empty })
+    {
+        foreach (var restore in new[] { false, true })
+        {
+            var store = new AdversarialRevisionStore(baseline);
+            var verifierCalls = 0;
+            var service = new PlanRevisionService(new OwnershipGate(true), store,
+                new TestPlanValidationEvidenceVerifier((_, _, _, _, _) =>
+                { verifierCalls++; return Task.FromResult(ValidationEvidenceStatus.Verified); }), TimeProvider.System);
+            AssertThrows<ArgumentException>(() =>
+            {
+                if (restore)
+                    service.RestoreAsync(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, baseline.RevisionId,
+                        evidence!, Guid.NewGuid()).GetAwaiter().GetResult();
+                else
+                    service.CreateAsync(new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, geometry,
+                        evidence!, Guid.NewGuid(), "identity"), Guid.NewGuid()).GetAwaiter().GetResult();
+            });
+            Assert(verifierCalls == 0 && store.AppendCalls == 0 && store.HistoryCount == 1,
+                "Invalid incoming evidence reached verifier or mutation.");
+        }
+    }
+});
+
+Run("GVR-13 late revision integrity and stale base are checked before append", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+    var baseline = Revision(geometry, hash, 1);
+    var cases = new (PlanRevisionSnapshot? Snapshot, AppendRevisionStatus Status)[]
+    {
+        (null, AppendRevisionStatus.InvalidDependencyResponse),
+        (baseline with { ChangeSummary = "changed" }, AppendRevisionStatus.InvalidDependencyResponse),
+        (baseline with { Validation = Validation(hash) }, AppendRevisionStatus.InvalidDependencyResponse),
+        (baseline with { GeometryJson = baseline.GeometryJson + " " }, AppendRevisionStatus.InvalidDependencyResponse),
+        (baseline with { ProjectId = Guid.NewGuid() }, AppendRevisionStatus.InvalidDependencyResponse),
+        (baseline with { RevisionId = Guid.NewGuid(), VersionNumber = 2 }, AppendRevisionStatus.RevisionConflict),
+        (baseline, AppendRevisionStatus.Created)
+    };
+    foreach (var item in cases)
+    {
+        var store = new AdversarialRevisionStore(baseline) { CurrentTransform = _ => item.Snapshot };
+        var result = RevisionAuditService(store).CreateAsync(new(geometry.ProjectId, geometry.PlanId,
+            baseline.RevisionId, geometry, Validation(hash), Guid.NewGuid(), "late base"), Guid.NewGuid()).GetAwaiter().GetResult();
+        var success = item.Status == AppendRevisionStatus.Created;
+        Assert(result.Status == item.Status && store.ReadCalls == 2 && store.AppendCalls == (success ? 1 : 0) &&
+            store.HistoryCount == (success ? 2 : 1), "Late base integrity result was incorrect.");
+    }
+});
+
+Run("GVR-13 late revision read failures and cancellation block append", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+    var baseline = Revision(geometry, hash, 1);
+    var command = new CreatePlanRevisionCommand(geometry.ProjectId, geometry.PlanId, baseline.RevisionId,
+        geometry, Validation(hash), Guid.NewGuid(), "late read");
+    foreach (var item in new (Exception Error, AppendRevisionStatus Status)[] {
+        (new TimeoutException(), AppendRevisionStatus.DependencyTimeout),
+        (new OperationCanceledException(), AppendRevisionStatus.DependencyTimeout),
+        (new HttpRequestException(), AppendRevisionStatus.DependencyUnavailable),
+        (new InvalidOperationException(), AppendRevisionStatus.UnexpectedInternalFailure) })
+    {
+        var store = new AdversarialRevisionStore(baseline) { CurrentTransform = _ => throw item.Error };
+        var result = RevisionAuditService(store).CreateAsync(command, Guid.NewGuid()).GetAwaiter().GetResult();
+        Assert(result.Status == item.Status && store.AppendCalls == 0 && store.HistoryCount == 1,
+            "Late read failure reached append or was misclassified.");
+    }
+    using var cancelled = new CancellationTokenSource();
+    var cancelledStore = new AdversarialRevisionStore(baseline)
+        { CurrentTransform = r => { cancelled.Cancel(); return r; } };
+    AssertThrows<OperationCanceledException>(() => RevisionAuditService(cancelledStore)
+        .CreateAsync(command, Guid.NewGuid(), cancelled.Token).GetAwaiter().GetResult());
+    Assert(cancelledStore.AppendCalls == 0, "Late read cancellation reached append.");
+});
+
+Run("GVR-14 final confirmation authorization rejects revocation and failures", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+    var baseline = Revision(geometry, hash, 1);
+    foreach (var item in new (Exception? Error, ConfirmationStatus Status)[] {
+        (null, ConfirmationStatus.Unauthorized), (new TimeoutException(), ConfirmationStatus.DependencyTimeout),
+        (new OperationCanceledException(), ConfirmationStatus.DependencyTimeout),
+        (new HttpRequestException(), ConfirmationStatus.DependencyUnavailable),
+        (new InvalidOperationException(), ConfirmationStatus.UnexpectedInternalFailure) })
+    {
+        var owned = true; var reads = 0; var checks = 0; var writes = 0; var publishes = 0;
+        var service = ConfirmationAuditService(new ConfirmationAuditStore(baseline),
+            new TestFinalConfirmationTransaction((c, _, _) => { writes++; return Task.FromResult(new ConfirmationResult(ConfirmationStatus.Confirmed, c)); }),
+            new TestConfirmedPlanSnapshotSink((_, _, _) => { publishes++; return Task.CompletedTask; }),
+            ownership: new TestProjectOwnershipGate((_, _, _) => { checks++; if (!owned && item.Error is not null) throw item.Error; return Task.FromResult(owned); }),
+            inputs: new TestApplicableInputRevisionSource((_, _) => { if (++reads == 2) owned = false;
+                return Task.FromResult(new ApplicableInputRevisions(geometry.LandRevisionId, geometry.RequirementsRevisionId)); }));
+        var result = service.ConfirmAsync(new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), Guid.NewGuid()).GetAwaiter().GetResult();
+        Assert(result.Status == item.Status && result.Confirmation is null && checks == 3 && writes == 0 && publishes == 0,
+            "Final authorization failure reached confirmation or publication.");
+    }
+});
+
+Run("GVR-15 final confirmation cancellation prevents transaction", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+    var baseline = Revision(geometry, hash, 1);
+    using var cancelled = new CancellationTokenSource();
+    var checks = 0; var writes = 0; var publishes = 0;
+    var service = ConfirmationAuditService(new ConfirmationAuditStore(baseline),
+        new TestFinalConfirmationTransaction((c, _, _) => { writes++; return Task.FromResult(new ConfirmationResult(ConfirmationStatus.Confirmed, c)); }),
+        new TestConfirmedPlanSnapshotSink((_, _, _) => { publishes++; return Task.CompletedTask; }),
+        freshness: new DynamicFreshnessPolicy(_ => { if (++checks == 2) cancelled.Cancel(); return true; }));
+    AssertThrows<OperationCanceledException>(() => service.ConfirmAsync(
+        new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), Guid.NewGuid(), cancelled.Token).GetAwaiter().GetResult());
+    Assert(checks == 2 && writes == 0 && publishes == 0, "Final cancellation reached mutation.");
+});
+
+Run("GVR-16 validation expiry during final dependency reads prevents confirmation", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+    var baseline = Revision(geometry, hash, 1);
+    var fresh = true; var reads = 0; var writes = 0; var publishes = 0;
+    var service = ConfirmationAuditService(new ConfirmationAuditStore(baseline),
+        new TestFinalConfirmationTransaction((c, _, _) => { writes++; return Task.FromResult(new ConfirmationResult(ConfirmationStatus.Confirmed, c)); }),
+        new TestConfirmedPlanSnapshotSink((_, _, _) => { publishes++; return Task.CompletedTask; }),
+        inputs: new TestApplicableInputRevisionSource((_, _) => { if (++reads == 2) fresh = false;
+            return Task.FromResult(new ApplicableInputRevisions(geometry.LandRevisionId, geometry.RequirementsRevisionId)); }),
+        freshness: new DynamicFreshnessPolicy(_ => fresh));
+    var result = service.ConfirmAsync(new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), Guid.NewGuid()).GetAwaiter().GetResult();
+    Assert(result.Status == ConfirmationStatus.ValidationStale && writes == 0 && publishes == 0,
+        "Expired validation reached confirmation.");
+});
+
+Run("GVR-17 initial and final freshness exceptions are classified", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+    var baseline = Revision(geometry, hash, 1);
+    foreach (var failOn in new[] { 1, 2 })
+    foreach (var item in new (Exception Error, ConfirmationStatus Status)[] {
+        (new TimeoutException(), ConfirmationStatus.DependencyTimeout),
+        (new OperationCanceledException(), ConfirmationStatus.DependencyTimeout),
+        (new HttpRequestException(), ConfirmationStatus.DependencyUnavailable),
+        (new InvalidOperationException(), ConfirmationStatus.UnexpectedInternalFailure) })
+    {
+        var checks = 0; var writes = 0; var publishes = 0;
+        var service = ConfirmationAuditService(new ConfirmationAuditStore(baseline),
+            new TestFinalConfirmationTransaction((c, _, _) => { writes++; return Task.FromResult(new ConfirmationResult(ConfirmationStatus.Confirmed, c)); }),
+            new TestConfirmedPlanSnapshotSink((_, _, _) => { publishes++; return Task.CompletedTask; }),
+            freshness: new DynamicFreshnessPolicy(_ => { if (++checks == failOn) throw item.Error; return true; }));
+        var result = service.ConfirmAsync(new(geometry.ProjectId, geometry.PlanId, baseline.RevisionId, hash, true), Guid.NewGuid()).GetAwaiter().GetResult();
+        Assert(result.Status == item.Status && checks == failOn && writes == 0 && publishes == 0,
+            "Freshness exception escaped or reached mutation.");
+    }
+});
+
 CandidatePreviewContractScenarios.Register(Run);
 DiagnosticContractScenarios.Register(Run);
 PersistenceContractScenarios.Register(Run);
 AdvancedGeometryContractScenarios.Register(Run);
+AiEditOrchestrationContractScenarios.Register(Run);
 
 if (failures.Count > 0)
 {
@@ -625,6 +1561,31 @@ static FinalPlanConfirmationService ConfirmationService(
         new InputSource(geometry.LandRevisionId, geometry.RequirementsRevisionId),
         new FreshnessPolicy(true), new ConfirmationTransaction(), new ConfirmationSink(), TimeProvider.System);
 
+static FinalPlanConfirmationService ConfirmationAuditService(
+    IPlanRevisionStore store,
+    IFinalConfirmationTransaction? transaction = null,
+    IConfirmedPlanSnapshotSink? sink = null,
+    IProjectOwnershipGate? ownership = null,
+    IApplicableInputRevisionSource? inputs = null,
+    IValidationFreshnessPolicy? freshness = null) => new(
+        ownership ?? new OwnershipGate(true),
+        store,
+        inputs ?? new TestApplicableInputRevisionSource((projectId, _) =>
+        {
+            var current = ((ConfirmationAuditStore)store).Initial;
+            return Task.FromResult(new ApplicableInputRevisions(
+                current.LandRevisionId, current.RequirementsRevisionId));
+        }),
+        freshness ?? new FreshnessPolicy(true),
+        transaction ?? new TestFinalConfirmationTransaction((confirmation, _, _) =>
+            Task.FromResult(new ConfirmationResult(ConfirmationStatus.Confirmed, confirmation))),
+        sink ?? new TestConfirmedPlanSnapshotSink(),
+        TimeProvider.System);
+
+static PlanRevisionService RevisionAuditService(IPlanRevisionStore store) => new(
+    new OwnershipGate(true), store,
+    new ValidationVerifier(ValidationEvidenceStatus.Verified), TimeProvider.System);
+
 static PlanRevisionSnapshot Revision(
     PlanGeometryDto geometry,
     string hash,
@@ -683,6 +1644,11 @@ sealed class FreshnessPolicy(bool result) : IValidationFreshnessPolicy
     public bool IsFresh(PlanRevisionSnapshot revision, DateTimeOffset now) => result;
 }
 
+sealed class DynamicFreshnessPolicy(Func<PlanRevisionSnapshot, bool> handler) : IValidationFreshnessPolicy
+{
+    public bool IsFresh(PlanRevisionSnapshot revision, DateTimeOffset now) => handler(revision);
+}
+
 sealed class ConfirmationTransaction(
     ConfirmationStatus status = ConfirmationStatus.Confirmed,
     bool throwFailure = false) : IFinalConfirmationTransaction
@@ -710,4 +1676,194 @@ sealed class ValidationVerifier(ValidationEvidenceStatus status) : IPlanValidati
     public Task<ValidationEvidenceStatus> VerifyAsync(
         Guid projectId, Guid planId, PlanValidationReferenceDto evidence, string exactGeometryHash,
         CancellationToken cancellationToken) => Task.FromResult(status);
+}
+
+sealed class RevisionSecurityTrackingStore(
+    IPlanRevisionStore inner) : IPlanRevisionStore
+{
+    public int ReadCalls { get; private set; }
+    public int AppendCalls { get; private set; }
+
+    public Task<PlanRevisionSnapshot?> GetAsync(
+        Guid projectId,
+        Guid planId,
+        Guid revisionId,
+        CancellationToken cancellationToken)
+    {
+        ReadCalls++;
+
+        return inner.GetAsync(
+            projectId, planId, revisionId, cancellationToken);
+    }
+
+    public Task<PlanRevisionSnapshot?> GetCurrentAsync(
+        Guid projectId,
+        Guid planId,
+        CancellationToken cancellationToken)
+    {
+        ReadCalls++;
+
+        return inner.GetCurrentAsync(
+            projectId, planId, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<PlanRevisionSnapshot>> GetHistoryAsync(
+        Guid projectId,
+        Guid planId,
+        CancellationToken cancellationToken)
+    {
+        ReadCalls++;
+
+        return inner.GetHistoryAsync(
+            projectId, planId, cancellationToken);
+    }
+
+    public Task<AppendRevisionResult> TryAppendAtomicallyAsync(
+        Guid expectedBaseRevisionId,
+        PlanRevisionSnapshot proposedRevision,
+        CancellationToken cancellationToken)
+    {
+        AppendCalls++;
+
+        return inner.TryAppendAtomicallyAsync(
+            expectedBaseRevisionId,
+            proposedRevision,
+            cancellationToken);
+    }
+}
+
+enum RevisionAppendFailure
+{
+    None,
+    Timeout,
+    Transport,
+    Unexpected,
+    DependencyCancellation,
+    AcknowledgementLostAfterCommit,
+    CallerCancellationAfterCommit
+}
+
+sealed class AdversarialRevisionStore(PlanRevisionSnapshot initial) : IPlanRevisionStore
+{
+    private readonly List<PlanRevisionSnapshot> revisions = [initial];
+    private readonly object sync = new();
+
+    public Func<Guid, PlanRevisionSnapshot?, PlanRevisionSnapshot?>? ReadTransform { get; init; }
+    public Func<PlanRevisionSnapshot?, PlanRevisionSnapshot?>? CurrentTransform { get; init; }
+    public Func<AppendRevisionResult, AppendRevisionResult?>? ResponseTransform { get; init; }
+    public RevisionAppendFailure Failure { get; init; }
+    public CancellationTokenSource? CancellationSource { get; init; }
+    public int ReadCalls { get; private set; }
+    public int AppendCalls { get; private set; }
+    public PlanRevisionSnapshot? LastProposed { get; private set; }
+    public int HistoryCount { get { lock (sync) return revisions.Count; } }
+
+    public Task<PlanRevisionSnapshot?> GetAsync(
+        Guid projectId, Guid planId, Guid revisionId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ReadCalls++;
+        PlanRevisionSnapshot? result;
+        lock (sync)
+            result = revisions.SingleOrDefault(item => item.ProjectId == projectId &&
+                item.PlanId == planId && item.RevisionId == revisionId);
+        return Task.FromResult(ReadTransform is null ? result : ReadTransform(revisionId, result));
+    }
+
+    public Task<PlanRevisionSnapshot?> GetCurrentAsync(
+        Guid projectId, Guid planId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ReadCalls++;
+        PlanRevisionSnapshot? result;
+        lock (sync)
+            result = revisions.Where(item => item.ProjectId == projectId &&
+                item.PlanId == planId).MaxBy(item => item.VersionNumber);
+        return Task.FromResult(CurrentTransform is null ? result : CurrentTransform(result));
+    }
+
+    public Task<IReadOnlyList<PlanRevisionSnapshot>> GetHistoryAsync(
+        Guid projectId, Guid planId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ReadCalls++;
+        lock (sync)
+            return Task.FromResult<IReadOnlyList<PlanRevisionSnapshot>>(revisions.Where(item =>
+                item.ProjectId == projectId && item.PlanId == planId).ToArray());
+    }
+
+    public Task<AppendRevisionResult> TryAppendAtomicallyAsync(
+        Guid expectedBaseRevisionId, PlanRevisionSnapshot proposedRevision,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        AppendCalls++;
+        LastProposed = proposedRevision;
+
+        if (Failure == RevisionAppendFailure.Timeout)
+            throw new TimeoutException("private timeout");
+        if (Failure == RevisionAppendFailure.Transport)
+            throw new HttpRequestException("private transport failure");
+        if (Failure == RevisionAppendFailure.Unexpected)
+            throw new InvalidOperationException("private provider failure");
+        if (Failure == RevisionAppendFailure.DependencyCancellation)
+            throw new OperationCanceledException("private dependency cancellation");
+
+        lock (sync) revisions.Add(proposedRevision);
+
+        if (Failure == RevisionAppendFailure.AcknowledgementLostAfterCommit)
+            throw new HttpRequestException("private acknowledgement lost");
+        if (Failure == RevisionAppendFailure.CallerCancellationAfterCommit)
+        {
+            CancellationSource!.Cancel();
+            throw new OperationCanceledException("caller cancelled after commit", cancellationToken);
+        }
+
+        var response = new AppendRevisionResult(AppendRevisionStatus.Created, proposedRevision);
+        return Task.FromResult(ResponseTransform is null ? response : ResponseTransform(response)!);
+    }
+}
+
+sealed class ConfirmationAuditStore : IPlanRevisionStore
+{
+    private readonly PlanRevisionSnapshot initial;
+    public ConfirmationAuditStore(PlanRevisionSnapshot initial) => this.initial = initial;
+    public PlanRevisionSnapshot Initial => initial;
+    public Func<PlanRevisionSnapshot?, PlanRevisionSnapshot?>? SelectedTransform { get; init; }
+    public Func<int, PlanRevisionSnapshot, PlanRevisionSnapshot>? CurrentTransform { get; init; }
+    public Exception? SelectedException { get; init; }
+    public Exception? CurrentException { get; init; }
+    public int SelectedReads { get; private set; }
+    public int CurrentReads { get; private set; }
+
+    public Task<PlanRevisionSnapshot?> GetAsync(
+        Guid projectId, Guid planId, Guid revisionId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        SelectedReads++;
+        if (SelectedException is not null)
+            return Task.FromException<PlanRevisionSnapshot?>(SelectedException);
+        PlanRevisionSnapshot? result = initial.ProjectId == projectId && initial.PlanId == planId &&
+            initial.RevisionId == revisionId ? initial : null;
+        return Task.FromResult(SelectedTransform is null ? result : SelectedTransform(result));
+    }
+
+    public Task<PlanRevisionSnapshot?> GetCurrentAsync(
+        Guid projectId, Guid planId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        CurrentReads++;
+        if (CurrentException is not null)
+            return Task.FromException<PlanRevisionSnapshot?>(CurrentException);
+        var result = CurrentTransform is null ? initial : CurrentTransform(CurrentReads, initial);
+        return Task.FromResult<PlanRevisionSnapshot?>(result);
+    }
+
+    public Task<IReadOnlyList<PlanRevisionSnapshot>> GetHistoryAsync(
+        Guid projectId, Guid planId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<PlanRevisionSnapshot>>([initial]);
+
+    public Task<AppendRevisionResult> TryAppendAtomicallyAsync(
+        Guid expectedBaseRevisionId, PlanRevisionSnapshot proposedRevision,
+        CancellationToken cancellationToken) => throw new NotSupportedException();
 }

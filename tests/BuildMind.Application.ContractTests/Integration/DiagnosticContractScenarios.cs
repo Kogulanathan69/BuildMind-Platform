@@ -156,16 +156,128 @@ internal static class DiagnosticContractScenarios
                 "Internal exception details escaped into the diagnostic.");
         });
 
-        run("persistence and transaction failure retries are conditional", () =>
+        run("persistence and transaction exceptions require reconciliation", () =>
         {
             var persistence = PlanEditorFailureMapper.FromDependencyException(
                 PlanEditorDependencyOperation.Persistence, new InvalidOperationException("provider detail"), "p");
             var transaction = PlanEditorFailureMapper.FromDependencyException(
                 PlanEditorDependencyOperation.Transaction, new InvalidOperationException("provider detail"), "t");
-            Check(persistence.Code == PlanEditorErrorCodes.PersistenceFailure &&
+            Check(persistence.Code == PlanEditorErrorCodes.PersistenceOutcomeUnknown &&
                 persistence.RetrySafety == PlanEditorRetrySafety.Conditional, "Persistence retry classification changed.");
-            Check(transaction.Code == PlanEditorErrorCodes.TransactionFailure &&
+            Check(transaction.Code == PlanEditorErrorCodes.TransactionOutcomeUnknown &&
                 transaction.RetrySafety == PlanEditorRetrySafety.Conditional, "Transaction retry classification changed.");
+        });
+
+        run("read timeout remains safe while mutation timeout requires reconciliation", () =>
+        {
+            var read = PlanEditorFailureMapper.FromDependencyException(
+                PlanEditorDependencyOperation.Compute, new TimeoutException("private read timeout"), "read-corr");
+            var persistence = PlanEditorFailureMapper.FromDependencyException(
+                PlanEditorDependencyOperation.CandidatePersistence,
+                new TimeoutException("private persistence timeout"), "persist-corr");
+            var transaction = PlanEditorFailureMapper.FromDependencyException(
+                PlanEditorDependencyOperation.CandidateApplyTransaction,
+                new HttpRequestException("private acknowledgement lost"), "apply-corr");
+            Check(read is { Code: PlanEditorErrorCodes.DependencyTimeout,
+                RetrySafety: PlanEditorRetrySafety.Safe }, "Read-only timeout retry semantics changed.");
+            Check(persistence is { Code: PlanEditorErrorCodes.PersistenceOutcomeUnknown,
+                RetrySafety: PlanEditorRetrySafety.Conditional, CorrelationId: "persist-corr" },
+                "Persistence timeout was declared safely retryable.");
+            Check(transaction is { Code: PlanEditorErrorCodes.TransactionOutcomeUnknown,
+                RetrySafety: PlanEditorRetrySafety.Conditional, CorrelationId: "apply-corr" },
+                "Transaction transport failure was declared safely retryable.");
+            Check(!persistence.SafeMessage.Contains("private", StringComparison.OrdinalIgnoreCase) &&
+                !transaction.SafeMessage.Contains("private", StringComparison.OrdinalIgnoreCase),
+                "Mutation diagnostic exposed dependency details.");
+        });
+
+        run("candidate uncertain outcomes have explicit reconciliation diagnostics", () =>
+        {
+            var creation = PlanEditorFailureMapper.FromCandidatePreview(
+                CandidatePreviewResultStatus.PersistenceOutcomeUnknown, "candidate-corr");
+            var action = PlanEditorFailureMapper.FromCandidateAction(
+                CandidateActionStatus.TransactionOutcomeUnknown, "transaction-corr");
+            Check(creation.Code == PlanEditorErrorCodes.PersistenceOutcomeUnknown &&
+                creation.RetrySafety == PlanEditorRetrySafety.Conditional &&
+                creation.CorrelationId == "candidate-corr", "Candidate reconciliation diagnostic changed.");
+            Check(action.Code == PlanEditorErrorCodes.TransactionOutcomeUnknown &&
+                action.RetrySafety == PlanEditorRetrySafety.Conditional &&
+                action.CorrelationId == "transaction-corr", "Transaction reconciliation diagnostic changed.");
+        });
+
+        run("revision uncertainty and invalid dependency diagnostics remain safe", () =>
+        {
+            const string correlation = "revision-correlation";
+            var unknown = PlanEditorFailureMapper.FromRevision(
+                AppendRevisionStatus.TransactionOutcomeUnknown, correlation);
+            Check(unknown.Code == PlanEditorErrorCodes.TransactionOutcomeUnknown &&
+                unknown.RetrySafety == PlanEditorRetrySafety.Conditional &&
+                unknown.CorrelationId == correlation && unknown.IsBlocking &&
+                unknown.SafeMessage.Contains("reconciled before retry", StringComparison.Ordinal) &&
+                PlanEditorFailureMapper.ProposedHttpStatus(unknown) == 500,
+                "Revision uncertainty diagnostic lost reconciliation semantics.");
+
+            var invalid = PlanEditorFailureMapper.FromRevision(
+                AppendRevisionStatus.InvalidDependencyResponse, correlation);
+            Check(invalid.Code == PlanEditorErrorCodes.InvalidDependencyResponse &&
+                invalid.Severity == PlanEditorDiagnosticSeverity.Critical && invalid.IsBlocking &&
+                invalid.RetrySafety == PlanEditorRetrySafety.Never &&
+                !invalid.SafeMessage.Contains("provider", StringComparison.OrdinalIgnoreCase),
+                "Invalid revision dependency diagnostic was retryable or exposed provider detail.");
+        });
+
+        run("confirmation transaction and publication uncertainty remain distinct", () =>
+        {
+            const string correlation = "confirmation-correlation";
+            var transaction = PlanEditorFailureMapper.FromConfirmation(
+                ConfirmationStatus.TransactionOutcomeUnknown, correlation);
+            Check(transaction is
+                {
+                    Code: PlanEditorErrorCodes.TransactionOutcomeUnknown,
+                    Severity: PlanEditorDiagnosticSeverity.Critical,
+                    IsBlocking: true,
+                    RetrySafety: PlanEditorRetrySafety.Conditional,
+                    CorrelationId: correlation
+                } && transaction.SafeMessage.Contains("reconciled before retry", StringComparison.Ordinal) &&
+                PlanEditorFailureMapper.ProposedHttpStatus(transaction) == 500,
+                "Confirmation transaction uncertainty lost reconciliation semantics.");
+
+            var invalid = PlanEditorFailureMapper.FromConfirmation(
+                ConfirmationStatus.InvalidDependencyResponse, correlation);
+            Check(invalid is
+                {
+                    Code: PlanEditorErrorCodes.InvalidDependencyResponse,
+                    Severity: PlanEditorDiagnosticSeverity.Critical,
+                    IsBlocking: true,
+                    RetrySafety: PlanEditorRetrySafety.Never
+                }, "Invalid confirmation dependency response was weakened.");
+
+            var publication = PlanEditorFailureMapper.FromConfirmationPublication(
+                ConfirmationPublicationStatus.OutcomeUnknown, correlation);
+            Check(publication.Code == PlanEditorErrorCodes.ReportPublicationFailure &&
+                publication.RetrySafety == PlanEditorRetrySafety.Conditional &&
+                publication.CorrelationId == correlation &&
+                publication.SafeMessage.Contains("plan is confirmed", StringComparison.OrdinalIgnoreCase) &&
+                !publication.SafeMessage.Contains("provider", StringComparison.OrdinalIgnoreCase),
+                "Publication uncertainty implied confirmation rollback or exposed provider detail.");
+            CheckThrows<ArgumentOutOfRangeException>(() =>
+                PlanEditorFailureMapper.FromConfirmationPublication(
+                    ConfirmationPublicationStatus.Acknowledged));
+        });
+
+        run("expiration transaction failure requires reconciliation with safe diagnostics", () =>
+        {
+            var diagnostic = PlanEditorFailureMapper.FromDependencyException(
+                PlanEditorDependencyOperation.CandidateExpireTransaction,
+                new TimeoutException("private expiration transaction detail"), "expire-correlation");
+            Check(diagnostic is
+                {
+                    Code: PlanEditorErrorCodes.TransactionOutcomeUnknown,
+                    RetrySafety: PlanEditorRetrySafety.Conditional,
+                    CorrelationId: "expire-correlation"
+                }, "Expiration transaction timeout was declared safely retryable.");
+            Check(!diagnostic.SafeMessage.Contains("private", StringComparison.OrdinalIgnoreCase),
+                "Expiration diagnostic exposed dependency details.");
         });
 
         run("warning acknowledgement never weakens critical blocking diagnostics", () =>
@@ -200,13 +312,21 @@ internal static class DiagnosticContractScenarios
                 "Report publication failure was hidden as confirmation rollback.");
             Check(diagnostic.RetrySafety == PlanEditorRetrySafety.Conditional,
                 "Report retry must require idempotent outbox semantics.");
+            var timeout = PlanEditorFailureMapper.FromDependencyException(
+                PlanEditorDependencyOperation.ReportPublication,
+                new TimeoutException("private delivery acknowledgement"), "corr-report-timeout");
+            Check(timeout.Code == PlanEditorErrorCodes.ReportPublicationFailure &&
+                timeout.RetrySafety == PlanEditorRetrySafety.Conditional &&
+                !timeout.SafeMessage.Contains("private", StringComparison.OrdinalIgnoreCase),
+                "Publication timeout was declared safely repeatable or exposed provider detail.");
         });
 
         run("AI proposal failure has safe feature-local mapping", () =>
         {
             var diagnostic = PlanEditorFailureMapper.FromDependencyException(
                 PlanEditorDependencyOperation.AiProposal, new InvalidOperationException("prompt and key"), "corr-ai");
-            Check(diagnostic.Code == PlanEditorErrorCodes.AiProposalInvalid, "AI proposal code changed.");
+            Check(diagnostic.Code == PlanEditorErrorCodes.UnexpectedInternalFailure &&
+                diagnostic.RetrySafety == PlanEditorRetrySafety.Never, "Unexpected AI provider defect was mislabeled.");
             Check(!diagnostic.SafeMessage.Contains("key", StringComparison.OrdinalIgnoreCase),
                 "AI provider detail escaped into the diagnostic.");
         });
@@ -219,6 +339,20 @@ internal static class DiagnosticContractScenarios
                 PlanEditorFailureMapper.FromRevision(AppendRevisionStatus.Created));
             CheckThrows<ArgumentOutOfRangeException>(() =>
                 PlanEditorFailureMapper.FromConfirmation(ConfirmationStatus.Confirmed));
+        });
+
+        run("GVR21 read operations and GVR24 mutation mappings remain distinct", () =>
+        {
+            foreach (var operation in new[] { PlanEditorDependencyOperation.RevisionRead,
+                PlanEditorDependencyOperation.ApplicableInputsRead })
+            {
+                Check(PlanEditorFailureMapper.FromDependencyException(operation, new TimeoutException(), "read")
+                    is { Code: PlanEditorErrorCodes.DependencyTimeout, RetrySafety: PlanEditorRetrySafety.Safe },
+                    "Read timeout mapping changed.");
+                Check(PlanEditorFailureMapper.FromDependencyException(operation, new JsonException(), "read")
+                    is { Code: PlanEditorErrorCodes.InvalidDependencyResponse, RetrySafety: PlanEditorRetrySafety.Never },
+                    "Invalid read mapping changed.");
+            }
         });
     }
 

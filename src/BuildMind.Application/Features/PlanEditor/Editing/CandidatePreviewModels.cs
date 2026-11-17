@@ -37,11 +37,15 @@ public enum CandidatePreviewResultStatus
     RevisionNotFound,
     StaleBaseRevision,
     StaleInputs,
+    InvalidDependencyResponse,
     InvalidCommand,
     DependencyUnavailable,
     CandidateRejected,
+    PersistenceOutcomeUnknown,
     ValidationUnavailable,
-    ValidationRejected
+    ValidationRejected,
+    DependencyTimeout,
+    UnexpectedInternalFailure
 }
 
 public sealed record CandidatePreviewResult(
@@ -70,12 +74,17 @@ public enum CandidateActionStatus
     Expired,
     StaleBaseRevision,
     StaleInputs,
+    InvalidDependencyResponse,
+    DependencyUnavailable,
     GeometryTampered,
     ValidationUnavailable,
     ValidationRejected,
     BlockingIssues,
     WarningAcknowledgementRequired,
-    PersistenceFailure
+    PersistenceFailure,
+    TransactionOutcomeUnknown,
+    DependencyTimeout,
+    UnexpectedInternalFailure
 }
 
 public sealed record CandidateActionResult(

@@ -36,10 +36,20 @@ public enum AppendRevisionStatus
     Unauthorized,
     ValidationUnavailable,
     ValidationRejected,
-    DuplicateCommand
+    DuplicateCommand,
+    TransactionOutcomeUnknown,
+    InvalidDependencyResponse,
+    DependencyTimeout,
+    DependencyUnavailable,
+    UnexpectedInternalFailure
 }
 
-public sealed record AppendRevisionResult(AppendRevisionStatus Status, PlanRevisionSnapshot? Revision = null);
+// Provisional M3 result; production reconciliation requires M4 coordination.
+public sealed record AppendRevisionResult(AppendRevisionStatus Status, PlanRevisionSnapshot? Revision = null)
+{
+    public Guid? ExpectedRevisionId { get; init; }
+    public Guid? ExpectedEditCommandId { get; init; }
+}
 
 public enum ValidationEvidenceStatus { Verified, Unavailable, Rejected }
 

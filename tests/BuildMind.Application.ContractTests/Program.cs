@@ -1,18 +1,27 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using BuildMind.Application.ContractTests.Integration;
 using BuildMind.Application.Features.PlanEditor.Contracts;
 using BuildMind.Application.Features.PlanEditor.Confirmation;
+using BuildMind.Application.Features.PlanEditor.Integration;
 using BuildMind.Application.Features.PlanEditor.Versioning;
 
 var failures = new List<string>();
 var passed = 0;
+string geometryFixturePath;
+try
+{
+    geometryFixturePath = FixtureLocator.ResolveGeometryFixture(args);
+}
+catch (Exception exception)
+{
+    Console.Error.WriteLine($"Fixture discovery failed: {exception.Message}");
+    return 2;
+}
 
 Run("geometry fixture round trip", () =>
 {
-    var fixturePath = args.Length == 1
-        ? Path.GetFullPath(args[0])
-        : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../docs/proposals/m3-plan-editor/PLAN-GEOMETRY-SAMPLE.json"));
-    var json = File.ReadAllText(fixturePath);
+    var json = File.ReadAllText(geometryFixturePath);
     var geometry = JsonSerializer.Deserialize<PlanGeometryDto>(json, PlanEditorJson.StrictOptions) ?? throw new Exception("Deserialization returned null.");
     PlanEditorContractValidator.Validate(geometry);
     var roundTrip = JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions);
@@ -89,8 +98,7 @@ Run("command-specific malformed payloads are rejected", () =>
 
 Run("shared command fixture matches C# acceptance", () =>
 {
-    var geometryPath = args.Length == 1 ? Path.GetFullPath(args[0]) : throw new Exception("Fixture path is required.");
-    var samplePath = Path.Combine(Path.GetDirectoryName(geometryPath)!, "EDIT-COMMAND-SAMPLES.json");
+    var samplePath = FixtureLocator.ResolveCommandFixture(geometryFixturePath);
     using var samples = JsonDocument.Parse(File.ReadAllText(samplePath));
     foreach (var sample in samples.RootElement.EnumerateArray())
     {
@@ -343,6 +351,184 @@ Run("confirmation rejects geometry hash mismatch", () =>
         .GetAwaiter().GetResult();
     Assert(result.Status == ConfirmationStatus.GeometryHashMismatch, "Mismatched hash was accepted.");
 });
+
+Run("M1 ownership test double preserves owner and cross-project decisions", () =>
+{
+    var ownedProject = Guid.NewGuid();
+    var owner = Guid.NewGuid();
+    IProjectOwnershipGate gate = new TestProjectOwnershipGate(
+        (projectId, actorId, _) => Task.FromResult(projectId == ownedProject && actorId == owner));
+    Assert(gate.OwnsProjectAsync(ownedProject, owner, default).Result, "Owner access was not preserved.");
+    Assert(!gate.OwnsProjectAsync(Guid.NewGuid(), owner, default).Result, "Cross-project access was granted.");
+});
+
+Run("M1 lifecycle eligibility exposes allowed and blocked responses", () =>
+{
+    IProjectLifecycleEligibilityPort allowed = new TestProjectLifecycleEligibilityPort(
+        (_, _, _) => Task.FromResult(new ProjectLifecycleEligibility(true, true, null)));
+    IProjectLifecycleEligibilityPort blocked = new TestProjectLifecycleEligibilityPort(
+        (_, _, _) => Task.FromResult(new ProjectLifecycleEligibility(true, false, "PROJECT_STATE_BLOCKED")));
+    Assert(allowed.GetConfirmationEligibilityAsync(Guid.NewGuid(), Guid.NewGuid(), default).Result.CanConfirm,
+        "Allowed lifecycle response was lost.");
+    Assert(blocked.GetConfirmationEligibilityAsync(Guid.NewGuid(), Guid.NewGuid(), default).Result.BlockingCode
+        == "PROJECT_STATE_BLOCKED", "Blocked lifecycle reason was lost.");
+});
+
+Run("M2 confirmed land test double distinguishes success missing and cross-project response", () =>
+{
+    var projectId = Guid.NewGuid();
+    var revisionId = Guid.NewGuid();
+    using var boundary = JsonDocument.Parse("{\"type\":\"Polygon\",\"coordinates\":[]}");
+    IConfirmedLandRevisionPort port = new TestConfirmedLandRevisionPort((requestedProject, requestedRevision, _) =>
+        Task.FromResult<ConfirmedLandRevision?>(requestedRevision == revisionId
+            ? new ConfirmedLandRevision(requestedProject, revisionId, "test-only/1", boundary.RootElement.Clone())
+            : null));
+    var found = port.GetAsync(projectId, revisionId, default).Result;
+    Assert(found?.ProjectId == projectId, "Confirmed land response identity was lost.");
+    Assert(port.GetAsync(projectId, Guid.NewGuid(), default).Result is null, "Missing land revision was fabricated.");
+
+    IConfirmedLandRevisionPort invalid = new TestConfirmedLandRevisionPort((_, _, _) =>
+        Task.FromResult<ConfirmedLandRevision?>(new(
+            Guid.NewGuid(), revisionId, "test-only/1", boundary.RootElement.Clone())));
+    var invalidResponse = invalid.GetAsync(projectId, revisionId, default).Result;
+    Assert(invalidResponse?.ProjectId != projectId,
+        "The invalid-response fixture must remain cross-project for future adapter rejection tests.");
+});
+
+Run("M5 requirement revision test double distinguishes success and missing", () =>
+{
+    var projectId = Guid.NewGuid();
+    var revisionId = Guid.NewGuid();
+    IRequirementRevisionPort port = new TestRequirementRevisionPort((requestedProject, requestedRevision, _) =>
+        Task.FromResult<RequirementRevisionReference?>(requestedRevision == revisionId
+            ? new RequirementRevisionReference(requestedProject, revisionId, "test-only/1")
+            : null));
+    Assert(port.GetAsync(projectId, revisionId, default).Result?.ProjectId == projectId,
+        "Requirement revision response identity was lost.");
+    Assert(port.GetAsync(projectId, Guid.NewGuid(), default).Result is null,
+        "Missing requirement revision was fabricated.");
+});
+
+Run("M4 compute client propagates correlation and validates successful response", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var request = new PlanEditorComputeRequest(
+        geometry, EditRequest(PlanEditCommandTypes.MoveRoom, "{\"deltaX\":1,\"deltaY\":0}").Command,
+        "contract-correlation-id");
+    string? observedCorrelation = null;
+    IPlanEditorComputeClient client = new TestPlanEditorComputeClient((received, _) =>
+    {
+        observedCorrelation = received.CorrelationId;
+        return Task.FromResult(new PlanEditResultDto
+        {
+            SchemaVersion = geometry.SchemaVersion,
+            CommandId = received.Command.CommandId,
+            BaseRevisionId = Guid.NewGuid(),
+            Status = PlanEditStatus.Accepted,
+            CandidateGeometry = geometry,
+            Diagnostics = [],
+            ChangedEntityIds = []
+        });
+    });
+    var response = client.PreviewAsync(request, default).Result;
+    PlanEditorContractValidator.Validate(response);
+    Assert(observedCorrelation == request.CorrelationId, "Compute correlation ID was not propagated.");
+});
+
+Run("M4 compute client exposes unavailability and cancellation", () =>
+{
+    IPlanEditorComputeClient unavailable = new TestPlanEditorComputeClient(
+        (_, _) => Task.FromException<PlanEditResultDto>(new HttpRequestException("Explicit unavailable test double.")));
+    AssertThrows<HttpRequestException>(() => unavailable.PreviewAsync(
+        new(MinimalGeometry(0), EditRequest(PlanEditCommandTypes.RemoveOpening, "{}").Command, "c"), default)
+        .GetAwaiter().GetResult());
+
+    IPlanEditorComputeClient timeout = new TestPlanEditorComputeClient(async (_, token) =>
+    {
+        await Task.Delay(Timeout.InfiniteTimeSpan, token);
+        throw new InvalidOperationException("Unreachable.");
+    });
+    using var cancellation = new CancellationTokenSource();
+    cancellation.Cancel();
+    AssertThrows<TaskCanceledException>(() => timeout.PreviewAsync(
+        new(MinimalGeometry(0), EditRequest(PlanEditCommandTypes.RemoveOpening, "{}").Command, "c"),
+        cancellation.Token).GetAwaiter().GetResult());
+});
+
+Run("M4 persistence failure leaves revision history unchanged", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var baseRevision = Revision(geometry, "sha256:base", 1);
+    var store = new TestPlanRevisionStore(baseRevision) { ThrowOnAppend = true };
+    var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+    var service = new PlanRevisionService(store, new TestPlanValidationEvidenceVerifier(
+        (_, _, _, _, _) => Task.FromResult(ValidationEvidenceStatus.Verified)), TimeProvider.System);
+    AssertThrows<InvalidOperationException>(() => service.CreateAsync(
+        new(geometry.ProjectId, geometry.PlanId, baseRevision.RevisionId, geometry,
+            Validation(hash), Guid.NewGuid(), "must roll back"), Guid.NewGuid()).GetAwaiter().GetResult());
+    Assert(store.GetHistoryAsync(geometry.ProjectId, geometry.PlanId, default).Result.Count == 1,
+        "Persistence failure changed revision history.");
+});
+
+Run("M6 validation test double rejects mismatched authoritative evidence", () =>
+{
+    IPlanValidationEvidenceVerifier verifier = new TestPlanValidationEvidenceVerifier(
+        (_, _, evidence, exactHash, _) => Task.FromResult(
+            evidence.GeometryHash == exactHash ? ValidationEvidenceStatus.Verified : ValidationEvidenceStatus.Rejected));
+    var status = verifier.VerifyAsync(Guid.NewGuid(), Guid.NewGuid(), Validation("sha256:wrong"),
+        "sha256:expected", default).Result;
+    Assert(status == ValidationEvidenceStatus.Rejected, "Mismatched validation evidence was accepted.");
+});
+
+Run("M5 report publication failure remains visible after confirmed transaction", () =>
+{
+    var geometry = MinimalGeometry(0);
+    var hash = PlanRevisionService.ComputeGeometryHash(JsonSerializer.Serialize(geometry, PlanEditorJson.StrictOptions));
+    var revision = Revision(geometry, hash, 1, Validation(hash));
+    var sink = new TestConfirmedPlanSnapshotSink((_, _, _) =>
+        Task.FromException(new InvalidOperationException("Explicit report publication test-double failure.")));
+    var service = new FinalPlanConfirmationService(
+        new TestProjectOwnershipGate((_, _, _) => Task.FromResult(true)), new TestPlanRevisionStore(revision),
+        new TestApplicableInputRevisionSource((_, _) => Task.FromResult(
+            new ApplicableInputRevisions(geometry.LandRevisionId, geometry.RequirementsRevisionId))),
+        new TestValidationFreshnessPolicy(true),
+        new TestFinalConfirmationTransaction((confirmation, _, _) =>
+            Task.FromResult(new ConfirmationResult(ConfirmationStatus.Confirmed, confirmation))),
+        sink, TimeProvider.System);
+    AssertThrows<InvalidOperationException>(() => service.ConfirmAsync(
+        new(geometry.ProjectId, geometry.PlanId, revision.RevisionId, hash, true), Guid.NewGuid())
+        .GetAwaiter().GetResult());
+    Assert(sink.PublishedRevisionId is null, "Failed report publication was recorded as delivered.");
+});
+
+Run("M7 AI proposal test double exposes unavailable and malformed proposals", () =>
+{
+    IAiEditProposalPort unavailable = new TestAiEditProposalPort((_, _, _, _, _, _) =>
+        Task.FromResult(new AiEditProposal(AiEditProposalStatus.Unavailable, [], [])));
+    Assert(unavailable.ProposeAsync(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "move room", "c", default)
+        .Result.Status == AiEditProposalStatus.Unavailable, "Unavailable AI state was fabricated as success.");
+
+    using var malformedPayload = JsonDocument.Parse("{}");
+    IAiEditProposalPort malformed = new TestAiEditProposalPort((_, _, _, _, _, _) =>
+        Task.FromResult(new AiEditProposal(AiEditProposalStatus.Proposed,
+        [new PlanEditCommandDto
+        {
+            CommandId = Guid.NewGuid(), CommandType = PlanEditCommandTypes.MoveRoom,
+            FloorId = Guid.NewGuid(), TargetId = Guid.NewGuid(), Payload = malformedPayload.RootElement.Clone()
+        }], [])));
+    var proposal = malformed.ProposeAsync(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "move room", "c", default).Result;
+    var proposedCommand = proposal.Commands.Single();
+    AssertThrows<ArgumentException>(() => PlanEditorContractValidator.Validate(new PlanEditRequestDto
+    {
+        SchemaVersion = GeometrySchemaInfo.DraftVersion,
+        ProjectId = Guid.NewGuid(), PlanId = Guid.NewGuid(), BaseRevisionId = Guid.NewGuid(), Command = proposedCommand
+    }));
+});
+
+CandidatePreviewContractScenarios.Register(Run);
+DiagnosticContractScenarios.Register(Run);
+PersistenceContractScenarios.Register(Run);
+AdvancedGeometryContractScenarios.Register(Run);
 
 if (failures.Count > 0)
 {

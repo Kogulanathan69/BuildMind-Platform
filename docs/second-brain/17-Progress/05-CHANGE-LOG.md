@@ -39,3 +39,7 @@
 2026-11-18 — STEP 06-C/06-D: D03 audit fixes (truthful conflict translation, identity-reuse detection, project-FK-only `ProjectNotFound`, version length guard, constraint-table extraction, explicit composite-FK index), CI migration generation/verification step and migration tests, merge of D02b `59c4d08`. Evidence EV-20261118-49.
 
 2026-11-18 — STEP 06-E3: committed the reviewed initial migration `20261118133137_InitialFeatureSchema`; tests expect it; EnsureCreated fallback removed; migration deployment safety (authorization, destructive rollback) documented. Evidence EV-20261118-50..52.
+
+2026-11-18 — STEP 07-A (uncommitted): BE-M4-D04 readiness (`/health/ready`, C11b) and safe response headers, security regression tests, security and API docs. Evidence EV-20261118-55.
+
+2026-11-18 — STEP 07-B: D04 audit fixes (EF ConnectionError suppression, readiness deadline + single-flight gate + deferred scope disposal, explicit status mapping), readiness behaviour and live tests. Evidence EV-20261118-56.

@@ -117,3 +117,11 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 ## 2026-11-18 — STEP 06-E3 initial migration
 - PR #22 merged (`95b1e8a`), PR #21 closed superseded; post-merge CI green; MySQL 43/43.
 - Branch `feature/m4-initial-database-migration`: committed `20261118133137_InitialFeatureSchema` (byte-identical), tests switched to the committed migration, deployment safety docs. Next: draft PR → CI must show the verify-only path and 43/43; independent review; collation and head-number decisions.
+
+## 2026-11-18 — STEP 07-A BE-M4-D04 (uncommitted)
+- STEP 06-F docs committed on `feature/m4-remaining-repositories` (`515052c`, pushed; not merged).
+- Branch `feature/m4-security-infrastructure` from `8221523`: readiness + safe headers + 12 security test cases. Build 0/0; not executed (CI after push).
+- Blocked: CORS (C6), OpenAPI (C7), JWT/authorization policies (A1/A2/M1), request limits (M2).
+
+## 2026-11-18 — STEP 07-B security audit + delivery
+- 3 defects fixed (hostname in logs, ineffective timeout/pile-up, missing 200-path coverage). Tests: infrastructure 299 cases, MySQL 45. Committed and pushed `feature/m4-security-infrastructure`; draft PR to `develop` to be created by the lead; CI then runs everything.

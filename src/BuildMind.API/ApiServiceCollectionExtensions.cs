@@ -1,5 +1,8 @@
 using BuildMind.API.Configuration;
 using BuildMind.API.Errors;
+using BuildMind.API.Health;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using BuildMind.API.Security;
 using BuildMind.Application.Abstractions;
 using BuildMind.Infrastructure.Configuration;
@@ -44,6 +47,20 @@ public static class ApiServiceCollectionExtensions
             .Bind(configuration.GetSection(DatabaseOptions.SectionName))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<DatabaseOptions>, DatabaseOptionsValidation>();
+
+        // BE-M4-D04 readiness (C11b): MySQL mandatory; Python/RAG instance-optional (never Healthy before D05).
+        services.AddSingleton<ReadinessProbeGate>();
+        services.AddHealthChecks()
+            .AddCheck<MySqlReadinessCheck>(
+                "mysql", HealthStatus.Unhealthy, [Readiness.Tag], Readiness.RegistrationTimeout)
+            .AddTypeActivatedCheck<InternalServiceReadinessCheck>(
+                "python", HealthStatus.Degraded, [Readiness.Tag], Readiness.RegistrationTimeout, "python")
+            .AddTypeActivatedCheck<InternalServiceReadinessCheck>(
+                "rag", HealthStatus.Degraded, [Readiness.Tag], Readiness.RegistrationTimeout, "rag");
+
+        // BE-M4-D04: do not advertise the server implementation. This only affects Kestrel; a reverse proxy
+        // or load balancer in front of the API may add its own headers and must be configured separately.
+        services.Configure<KestrelServerOptions>(options => options.AddServerHeader = false);
 
         return services;
     }

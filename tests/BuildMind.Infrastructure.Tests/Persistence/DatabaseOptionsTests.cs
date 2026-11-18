@@ -9,7 +9,7 @@ public sealed class DatabaseOptionsTests
     internal const string Secret = SyntheticTestEndpoints.SyntheticSecret;
 
     internal const string ValidConnection =
-        "Server=127.0.0.1;Port=1;Database=buildmind_synthetic;User ID=bm_synthetic;SslMode=Required;Password=" + Secret;
+        "Server=127.0.0.1;Port=1;Database=buildmind_synthetic;User ID=bm_synthetic;SslMode=VerifyFull;Password=" + Secret;
 
     [Fact]
     public void Defaults_are_disabled_and_valid_without_a_connection_string()
@@ -85,6 +85,47 @@ public sealed class DatabaseOptionsTests
         var connection = "Server=127.0.0.1;Database=buildmind_synthetic;User ID=bm_synthetic;Password=" + Secret + ";SslMode=" + sslMode;
 
         Assert.Empty(new DatabaseOptions { Enabled = true }.Validate(connection));
+    }
+
+    [Theory]
+    [InlineData("db.internal", "Required")]
+    [InlineData("db.internal", "VerifyCA")]
+    [InlineData("10.0.0.5", "Required")]
+    [InlineData("localhost,db.internal", "Required")]
+    public void Non_loopback_servers_require_server_identity_verification(string server, string sslMode)
+    {
+        var connection = $"Server={server};Database=buildmind_synthetic;User ID=bm_synthetic;Password={Secret};SslMode={sslMode}";
+
+        var failures = new DatabaseOptions { Enabled = true }.Validate(connection);
+
+        Assert.Contains(failures, f => f.Contains("VerifyFull outside local development", StringComparison.Ordinal));
+        Assert.All(failures, f =>
+        {
+            Assert.DoesNotContain(Secret, f, StringComparison.Ordinal);
+            Assert.DoesNotContain("db.internal", f, StringComparison.Ordinal);
+        });
+    }
+
+    [Theory]
+    [InlineData("db.internal")]
+    [InlineData("127.0.0.1")]
+    public void Verified_identity_is_accepted_for_any_server(string server)
+    {
+        var connection = $"Server={server};Database=buildmind_synthetic;User ID=bm_synthetic;Password={Secret};SslMode=VerifyFull";
+
+        Assert.Empty(new DatabaseOptions { Enabled = true }.Validate(connection, requireServerIdentityVerification: true));
+    }
+
+    [Theory]
+    [InlineData("Required")]
+    [InlineData("VerifyCA")]
+    public void Production_requires_identity_verification_even_on_loopback(string sslMode)
+    {
+        var connection = $"Server=127.0.0.1;Database=buildmind_synthetic;User ID=bm_synthetic;Password={Secret};SslMode={sslMode}";
+
+        var failures = new DatabaseOptions { Enabled = true }.Validate(connection, requireServerIdentityVerification: true);
+
+        Assert.Contains(failures, f => f.Contains("VerifyFull", StringComparison.Ordinal));
     }
 
     [Theory]

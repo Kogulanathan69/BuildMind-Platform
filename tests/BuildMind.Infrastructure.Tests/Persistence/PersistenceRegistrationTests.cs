@@ -86,6 +86,41 @@ public sealed class PersistenceRegistrationTests
     }
 
     [Fact]
+    public async Task Production_rejects_unverified_tls_at_startup()
+    {
+        await using var factory = new BuildMindApiFactory(
+            "Production",
+            new Dictionary<string, string?>
+            {
+                ["Database:Enabled"] = "true",
+                ["ConnectionStrings:BuildMind"] = "Server=127.0.0.1;Port=1;Database=buildmind_synthetic;User ID=bm_synthetic;SslMode=Required;Password=" + Secret,
+            });
+
+        var exception = Record.Exception(() => factory.CreateClient());
+
+        var validation = ExceptionChains.RequireStartupOptionsValidationFailure(exception, factory.Logs);
+        Assert.Contains(validation.Failures, f => f.Contains("VerifyFull", StringComparison.Ordinal));
+        Assert.DoesNotContain(Secret, validation.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Development_accepts_encrypted_loopback_connection_without_identity_verification()
+    {
+        await using var factory = new BuildMindApiFactory(
+            "Development",
+            new Dictionary<string, string?>
+            {
+                ["Database:Enabled"] = "true",
+                ["ConnectionStrings:BuildMind"] = "Server=127.0.0.1;Port=1;Database=buildmind_synthetic;User ID=bm_synthetic;SslMode=Required;Password=" + Secret,
+            });
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/health");
+
+        Assert.True(response.IsSuccessStatusCode);
+    }
+
+    [Fact]
     public async Task Enabled_database_builds_a_mysql_context_without_connecting_or_migrating()
     {
         await using var factory = new BuildMindApiFactory(

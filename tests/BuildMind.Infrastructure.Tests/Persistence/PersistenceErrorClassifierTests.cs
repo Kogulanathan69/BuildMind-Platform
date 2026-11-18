@@ -92,6 +92,29 @@ public sealed class PersistenceErrorClassifierTests
     }
 
     [Fact]
+    public void Only_a_deadlock_means_the_server_rolled_back_the_whole_transaction()
+    {
+        var deadlock = PersistenceErrorClassifier.FromProviderError(1213, null);
+        var lockTimeout = PersistenceErrorClassifier.FromProviderError(1205, null);
+
+        Assert.True(deadlock.ServerRolledBackTransaction);
+        Assert.False(lockTimeout.ServerRolledBackTransaction); // 1205 rolls back only the statement by default
+        Assert.True(lockTimeout.IsTransient);
+    }
+
+    [Fact]
+    public void Unconfirmed_rollback_is_classified_separately_and_not_transient()
+    {
+        var failure = PersistenceErrorClassifier.Classify(
+            new TransactionRollbackUncertainException(new DbUpdateException("synthetic"), new IOException()));
+
+        Assert.Equal(PersistenceFailureKind.RollbackUnconfirmed, failure.Kind);
+        Assert.False(failure.IsTransient);
+        Assert.False(failure.ServerRolledBackTransaction);
+        Assert.Equal(SharedErrorCodes.InternalError, failure.DefaultCode);
+    }
+
+    [Fact]
     public void Unrelated_exceptions_are_unexpected_without_carrying_their_message()
     {
         var failure = PersistenceErrorClassifier.Classify(new InvalidOperationException("Password=" + Secret));

@@ -10,7 +10,7 @@
 
 ## Steps (lead)
 
-1. Open a DBA session to the **local** server. Check the port first; it is not assumed to be 3306. Run the pre-check line first: you need `partial_revokes = 0` and `have_ssl = YES`, otherwise stop. All three accounts `REQUIRE SSL`.
+1. Open a DBA session to the **local** server. Check the port first; it is not assumed to be 3306. Run the pre-check line first: you need `partial_revokes = 0` and a `tls_version` that lists TLSv1.2 or TLSv1.3, otherwise stop. All three accounts `REQUIRE SSL`.
 2. Copy the script into the session. Replace the three placeholders with newly generated passwords, inside the session only.
 3. Run it, and check that the `SHOW GRANTS` output matches the table above.
 4. Store the secrets locally, never in the repository:

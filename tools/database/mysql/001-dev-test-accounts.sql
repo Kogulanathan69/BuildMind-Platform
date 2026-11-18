@@ -12,8 +12,10 @@
 -- PRE-CHECK (read-only). Both values must be as expected before you continue:
 -- * partial_revokes must be 0 (OFF). When it is ON, MySQL treats % and _ in GRANT schema names
 --   LITERALLY, so the bm_test grant below would cover no disposable database. Do not continue; ask M4.
--- * have_ssl must be YES, because every account below REQUIREs TLS.
-SELECT @@GLOBAL.partial_revokes AS partial_revokes, @@GLOBAL.have_ssl AS have_ssl;
+-- * TLS must be available, because every account below REQUIREs it: tls_version must list TLSv1.2/1.3,
+--   and in a TLS session, `SHOW SESSION STATUS LIKE 'Ssl_cipher'` must be non-empty.
+SELECT @@GLOBAL.partial_revokes AS partial_revokes;
+SHOW GLOBAL VARIABLES LIKE 'tls_version';
 
 CREATE DATABASE IF NOT EXISTS `buildmind_dev` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 

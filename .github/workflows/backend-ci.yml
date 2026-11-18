@@ -4,6 +4,10 @@ on:
     branches: [develop, main]
   push:
     branches: [develop]
+# Least privilege for every job: the workflow only needs to read the repository. Triggered by
+# pull_request (never pull_request_target), so PR code gets no repository secrets or write token.
+permissions:
+  contents: read
 jobs:
   dotnet-build:
     runs-on: ubuntu-latest
@@ -31,3 +35,121 @@ jobs:
           python-version: '3.13'
       - run: python -m pip install -r python-services/requirements-dev.txt
       - run: cd python-services && python -m pytest -q
+  database-compatibility:
+    # BE-M4-D02b: MySQL provider compatibility on a disposable MySQL 8.4 container.
+    # G03: internal compatibility testing only (commercial licence review pending); no binaries are published.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      MYSQL_IMAGE: mysql:8.4@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902
+      SPIKE_PROJECT: tests/BuildMind.Persistence.IntegrationTests/BuildMind.Persistence.IntegrationTests.csproj
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Generate per-run database credentials
+        run: |
+          for name in ROOT TEST RUNTIME; do
+            value="$(openssl rand -hex 24)"
+            echo "::add-mask::${value}"
+            echo "BM_${name}_PASSWORD=${value}" >> "$GITHUB_ENV"
+          done
+      - name: Start disposable MySQL 8.4 (loopback only, no volume)
+        run: |
+          docker run -d --name buildmind-mysql \
+            -e MYSQL_ROOT_PASSWORD="$BM_ROOT_PASSWORD" \
+            -p 127.0.0.1:3306:3306 \
+            --tmpfs /var/lib/mysql \
+            --health-cmd "mysqladmin ping -h 127.0.0.1 --silent" \
+            --health-interval 5s --health-timeout 5s --health-retries 30 \
+            "$MYSQL_IMAGE"
+          for attempt in $(seq 1 60); do
+            if [ "$(docker inspect --format '{{.State.Health.Status}}' buildmind-mysql)" = "healthy" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "MySQL did not become healthy" >&2
+          exit 1
+      - name: Create least-privilege TLS-only accounts
+        run: |
+          revokes="$(docker exec -e MYSQL_PWD="$BM_ROOT_PASSWORD" buildmind-mysql \
+            mysql -uroot -N -e 'SELECT @@GLOBAL.partial_revokes;')"
+          if [ "$revokes" != "0" ]; then
+            echo "partial_revokes must be OFF (wildcard schema grants would be literal)" >&2
+            exit 1
+          fi
+          docker exec -i -e MYSQL_PWD="$BM_ROOT_PASSWORD" buildmind-mysql mysql -uroot <<SQL
+          CREATE DATABASE buildmind_dev CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+          CREATE USER 'bm_runtime'@'%' IDENTIFIED BY '${BM_RUNTIME_PASSWORD}' REQUIRE SSL;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON buildmind_dev.* TO 'bm_runtime'@'%';
+          CREATE USER 'bm_test'@'%' IDENTIFIED BY '${BM_TEST_PASSWORD}' REQUIRE SSL;
+          GRANT ALL PRIVILEGES ON \`buildmind\\_test\\_%\`.* TO 'bm_test'@'%';
+          SQL
+          docker exec -e MYSQL_PWD="$BM_ROOT_PASSWORD" buildmind-mysql mysql -uroot -e \
+            "SELECT VERSION() AS server_version; SHOW GRANTS FOR 'bm_runtime'@'%'; SHOW GRANTS FOR 'bm_test'@'%';"
+      - name: Restore repository-local tools
+        run: dotnet tool restore
+      - name: Verify design-time factory and migration discovery (no connection)
+        env:
+          BUILDMIND_MIGRATIONS_CONNECTION: Server=127.0.0.1;Port=3306;Database=buildmind_test_tooling;User ID=bm_test;SslMode=Required
+        run: >-
+          dotnet tool run dotnet-ef migrations list --no-connect --configuration Release
+          --project src/BuildMind.Infrastructure --startup-project src/BuildMind.API
+      - name: Generate synthetic migration with dotnet-ef (test model only, not committed)
+        run: |
+          mkdir -p TestResults
+          dotnet tool run dotnet-ef migrations add CiGeneratedSpike --context GeneratedSpikeDbContext \
+            --output-dir GeneratedMigrations --configuration Release \
+            --project "$SPIKE_PROJECT" --startup-project "$SPIKE_PROJECT"
+          dotnet tool run dotnet-ef migrations script --idempotent --context GeneratedSpikeDbContext \
+            --configuration Release --output TestResults/generated-spike-migration.sql \
+            --project "$SPIKE_PROJECT" --startup-project "$SPIKE_PROJECT"
+      - name: Run MySQL compatibility tests
+        env:
+          BUILDMIND_TEST_MYSQL: Server=127.0.0.1;Port=3306;User ID=bm_test;SslMode=Required;Password=${{ env.BM_TEST_PASSWORD }}
+          BUILDMIND_TEST_MYSQL_RUNTIME: Server=127.0.0.1;Port=3306;Database=buildmind_dev;User ID=bm_runtime;SslMode=Required;Password=${{ env.BM_RUNTIME_PASSWORD }}
+        run: >-
+          dotnet test "$SPIKE_PROJECT"
+          --configuration Release
+          --logger "trx;LogFileName=mysql-compatibility.trx"
+          --logger "console;verbosity=normal"
+          --results-directory TestResults
+      - name: Verify disposable databases were removed
+        if: always()
+        run: |
+          left="$(docker exec -e MYSQL_PWD="$BM_ROOT_PASSWORD" buildmind-mysql mysql -uroot -N -e \
+            "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name LIKE 'buildmind\\_test\\_%';" 2>/dev/null || echo unavailable)"
+          echo "Leftover disposable test databases: ${left}"
+          if [ "$left" != "0" ] && [ "$left" != "unavailable" ]; then
+            exit 1
+          fi
+      - name: Check test results contain no credentials
+        id: results-scan
+        if: always()
+        run: |
+          mkdir -p TestResults
+          for secret in "$BM_ROOT_PASSWORD" "$BM_TEST_PASSWORD" "$BM_RUNTIME_PASSWORD"; do
+            if grep -rqF -- "$secret" TestResults; then
+              echo "A credential was found in the test results; artifact upload is blocked." >&2
+              exit 1
+            fi
+          done
+      - name: Upload sanitized test results
+        if: always() && steps.results-scan.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mysql-compatibility-results
+          path: |
+            TestResults/*.trx
+            TestResults/generated-spike-migration.sql
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Remove disposable MySQL container
+        if: always()
+        run: docker rm -f -v buildmind-mysql || true

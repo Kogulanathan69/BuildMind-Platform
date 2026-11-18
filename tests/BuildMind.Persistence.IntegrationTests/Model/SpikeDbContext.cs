@@ -52,8 +52,16 @@ public sealed class SpikeDbContext(DbContextOptions<SpikeDbContext> options) : D
         return new SpikeDbContext(builder.Options);
     }
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(ModelBuilder modelBuilder) => SpikeModel.Configure(modelBuilder);
+}
+
+/// <summary>The synthetic spike model, shared by the hand-written and the CLI-generated migration contexts.</summary>
+public static class SpikeModel
+{
+    public static void Configure(ModelBuilder modelBuilder)
     {
+        ArgumentNullException.ThrowIfNull(modelBuilder);
+
         modelBuilder.Entity<SpikeOwner>(owner =>
         {
             owner.ToTable("spike_owners");

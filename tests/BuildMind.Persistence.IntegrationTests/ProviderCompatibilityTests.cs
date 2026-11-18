@@ -366,6 +366,114 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task T21_cli_generated_migration_matches_the_model_and_applies_cleanly()
+    {
+        await using var database = await DisposableMySqlDatabase.CreateAsync();
+        await using var context = GeneratedSpikeDbContext.Create(database.ConnectionString);
+
+        var migrations = context.Database.GetMigrations().ToArray();
+        Assert.True(
+            migrations.Length > 0,
+            "No CLI-generated migration found. Run `dotnet ef migrations add` for GeneratedSpikeDbContext first (CI step; see README).");
+        output.WriteLine($"Generated migrations: {string.Join(", ", migrations)}");
+
+        Assert.False(context.Database.HasPendingModelChanges()); // generated snapshot matches the model
+
+        await context.Database.MigrateAsync();
+        Assert.Empty(await context.Database.GetPendingMigrationsAsync());
+        Assert.Equal(2L, await SpikeTableCountAsync(database));
+
+        var owner = NewOwner("owner-generated");
+        context.Owners.Add(owner);
+        await context.SaveChangesAsync();
+        Assert.True(await context.Owners.AsNoTracking().AnyAsync(o => o.Id == owner.Id));
+
+        await context.GetService<IMigrator>().MigrateAsync(Migration.InitialDatabase);
+        Assert.Equal(0L, await SpikeTableCountAsync(database));
+    }
+
+    [Fact]
+    public async Task T22_connections_are_encrypted_with_tls()
+    {
+        await using var database = await DisposableMySqlDatabase.CreateAsync();
+        await using var connection = new MySqlConnection(database.ConnectionString);
+        await connection.OpenAsync();
+
+        var version = await SessionStatusAsync(connection, "Ssl_version");
+        var cipher = await SessionStatusAsync(connection, "Ssl_cipher");
+
+        output.WriteLine($"TLS: {version} / {cipher}");
+        Assert.False(string.IsNullOrWhiteSpace(version));
+        Assert.False(string.IsNullOrWhiteSpace(cipher));
+    }
+
+    [Fact]
+    public async Task T23_plaintext_connections_are_refused_for_the_test_identity()
+    {
+        var plaintext = new MySqlConnectionStringBuilder(IntegrationEnvironment.Require(IntegrationEnvironment.TestConnectionVariable))
+        {
+            SslMode = MySqlSslMode.Disabled,
+            Database = string.Empty,
+        };
+
+        await using var connection = new MySqlConnection(plaintext.ConnectionString);
+        var refused = await Assert.ThrowsAnyAsync<MySqlException>(() => connection.OpenAsync());
+
+        output.WriteLine($"Plaintext connection refused with provider error {refused.Number}");
+    }
+
+    [Fact]
+    public async Task T24_lock_wait_timeout_keeps_the_transaction_open_and_the_runner_rolls_back_all_of_it()
+    {
+        await using var database = await MigratedDatabaseAsync();
+        var first = await SeedOwnerAsync(database, "owner-first");
+        var locked = await SeedOwnerAsync(database, "owner-locked");
+
+        await using var blocker = new MySqlConnection(database.ConnectionString);
+        await blocker.OpenAsync();
+        await using var blockerTransaction = await blocker.BeginTransactionAsync();
+        await using (var lockRow = new MySqlCommand("SELECT id FROM spike_owners WHERE id = @id FOR UPDATE;", blocker, blockerTransaction))
+        {
+            lockRow.Parameters.AddWithValue("@id", locked.Id);
+            await lockRow.ExecuteScalarAsync();
+        }
+
+        await using var context = SpikeDbContext.Create(database.ConnectionString);
+        string? firstNameInsideTransaction = null;
+
+        var failure = await Assert.ThrowsAnyAsync<Exception>(() =>
+            new TransactionRunner(new SpikeTransactionSource(context)).ExecuteAsync(async token =>
+            {
+                await context.Database.ExecuteSqlRawAsync("SET SESSION innodb_lock_wait_timeout = 1;", token);
+                await context.Owners.Where(o => o.Id == first.Id)
+                    .ExecuteUpdateAsync(s => s.SetProperty(o => o.Name, "first-changed"), token);
+                try
+                {
+                    await context.Owners.Where(o => o.Id == locked.Id)
+                        .ExecuteUpdateAsync(s => s.SetProperty(o => o.Name, "locked-changed"), token);
+                }
+                catch (Exception exception) when (PersistenceErrorClassifier.Classify(exception).Kind == PersistenceFailureKind.LockTimeout)
+                {
+                    // Only the timed-out statement was rolled back: the earlier write is still visible here.
+                    firstNameInsideTransaction = await context.Owners.AsNoTracking()
+                        .Where(o => o.Id == first.Id).Select(o => o.Name).SingleAsync(token);
+                    throw;
+                }
+            }, CancellationToken.None));
+
+        await blockerTransaction.RollbackAsync();
+
+        var classified = PersistenceErrorClassifier.Classify(failure);
+        Assert.Equal(PersistenceFailureKind.LockTimeout, classified.Kind);
+        Assert.Equal(1205, classified.ProviderErrorNumber);
+        Assert.False(classified.ServerRolledBackTransaction);
+        Assert.Equal("first-changed", firstNameInsideTransaction);
+
+        await using var reader = SpikeDbContext.Create(database.ConnectionString);
+        Assert.Equal("owner-first", await reader.Owners.AsNoTracking().Where(o => o.Id == first.Id).Select(o => o.Name).SingleAsync());
+    }
+
+    [Fact]
     public async Task LP_runtime_identity_has_no_schema_or_grant_privileges()
     {
         // The runtime string names the schema its grants cover; the probe connects WITHOUT selecting that
@@ -472,6 +580,13 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
         }
 
         return await command.ExecuteScalarAsync();
+    }
+
+    private static async Task<string?> SessionStatusAsync(MySqlConnection connection, string variable)
+    {
+        await using var command = new MySqlCommand($"SHOW SESSION STATUS LIKE '{variable}';", connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        return await reader.ReadAsync() ? reader.GetString(1) : null;
     }
 
     private static async Task RunScriptAsync(string connectionString, string script)

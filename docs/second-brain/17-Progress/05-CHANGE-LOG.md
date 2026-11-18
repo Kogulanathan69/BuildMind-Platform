@@ -51,3 +51,7 @@
 2026-11-18 — STEP 08-B: D05 security audit fixes and regression tests; live Python contract probe; D05 integration document (23) with CI smoke proposal. Evidence EV-20261118-59.
 
 2026-11-18 — STEP 08-C: live C#-to-Python CI smoke test and machine-readable test-result artifacts (lead-approved); `InternalServiceBulkhead`; readiness gate release fix. Evidence EV-20261118-60.
+
+2026-11-18 — STEP 09-A: verified run #50 evidence; D06 persistence fallback mapping and concurrency tests (uncommitted). Evidence EV-20261118-61..62.
+
+2026-11-18 — STEP 09-B: D06 mapping lead-approved; uncertainty precedence, cancellation boundary, Development-log leak and guard wording corrected. Evidence EV-20261118-63.

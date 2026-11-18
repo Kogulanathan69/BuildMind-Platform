@@ -52,9 +52,15 @@ public static class PlanEditorContractValidator
         var ids = new HashSet<Guid>();
         foreach (var floor in geometry.Floors)
         {
+            ArgumentNullException.ThrowIfNull(floor);
+            ArgumentNullException.ThrowIfNull(floor.Rooms);
+            ArgumentNullException.ThrowIfNull(floor.Walls);
+            ArgumentNullException.ThrowIfNull(floor.Openings);
             AddUnique(ids, floor.Id);
             if (floor.Rooms.Count > 10_000 || floor.Walls.Count > 20_000 || floor.Openings.Count > 20_000)
                 throw new ArgumentException("Floor entity count exceeds the draft contract limit.");
+            if (floor.Walls.Any(wall => wall is null))
+                throw new ArgumentException("Wall collections cannot contain null entries.");
             var walls = floor.Walls.ToDictionary(wall => wall.Id);
             foreach (var wall in floor.Walls)
             {
@@ -69,6 +75,11 @@ public static class PlanEditorContractValidator
 
             foreach (var room in floor.Rooms)
             {
+                ArgumentNullException.ThrowIfNull(room);
+                ArgumentNullException.ThrowIfNull(room.Polygon);
+                ArgumentNullException.ThrowIfNull(room.WallIds);
+                if (room.Polygon.Any(point => point is null))
+                    throw new ArgumentException("Room polygons cannot contain null points.");
                 AddUnique(ids, room.Id);
                 if (string.IsNullOrWhiteSpace(room.Name) || room.Name.Length > 200
                     || string.IsNullOrWhiteSpace(room.Type) || room.Type.Length > 100)
@@ -84,6 +95,7 @@ public static class PlanEditorContractValidator
 
             foreach (var opening in floor.Openings)
             {
+                ArgumentNullException.ThrowIfNull(opening);
                 AddUnique(ids, opening.Id);
                 if (!walls.TryGetValue(opening.WallId, out var wall))
                     throw new ArgumentException("An opening references a missing wall.");
@@ -138,6 +150,7 @@ public static class PlanEditorContractValidator
 
     private static void RequireFinite(CoordinatePointDto point)
     {
+        ArgumentNullException.ThrowIfNull(point);
         if (!double.IsFinite(point.X) || !double.IsFinite(point.Y))
             throw new ArgumentException("Coordinates must be finite.");
     }

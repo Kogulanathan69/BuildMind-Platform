@@ -23,3 +23,5 @@
 2026-11-18 — STEP 05-C: D02a review corrections (TLS mandatory, change-tracker discard, safe failure log, retry semantics, spike probe, `partial_revokes` check), implementation commit `2ee8324`, `develop` merge `3ff94e0`, push; database CI proposal revised. Evidence EV-20261118-29..31.
 
 2026-11-18 — BE-M4-D02b (`947d8f8`): persistence safety corrections, isolated MySQL 8.4 CI job (digest-pinned, TLS-only least-privilege accounts, masked random credentials, cleanup checks), CLI-generated migration verification on a synthetic model, 4 new live tests (26 total) and 14 new database-free cases (210). Evidence EV-20261118-32..35. Live results pending.
+
+2026-11-18 — STEP 05-E8: `fix(ci)` for the PR #21 `database-compatibility` job (restore before EF tooling, .NET 10 SDK selection, grant preflight). Evidence EV-20261118-36..37.

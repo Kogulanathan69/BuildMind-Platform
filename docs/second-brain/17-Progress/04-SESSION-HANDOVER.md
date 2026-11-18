@@ -91,3 +91,6 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - PR #18 merged `940a5b7` (0 reviews; CI passed, counts not retrieved). `develop` fast-forwarded to `065f929`; new branch `feature/m4-mysql-compatibility`; previous branches kept.
 - Commit `947d8f8`: persistence corrections, `database-compatibility` CI job, generated-migration context, T21–T24. Builds 0/0, no vulnerable packages, pytest 54.
 - **Pending:** PR creation (manual) → first live MySQL run; then record the actual results (MySQL version, column types, TLS, grants, cleanup, counts). Don't mark D02 complete. G03 open.
+
+## 2026-11-18 — STEP 05-E8 PR #21 CI recovery
+- PR #21 first run: standard jobs passed (C# 210 + 485, M3 246, Python 54); the database job failed before the tests (NETSDK1004 + SDK 11.0.100). Fixed in the database job only (SDK pin, restore, assets check, build, grant preflight). **MySQL tests still not executed**; awaiting the re-run. G03 and independent review open.

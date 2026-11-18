@@ -49,9 +49,28 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/setup-dotnet@v4
+      - id: setup-dotnet
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      - name: Select the .NET 10 SDK for this job
+        # The runner image also ships a newer SDK, which `dotnet` would otherwise prefer. This job-local
+        # global.json (not committed) pins the SDK installed above; nothing else in the repository changes.
+        env:
+          INSTALLED_SDK: ${{ steps.setup-dotnet.outputs.dotnet-version }}
+        run: |
+          case "$INSTALLED_SDK" in
+            10.0.*) ;;
+            *) echo "setup-dotnet did not report a .NET 10 SDK (got '${INSTALLED_SDK}')" >&2; exit 1 ;;
+          esac
+          printf '{\n  "sdk": {\n    "version": "%s",\n    "rollForward": "latestPatch"\n  }\n}\n' "$INSTALLED_SDK" > global.json
+          cat global.json
+          selected="$(dotnet --version)"
+          echo "Selected .NET SDK: ${selected}"
+          case "$selected" in
+            10.0.*) ;;
+            *) echo "Expected a .NET 10 SDK but got ${selected}" >&2; exit 1 ;;
+          esac
       - name: Generate per-run database credentials
         run: |
           for name in ROOT TEST RUNTIME; do
@@ -93,8 +112,39 @@ jobs:
           SQL
           docker exec -e MYSQL_PWD="$BM_ROOT_PASSWORD" buildmind-mysql mysql -uroot -e \
             "SELECT VERSION() AS server_version; SHOW GRANTS FOR 'bm_runtime'@'%'; SHOW GRANTS FOR 'bm_test'@'%';"
+      - name: Verify the bm_test wildcard grant is effective and scoped (TLS)
+        # Proves the stored grant pattern matches buildmind_test_* (and nothing else) before any test runs.
+        run: |
+          as_test() {
+            docker exec -e MYSQL_PWD="$BM_TEST_PASSWORD" buildmind-mysql \
+              mysql -ubm_test -h127.0.0.1 --ssl-mode=REQUIRED -N -e "$1"
+          }
+          as_test "CREATE DATABASE buildmind_test_grant_check; DROP DATABASE buildmind_test_grant_check;"
+          if as_test "CREATE DATABASE buildmind_other_grant_check;" 2>/dev/null; then
+            echo "bm_test was able to create a database outside buildmind_test_*" >&2
+            exit 1
+          fi
+          echo "bm_test grant verified: buildmind_test_* allowed, other names refused."
       - name: Restore repository-local tools
         run: dotnet tool restore
+      - name: Restore project dependencies
+        # dotnet-ef reads project metadata from project.assets.json; restore before any tooling command.
+        run: |
+          dotnet restore BuildMind.sln
+          dotnet restore "$SPIKE_PROJECT"
+          for assets in \
+            src/BuildMind.Infrastructure/obj/project.assets.json \
+            src/BuildMind.API/obj/project.assets.json \
+            tests/BuildMind.Persistence.IntegrationTests/obj/project.assets.json; do
+            if [ ! -f "$assets" ]; then
+              echo "Missing ${assets}" >&2
+              exit 1
+            fi
+          done
+      - name: Build in Release before tooling
+        run: |
+          dotnet build BuildMind.sln --configuration Release --no-restore
+          dotnet build "$SPIKE_PROJECT" --configuration Release --no-restore
       - name: Verify design-time factory and migration discovery (no connection)
         env:
           BUILDMIND_MIGRATIONS_CONNECTION: Server=127.0.0.1;Port=3306;Database=buildmind_test_tooling;User ID=bm_test;SslMode=Required

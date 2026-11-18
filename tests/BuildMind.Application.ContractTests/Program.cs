@@ -1461,6 +1461,7 @@ Run("GVR-17 initial and final freshness exceptions are classified", () =>
 });
 
 CandidatePreviewContractScenarios.Register(Run);
+CrossMemberContractCompatibilityScenarios.Register(Run);
 DiagnosticContractScenarios.Register(Run);
 PersistenceContractScenarios.Register(Run);
 AdvancedGeometryContractScenarios.Register(Run);

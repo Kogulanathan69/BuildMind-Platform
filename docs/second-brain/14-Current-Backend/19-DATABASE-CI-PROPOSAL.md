@@ -1,5 +1,7 @@
 # Database compatibility CI job — PROPOSAL (BE-M4-D02a, revised 2026-11-18 in STEP 05-C)
 
+> **Superseded by the implementation (BE-M4-D02b, 2026-11-18, commit `947d8f8`).** Lead authorization: internal compatibility testing only. The live job in `.github/workflows/backend-ci.yml` differs from the diff below: the image is pinned by digest, the data directory is on `tmpfs`, `have_ssl` is replaced by test-level TLS evidence (T22/T23), there is a CLI migration generation step, a leftover-database check and a credential scan gating the artifact upload, and the test count is now 26. The text below is kept as history.
+
 Status: **PROPOSED, not applied.** `.github/workflows/backend-ci.yml` is unchanged. Applying it needs explicit lead approval. G03 has conditional approval for internal development and compatibility testing only; the commercial licence review is still pending.
 
 **G03 note:** the job restores the provider from NuGet onto an ephemeral GitHub runner for internal testing. It publishes no provider binaries: the only artifact is a TRX test result. The repository is **public** (verified 2026-11-18). That publishes BuildMind source with a package reference, not the provider itself. The lead should still confirm that this fits the conditional authorization.

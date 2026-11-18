@@ -86,3 +86,8 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Review fixed 6 issues (EV-20261118-29). Commit `2ee8324`; merged `develop` `fef5814` → `3ff94e0`; pushed, remote matches.
 - Builds 0/0; no vulnerable packages; pytest 54 passed. **No C# test executed yet; no database touched; spike not run.**
 - Pending (lead): create the draft PR (no CLI here), let the PR CI run and share the log archive or counts; approve the database CI job ([19](../14-Current-Backend/19-DATABASE-CI-PROPOSAL.md)); confirm G03 fits the public repo; G03 licence review; independent review of PR #8/#10/#11 and this PR.
+
+## 2026-11-18 — STEP 05-D/E BE-M4-D02b
+- PR #18 merged `940a5b7` (0 reviews; CI passed, counts not retrieved). `develop` fast-forwarded to `065f929`; new branch `feature/m4-mysql-compatibility`; previous branches kept.
+- Commit `947d8f8`: persistence corrections, `database-compatibility` CI job, generated-migration context, T21–T24. Builds 0/0, no vulnerable packages, pytest 54.
+- **Pending:** PR creation (manual) → first live MySQL run; then record the actual results (MySQL version, column types, TLS, grants, cleanup, counts). Don't mark D02 complete. G03 open.

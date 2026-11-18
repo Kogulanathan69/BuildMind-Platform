@@ -86,3 +86,5 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
   - Persistence mapping strategy for immutable domain types and per-feature schemas: still need M1/M3/M5 agreement.
 
 - 2026-11-18 (STEP 05-C): the repository is **public**. The D02a push publishes source and package references only (no provider binaries); the lead should confirm this is consistent with the G03 conditional internal-testing authorization. G03 open. The database CI job is still a proposal ([19](19-DATABASE-CI-PROPOSAL.md), revised: TLS, `partial_revokes` pre-check, `dotnet-ef` tooling smoke check).
+
+- 2026-11-18 (STEP 05-D/E): lead authorized the isolated MySQL CI job for internal compatibility testing only; implemented on `feature/m4-mysql-compatibility`. G03 **open** (commercial licence review; whether a public repository is acceptable is a separate decision). PR #18 merged with 0 reviews (G19 theme).

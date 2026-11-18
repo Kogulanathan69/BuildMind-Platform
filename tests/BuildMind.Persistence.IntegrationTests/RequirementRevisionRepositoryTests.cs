@@ -14,9 +14,9 @@ namespace BuildMind.Persistence.IntegrationTests;
 
 /// <summary>
 /// BE-M4-D03 live tests of the production schema and <see cref="RequirementRevisionRepository"/> on a disposable
-/// MySQL 8.4 database (synthetic data only). The schema is created from the production model with
-/// <c>EnsureCreated</c> in the disposable database: an INTERIM until the reviewed initial migration exists
-/// (migration generation is blocked locally by Smart App Control; see the D03 register).
+/// MySQL 8.4 database (synthetic data only). The schema is created only by applying the committed, reviewed
+/// initial migration <c>20261118133137_InitialFeatureSchema</c> (generated in CI because local dotnet-ef is blocked
+/// by Smart App Control; see the D03 register).
 /// </summary>
 public sealed class RequirementRevisionRepositoryTests(ITestOutputHelper output)
 {
@@ -29,7 +29,7 @@ public sealed class RequirementRevisionRepositoryTests(ITestOutputHelper output)
         await CreateSchemaAsync(database);
         await using (var probe = CreateContext(database.ConnectionString))
         {
-            output.WriteLine(probe.Database.GetMigrations().Any() ? "Schema path: migrations" : "Schema path: EnsureCreated (interim)");
+            output.WriteLine("Schema path: migrations (" + string.Join(", ", await probe.Database.GetAppliedMigrationsAsync()) + ")");
         }
 
         var tables = await ListAsync(database, "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name <> '__EFMigrationsHistory' ORDER BY table_name;");
@@ -263,20 +263,14 @@ public sealed class RequirementRevisionRepositoryTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// Migration-based schema whenever a BuildMindDbContext migration exists (CI generates it until one is
-    /// committed); EnsureCreated only as the documented interim when none exists.
+    /// Creates the schema ONLY from the committed, reviewed migration (STEP 06-E3). The interim EnsureCreated
+    /// fallback was removed: a missing migration now fails the tests instead of silently using another path.
     /// </summary>
     private static async Task CreateSchemaAsync(DisposableMySqlDatabase database)
     {
         await using var context = CreateContext(database.ConnectionString);
-        if (context.Database.GetMigrations().Any())
-        {
-            await context.Database.MigrateAsync();
-        }
-        else
-        {
-            await context.Database.EnsureCreatedAsync();
-        }
+        Assert.Contains("20261118133137_InitialFeatureSchema", context.Database.GetMigrations());
+        await context.Database.MigrateAsync();
     }
 
     private static async Task<DisposableMySqlDatabase> SeededDatabaseAsync()

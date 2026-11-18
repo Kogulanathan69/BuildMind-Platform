@@ -29,6 +29,16 @@
 
 **Migrations are never applied by the application or automatically.** The only supported mechanism is a **reviewed, ranged script** applied by **one authorized executor** with the `bm_migrator` identity.
 
+**Explicit authorization:** every deployment to any shared or persistent database needs a recorded go-ahead from the M4 lead, naming the target database and the `<from>`/`<to>` migrations. Disposable CI and test databases are the only exception. **No production database has been migrated or authorized.**
+
+**Committed migrations** (`src/BuildMind.Infrastructure/Persistence/Migrations`):
+
+| Migration | Content | Ranged script for an empty database |
+|---|---|---|
+| `20261118133137_InitialFeatureSchema` | `users`, `projects`, `requirement_revisions`, `project_requirement_heads` (BE-M4-D03) | `migrations script 0 20261118133137_InitialFeatureSchema …` |
+
+**Rollback is destructive.** `Down` drops tables and **every row in them**. Never run a down migration on a database with data you need. Recover from the backup (step 4) instead, unless the M4 lead explicitly authorizes the rollback.
+
 1. **Single executor:** only the person assigned by M4 runs migrations against a given database, and announces it first. No two people migrate the same database at the same time.
 2. **Check the history before running anything:** `SELECT MigrationId, ProductVersion FROM __EFMigrationsHistory ORDER BY MigrationId;`. The last row must be exactly the `<from>` migration of the script. If it isn't, **stop**: the script was generated for a different state.
 3. **Generate the ranged script:** `dotnet tool run dotnet-ef migrations script <from> <to> --project src/BuildMind.Infrastructure --startup-project src/BuildMind.API --output <file>.sql`. Review it as code: DDL, data changes, and the history `INSERT` it appends.

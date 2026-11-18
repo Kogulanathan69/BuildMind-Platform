@@ -45,3 +45,12 @@ See EV-20261118-49. Additional notes:
 - Losers of an 8-way concurrent save report either `RevisionConflict` (head moved) or a fully rolled-back deadlock exception (contention before the winner committed). The tests assert exactly one winner and nothing else written.
 - **Follow-up once the reviewed migration is committed:** `PersistenceRegistrationTests` and `DesignTimeFactoryTests` currently assert that the migration list is empty (true while none is committed). They must then assert the committed migration set instead; the application still never migrates at start-up.
 - Test inventory: infrastructure 161 methods / 279 cases; MySQL 43 (T01–T25, T19D, LP, SQL, D03-R01–R11, M01–M04).
+
+## STEP 06-E3 — initial migration committed (2026-11-18)
+
+- `20261118133137_InitialFeatureSchema` (generated in CI run 44314331460, reviewed, committed byte-identical). CI now **verifies** it and never regenerates. Repository tests run on the migration only.
+- **Live verification:** 43/43 on MySQL 8.4.13 (EV-20261118-51).
+- **Open schema decisions (no change made):**
+  1. *Email uniqueness collation:* the table inherits the database default; `utf8mb4_0900_ai_ci` is case- and **accent-insensitive**. With M1 already normalizing (upper-casing), a binary collation (`utf8mb4_bin`) on `normalized_email` would make uniqueness exact. Needs M1 + M4 agreement and a follow-up migration.
+  2. *Head number consistency:* `current_revision_number` is guaranteed only by the repository. A database guarantee would need a 3-column FK `(project_id, current_revision_id, current_revision_number)` → a 3-column alternate key on revisions. Optional; follow-up migration if wanted.
+- Deployment: ranged scripts only, explicit M4-lead authorization per database, backup first, destructive rollback warning (`tools/database/mysql/README.md`). Nothing has been deployed beyond disposable CI databases.

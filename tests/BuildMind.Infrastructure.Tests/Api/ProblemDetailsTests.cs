@@ -46,7 +46,7 @@ public sealed class ProblemDetailsTests
     [MemberData(nameof(Environments))]
     public async Task ArgumentException_is_not_globally_mapped_to_400(string environment)
     {
-        var problem = await GetProblemAsync(environment, SyntheticTestEndpoints.Prefix + "/argument-exception");
+        var problem = await GetProblemAsync(environment, SyntheticTestEndpoints.Prefix + "/argument-error");
 
         AssertProblem(problem, HttpStatusCode.InternalServerError, "INTERNAL_ERROR");
         AssertNoSensitiveContent(problem.RawBody);

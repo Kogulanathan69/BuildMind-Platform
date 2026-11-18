@@ -24,7 +24,7 @@ internal sealed class SyntheticTestEndpoints : IApiEndpointModule
         var tests = apiV1.MapGroup("/__synthetic-tests");
 
         tests.MapGet("/throw", ThrowWithSecretMessage);
-        tests.MapGet("/argument-exception", ThrowArgumentException);
+        tests.MapGet("/argument-error", ThrowArgumentException);
         tests.MapGet("/server-cancelled", ThrowServerSideCancellation);
         tests.MapGet("/bad-request/{status:int}", ThrowBadHttpRequest);
 

@@ -110,7 +110,11 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
         await migrator.MigrateAsync(SpikeInitialMigration.Id);
         Assert.Equal(2L, await SpikeTableCountAsync(database));
 
-        var providerAssembly = context.GetService<Microsoft.EntityFrameworkCore.Storage.IDatabaseProvider>().GetType().Assembly.GetName();
+        // The provider's own options extension lives in the Oracle provider assembly (IDatabaseProvider's runtime
+        // type is EF Core's generic DatabaseProvider<T>, which reported Microsoft.EntityFrameworkCore; EV-20261118-44).
+        var providerAssembly = context.GetService<IDbContextOptions>().Extensions
+            .Select(extension => extension.GetType().Assembly.GetName())
+            .Single(name => string.Equals(name.Name, "MySql.EntityFrameworkCore", StringComparison.Ordinal));
         var providerVersion = providerAssembly.Version!;
         output.WriteLine($"Provider assembly: {providerAssembly.Name} {providerVersion}");
         Assert.Equal(10, providerVersion.Major); // reassess this limitation on any provider upgrade

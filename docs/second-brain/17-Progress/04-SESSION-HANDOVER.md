@@ -68,3 +68,21 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Not implemented (pending decisions): CORS, OpenAPI, JWT/A1/A2, readiness, database, internal service calls, `/internal/v1`, M3 runner wiring.
 - No source outside M4 scope, no CI/DB/RAG change; nothing staged, committed or pushed.
 - Next action (lead): approve STEP 04-J (commit, push, PR, Linux CI); arrange independent review (PR #8, PR #10, this slice).
+
+## 2026-11-18 — STEP 04-K post-merge + STEP 05-A D02 preparation
+- PR #11 squash-merged as `0a4d70a` (0 reviews). `develop` fast-forwarded to `08ec48a` (also includes PR #9 M3, #13 M1, #14 M5). New branch `feature/m4-database-infrastructure` from `08ec48a`; all earlier branches preserved.
+- CI: final PR run 44251191661 and post-merge run 44251341941 success; exact counts not retrieved (403). History: 124/126 → 125/126 → corrected (`27d320d`, `2d2a474`).
+- D02: environment and provider revalidated read-only; implementation readiness plan added to [18](../14-Current-Backend/18-MYSQL-PROVIDER-STUDY.md). **Stopped at G03 provider/licence approval gate.** No package, database, migration or production code change.
+- Next action (lead): (1) licence decision on Oracle provider for commercial use; (2) approve exact package set; (3) create disposable database + least-privilege accounts outside the repo; (4) authorize the spike; (5) arrange independent review of PR #8/#10/#11.
+
+## 2026-11-18 — STEP 05-B BE-M4-D02a database infrastructure (interrupted once, recovered)
+- Branch `feature/m4-database-infrastructure`: docs commit `3ebf7aa` (not pushed); D02a implementation **uncommitted** pending diff review. Remote `develop` moved to `860d5fe` (PR #15/#16: `BuildMind.sln`, CI contract-check step, tests README); not merged into this branch.
+- Implemented: approved packages, `DatabaseOptions` plus validation, `BuildMindDbContext` (no entities), DI, design-time factory, `TransactionRunner`, `PersistenceErrorClassifier`, log hardening, database-free tests, spike project (22 tests), account SQL proposal, CI job proposal ([19](../14-Current-Backend/19-DATABASE-CI-PROPOSAL.md)).
+- Verified: restore; Release build 0/0; spike project build 0/0; no vulnerable packages; pytest 54 passed. **No C# test executed** (G17 locally; CI not yet run for this branch). **No database touched.**
+- Next (lead): review the diff → approve commit and push → PR CI runs the 189 database-free cases; approve the database CI job and/or run the account SQL; decide on the G03 licence; get M1/M3/M5 agreement on mappings.
+
+## 2026-11-18 — STEP 05-C BE-M4-D02a delivery
+- Backup: `C:\Users\kogul\Documents\BuildMind-Backups\d02a-20261118-150452` (bundle + working files).
+- Review fixed 6 issues (EV-20261118-29). Commit `2ee8324`; merged `develop` `fef5814` → `3ff94e0`; pushed, remote matches.
+- Builds 0/0; no vulnerable packages; pytest 54 passed. **No C# test executed yet; no database touched; spike not run.**
+- Pending (lead): create the draft PR (no CLI here), let the PR CI run and share the log archive or counts; approve the database CI job ([19](../14-Current-Backend/19-DATABASE-CI-PROPOSAL.md)); confirm G03 fits the public repo; G03 licence review; independent review of PR #8/#10/#11 and this PR.

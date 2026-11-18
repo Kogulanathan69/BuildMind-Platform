@@ -38,6 +38,13 @@ public static class ApiServiceCollectionExtensions
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<ServicesOptions>, ServicesOptionsValidation>();
 
+        // BE-M4-D02a: database settings, validated at start-up only when Database:Enabled is true.
+        // The connection string comes from ConnectionStrings:BuildMind (User Secrets / environment variables).
+        services.AddOptions<DatabaseOptions>()
+            .Bind(configuration.GetSection(DatabaseOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<DatabaseOptions>, DatabaseOptionsValidation>();
+
         return services;
     }
 

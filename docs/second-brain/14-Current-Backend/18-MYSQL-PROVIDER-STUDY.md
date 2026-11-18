@@ -159,3 +159,141 @@ Licence review recorded; packages restored at the exact versions with no audit w
 ## Lead decision — 2026-11-18
 
 **CONDITIONAL TESTING APPROVAL ONLY** (Team lead (M4 + M7; GitHub `Kogulanathan69`)). Oracle `MySql.EntityFrameworkCore` is the preferred candidate and may be considered for the future BE-M4-D02 disposable-database spike (direction: .NET 10, EF Core 10, MySQL 8.4 LTS, `dotnet-ef` local tool manifest). **G03 remains OPEN.** Final adoption requires: commercial-use licence compatibility review, verified dependency versions, NuGet vulnerability audit, MySQL 8.4 compatibility testing, migration, transaction, concurrency and least-privilege verification, and explicit lead acceptance. This decision does **not** authorize dependency installation, database creation, configuration changes or execution of the spike. All evidence above is preserved unchanged.
+
+## Revalidation — 2026-11-18 (STEP 05-A4, read-only)
+
+No change to the study's conclusion (evidence EV-20261118-24): `MySql.EntityFrameworkCore 10.0.12+MySQL26.10.0` is still the latest stable EF Core 10 MySQL provider. Its net10.0 dependencies are EF Core and Relational 10.0.12 plus `MySql.Data 26.10.0`. The licence is unchanged and covers both the provider and `MySql.Data`. The NuGet registry lists no vulnerabilities for the provider, its dependencies or the EF tooling. Pomelo is still 9.0.0, which needs EF Core 9, and EF Core 9 has been out of support since 2026-11-10. EF Core 10.0.15 exists, but staying on **10.0.12** keeps all `Microsoft.Extensions.*` references at 10.0.12, which avoids NU1605 downgrade conflicts, and matches the installed runtime. MySQL 8.4 support by the provider is still **ASSUMED** until the spike runs. Local server: MySQL Community 8.4.9, service `MySQL84`, port 3306 (EV-20261118-23).
+
+**Licence gate (not a legal conclusion):** BuildMind is intended to be commercial. The provider and `MySql.Data` are GPL-2.0-only with the Universal FOSS exception. Whether copyleft obligations apply depends on how BuildMind is distributed or hosted (for example a hosted service versus software delivered to customers). Possible routes: accept for hosted-only use after legal review, buy a commercial licence from Oracle, or wait for an MIT-licensed provider. **The lead must accept one of these explicitly. Nothing is approved by this note.**
+
+## BE-M4-D02 implementation readiness plan — PROPOSAL (2026-11-18)
+
+Status: **stopped at the provider and licence approval gate.** No package was installed, no database was touched and no code was written. "Confirmed" below means an existing approved decision or verified repository fact; everything else is a proposal.
+
+### Confirmed facts and decisions
+- M4 is the single writer for the DbContext and migrations (ownership). The repository adapters belong in `src/BuildMind.Infrastructure/Persistence` (README).
+- C8 options pattern: binding and validation live in the API composition root, and secrets are never logged. C3 Problem Details: database errors never leak SQL or connection text. C10 logging safety applies.
+- Ports already on `develop` (owned by their feature owners):
+  - M1: `IUserRepository`, `IProjectRepository` (`UpdateAsync` takes an expected revision);
+  - M5: `IRequirementRevisionRepository`, `IReportRepository`, `IArchitectRequestRepository` (all specify **atomic** operations, plus conflict and no-partial-write semantics);
+  - M3: `IPlanRevisionStore` (`TryAppendAtomicallyAsync`) and the provisional integration ports.
+- Domain types:
+  - `User` and `Project` have private setters with defaults.
+  - `Report`, `ArchitectRequest` and `RequirementRevision` are immutable, have no parameterless constructor, and carry nested value objects (`ReportSnapshot`, `RequirementContent`).
+
+### Remaining blockers
+1. **G03 licence acceptance** and approval of the exact package set below.
+2. **Where the database tests run:** local C# test execution is blocked by Smart App Control (G17), and CI has no MySQL. A database CI job (a `mysql:8.4` service container with per-run generated credentials) needs separate approval to change the CI workflow. Alternatively, G17 is resolved on the workstation.
+3. **Disposable database and accounts:** the lead creates these outside the repository. Secrets go only into User Secrets or environment variables and are never shared in chat.
+4. **Persistence mapping strategy:** M4 recommends separate persistence models in Infrastructure, mapped to and from domain types through each type's `Rehydrate`, because the domain types are immutable. Feature owners (M1, M3, M5) need to agree.
+5. **Feature schemas are not frozen:** D02a ships no feature tables. Each feature's first migration needs its owner's agreement (D02b and later).
+6. Earlier open items still apply: the A1/A2 identity scope (affects the `users` table design), G20 (who implements the M3 ports), G12 (consent transaction).
+
+### Architecture (proposal)
+| Concern | Proposal |
+|---|---|
+| Context | `BuildMindDbContext` (Infrastructure). `ApplyConfigurationsFromAssembly` discovers `IEntityTypeConfiguration<T>` classes under `Persistence/Configurations/<Feature>/`. No `DbSet` for feature tables in D02a |
+| Options | `DatabaseOptions` (`Database` section): `Enabled` (default **false**, so CI and current tests need no database), `CommandTimeoutSeconds` (1–120), `MaxRetryCount`. The connection string comes only from `ConnectionStrings:BuildMind` (User Secrets or environment variable). It is validated at start-up when `Enabled` is true and never logged or echoed |
+| DI | `AddBuildMindPersistence` is called from `AddInfrastructure` and registers the DbContext (scoped) only when the database is enabled. The API binds the options as in C8 |
+| Transactions | No generic repository or public unit of work. Each atomic port method runs inside one internal `TransactionRunner.ExecuteAsync`, which uses the provider's execution strategy and one transaction, with no external calls inside. Cancellation means rollback; a commit-unknown outcome maps to `TransactionOutcomeUnknown` where the port defines it |
+| Concurrency | Revision/StateVersion columns are concurrency tokens. Compare-and-set updates use `ExecuteUpdateAsync(... WHERE id = @id AND revision = @expected)`: zero rows affected means a conflict result, never a silent overwrite |
+| Error translation | An internal `PersistenceErrorTranslator` maps MySQL error numbers to failure kinds: 1062 duplicate → `DUPLICATE_REQUEST`/`CONFLICT`; 1451/1452 FK → `CONFLICT`/not found; 1213 deadlock and 1205 lock timeout → retry or `DEPENDENCY_UNAVAILABLE`; connection failures → `DEPENDENCY_UNAVAILABLE`. Messages are discarded and only the code and type are logged |
+| Ownership queries | Every adapter query filters by `OwnerId`/`ProjectId`, as the ports require. Composite indexes start with the scoping key |
+| Migrations | Stored in `Infrastructure/Persistence/Migrations`; M4 is the only author. They are applied **only** from a reviewed `dotnet ef migrations script --idempotent` run under the migration identity. **The application never migrates itself at start-up.** Design-time connection comes from `ConnectionStrings__BuildMindMigrations` (environment variable or User Secrets) |
+| Health | Readiness (C11b) stays design-only. D02 adds no health endpoint change, and `/health` (liveness) never touches the database |
+| Naming | Lowercase `snake_case` tables and columns, because MySQL table-name case sensitivity differs between Windows and Linux. Plural tables (`users`, `projects`). Constraint prefixes `pk_`, `fk_`, `ux_`, `ix_`. Databases: `buildmind_dev`, `buildmind_test_<run>` (disposable) |
+| Types (to be confirmed by the spike) | GUID → `CHAR(36)` or `BINARY(16)`, decided by the spike. Timestamps → UTC `DATETIME(6)`. Money/area → `DECIMAL` with explicit `HasPrecision`. Geometry and snapshots → native `JSON` (or `LONGTEXT` plus a stored hash if the round-trip changes bytes) |
+
+### Database accounts (proposal; the lead creates them, and secrets stay outside the repository)
+| Account | Host | Grants |
+|---|---|---|
+| `bm_runtime` | `localhost` | `SELECT, INSERT, UPDATE, DELETE ON buildmind_dev.*`; no DDL, `GRANT` or global privileges |
+| `bm_migrator` | `localhost` | `CREATE, ALTER, DROP, INDEX, REFERENCES, SELECT, INSERT, UPDATE, DELETE ON buildmind_dev.*` |
+| `bm_test` | `localhost` | `ALL ON \`buildmind\_test\_%\`.*` (disposable spike and test databases only) |
+| `root`/DBA | — | Never used by the app, tests or migrations |
+
+Production TLS: `SslMode=Required`. Local development may use `Preferred`, recorded as a decision.
+
+### Dependency approval table (none approved)
+| Package / tool | Version | Project | Licence | Purpose |
+|---|---|---|---|---|
+| `MySql.EntityFrameworkCore` | 10.0.12+MySQL26.10.0 | Infrastructure | GPL-2.0 + FOSS exception | Provider (**licence gate**) |
+| `Microsoft.EntityFrameworkCore` | 10.0.12 (explicit pin) | Infrastructure | MIT | Core |
+| `Microsoft.EntityFrameworkCore.Relational` | 10.0.12 (explicit pin) | Infrastructure | MIT | Relational, `ExecuteUpdate` |
+| `Microsoft.EntityFrameworkCore.Design` | 10.0.12, `PrivateAssets=all` | API (startup project for tooling) | MIT | Migrations design time |
+| `dotnet-ef` | 10.0.12 | `.config/dotnet-tools.json` (local) | MIT | Migration tooling |
+| Transitive (`MySql.Data` 26.10.0, BouncyCastle 2.6.2, Google.Protobuf 3.35.0, K4os LZ4 1.3.8, ZstdSharp 0.8.8, System.Configuration.ConfigurationManager 10.0.8, System.Security.Permissions 10.0.8) | as resolved | — | GPL+FOSS exc. / MIT / BSD-3 | Approved together with the provider |
+
+The integration tests need no new test packages; xunit and the test SDK are already approved.
+
+### Proposed file inventory
+**Production (D02a):**
+- `src/BuildMind.Infrastructure/Persistence/BuildMindDbContext.cs`
+- `src/BuildMind.Infrastructure/Persistence/PersistenceServiceCollectionExtensions.cs`
+- `src/BuildMind.Infrastructure/Persistence/Transactions/TransactionRunner.cs`
+- `src/BuildMind.Infrastructure/Persistence/Errors/PersistenceErrorTranslator.cs` and `PersistenceFailure.cs`
+- `src/BuildMind.Infrastructure/Persistence/DesignTime/BuildMindDesignTimeDbContextFactory.cs`
+- `src/BuildMind.Infrastructure/Configuration/DatabaseOptions.cs`
+- `src/BuildMind.API/Configuration/DatabaseOptionsValidation.cs`
+
+Edits: `Infrastructure/DependencyInjection.cs`, `API/ApiServiceCollectionExtensions.cs`, `API/appsettings.json` (a `Database` section with no secrets), the Infrastructure and API csproj files, `.config/dotnet-tools.json`, and the Persistence README.
+
+**Tests:**
+- Run in CI without a database: `tests/BuildMind.Infrastructure.Tests/Persistence/DatabaseOptionsTests.cs`, `PersistenceRegistrationTests.cs`, `ConnectionSecretLoggingTests.cs`.
+- Need a database (spike): a new project `tests/BuildMind.Persistence.IntegrationTests/` containing `Support/DisposableMySqlDatabase.cs` (creates and drops `buildmind_test_<guid>`), `Support/SpikeDbContext.cs` (synthetic test-only entities, **no feature schema**), and `ProviderCompatibilityTests.cs`. It is added to the solution only once the database CI job is approved.
+
+### Spike test plan (disposable `buildmind_test_<guid>`, synthetic entities only)
+| # | Test | Pass criterion |
+|---|---|---|
+| 1 | Connection | Runtime identity connects; provider and server versions recorded without secrets |
+| 2 | DbContext init | Model builds; no client evaluation warnings |
+| 3 | Migration generation | `migrations add` and an idempotent script are produced and the SQL is reviewed |
+| 4 | Migration apply | Applies with `bm_test` (spike) / `bm_migrator` |
+| 5 | Rollback | Down migration leaves an empty schema plus the history table |
+| 6 | Reapply | Clean reapply; the idempotent script runs twice without error |
+| 7 | Insert/read | Values round-trip |
+| 8 | Update | Persisted change, with the revision incremented |
+| 9 | Delete | Row removed; cascade rules as configured |
+| 10 | Foreign key | Orphan insert rejected (1452) |
+| 11 | Unique | Duplicate rejected (1062) |
+| 12 | Duplicate translation | Becomes a `DUPLICATE_REQUEST`/`CONFLICT` failure kind with no SQL text |
+| 13 | Commit | Multi-row write visible |
+| 14 | Rollback | Forced failure leaves zero rows |
+| 15 | Optimistic concurrency | Stale token raises `DbUpdateConcurrencyException`, translated to a conflict |
+| 16 | Conditional revision update | Exactly one of N concurrent compare-and-set attempts wins |
+| 17 | GUID round-trip | Equality holds and the storage type is documented |
+| 18 | Decimal precision | Exact at the configured precision and scale |
+| 19 | UTC timestamps | `DateTimeOffset` UTC microseconds round-trip; non-UTC rejected or normalised per policy |
+| 20 | JSON round-trip | JSON column value is semantically equal; the stored hash of a canonical string is unchanged |
+| + | Least privilege | `bm_runtime` cannot `CREATE`/`ALTER`/`DROP`/`GRANT` |
+| + | SQL inspection | Owner-scoped query plans use indexes (`EXPLAIN`) |
+
+### Implementation order
+1. Lead: licence decision and package approval (G03).
+2. D02a: options, DI, DbContext, transaction runner, error translator and non-database tests (CI-safe; the database stays disabled by default).
+3. Approve the database CI job, or resolve G17; the lead provisions the accounts.
+4. Spike project: run the 20 tests and the two extras, and record the evidence.
+5. G03 becomes a recorded decision.
+6. D02b and later: per-feature mappings and migrations with each owner's agreement (M1 users and projects first), then the M5/M3 atomic adapters.
+
+## BE-M4-D02a implementation — 2026-11-18 (uncommitted, awaiting review)
+
+G03: **CONDITIONAL INTERNAL DEVELOPMENT AND COMPATIBILITY TESTING AUTHORIZATION — PRODUCTION AND COMMERCIAL DISTRIBUTION LICENSING REVIEW PENDING**. G03 stays open.
+
+| Component | Implementation |
+|---|---|
+| Packages | Infrastructure: `Microsoft.EntityFrameworkCore` and `.Relational` 10.0.12 (explicit pins) and `MySql.EntityFrameworkCore` 10.0.12 (resolves `MySql.Data` 26.10.0). API: `Microsoft.EntityFrameworkCore.Design` 10.0.12 with `PrivateAssets=all`. Root `dotnet-tools.json`: `dotnet-ef` 10.0.12. No vulnerable packages, including transitive ones |
+| Configuration | `Database:Enabled` (default **false**) and `Database:CommandTimeoutSeconds` (1–300, default 30). The connection string comes **only** from `ConnectionStrings:BuildMind` (User Secrets or environment variable) and is validated at start-up only when enabled. Rejected: missing server, database or user; `root`; `Persist Security Info=true`; `Allow Load Local Infile=true`; unparseable strings. Messages name keys only |
+| Context | `BuildMindDbContext` with no entity types. It discovers `IEntityTypeConfiguration<T>` classes under `BuildMind.Infrastructure.Persistence.Configurations.*` and has no migrations. Registered as scoped; when disabled, resolving it throws a fixed safe message. It never connects, creates databases or migrates at start-up |
+| Provider options | One place (`MySqlContextOptions`): `UseMySQL`, command timeout, migrations assembly = Infrastructure, no retrying execution strategy, sensitive-data logging and detailed errors off, and failure events that quote provider messages (`CommandError`, `SaveChangesFailed`, `QueryIterationFailed`, `OptimisticConcurrencyException`) ignored. `Microsoft.EntityFrameworkCore` logs at Warning |
+| Design time | `BuildMindDesignTimeDbContextFactory`: only `BUILDMIND_MIGRATIONS_CONNECTION` is read, with no fallback to application configuration; same validation (no root); nothing runs automatically |
+| Transactions | Internal `TransactionRunner` (with an `IDbTransactionSource` seam): begin → operation → commit. On an operation failure or cancellation it rolls back and rethrows the original exception; a rollback failure never masks it. Commit is never cancelled midway; a commit failure raises `TransactionOutcomeUnknownException` and is never retried. The transaction is always disposed and nested transactions are rejected. No generic repository or unit of work |
+| Error translation | `PersistenceErrorClassifier` produces `PersistenceFailure` (kind, default shared code, transient flag, provider error number, constraint name). Duplicate (1022/1062/1169/1586) → `CONFLICT`; FK (1216/1217/1451/1452) → `CONFLICT`; deadlock 1213 and lock timeout 1205 → `DEPENDENCY_UNAVAILABLE` (transient); connection failures → `DEPENDENCY_UNAVAILABLE`; command timeout → `DEPENDENCY_TIMEOUT`; `DbUpdateConcurrencyException` → `REVISION_CONFLICT`; unknown commit outcome and anything else → `INTERNAL_ERROR`. Only schema constraint names are extracted; values and messages are dropped. Feature adapters choose the final code (for example `DUPLICATE_REQUEST`) |
+| Database-free tests (`BuildMind.Infrastructure.Tests/Persistence`, + `LayerDependencyTests`) | 39 methods / 63 cases (suite total 110 / 189). Compiled; **not executed locally (G17)** |
+| Spike project `tests/BuildMind.Persistence.IntegrationTests` | 22 tests (T01–T20, LP, SQL), synthetic model and a hand-written migration. **Outside `BuildMind.sln`**; compiled; **not executed** (needs disposable MySQL and approval) |
+| Account setup | `tools/database/mysql/001-dev-test-accounts.sql` with placeholders, run manually by the lead, and a README |
+| CI | Proposal [19-DATABASE-CI-PROPOSAL](19-DATABASE-CI-PROPOSAL.md); workflow unchanged |
+
+**Not done:** feature mappings and migrations (need owner agreement), repository adapters, readiness and database health integration, and execution of any database test. MySQL 8.4 compatibility is **UNVERIFIED**.
+
+**STEP 05-C review corrections (2026-11-18, commit `2ee8324`):** TLS is mandatory (`SslMode` ≥ Required; accounts `REQUIRE SSL`; production should use `VerifyFull`); tracked entities are discarded after a rollback or an unknown commit; `PersistenceLog` restores safe failure diagnostics; the retry semantics of `IsTransient` are documented; the spike least-privilege probe no longer selects an existing database; the account SQL checks `partial_revokes`. Test inventory: `BuildMind.Infrastructure.Tests` 113 methods / 196 cases (66 new database-free cases in D02a); spike 22. **Not proven by the spike:** CLI-generated migrations with a model snapshot (the spike migration is hand-written; the CI proposal adds a `dotnet-ef` tooling smoke check only).

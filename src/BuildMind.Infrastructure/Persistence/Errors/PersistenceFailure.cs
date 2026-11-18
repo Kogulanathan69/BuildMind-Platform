@@ -1,0 +1,139 @@
+using System.Text.RegularExpressions;
+using BuildMind.Application.Abstractions.Errors;
+using BuildMind.Infrastructure.Persistence.Transactions;
+using Microsoft.EntityFrameworkCore;
+using MySql.Data.MySqlClient;
+
+namespace BuildMind.Infrastructure.Persistence.Errors;
+
+public enum PersistenceFailureKind
+{
+    DuplicateKey,
+    ForeignKeyViolation,
+    Deadlock,
+    LockTimeout,
+    CommandTimeout,
+    ConnectionFailure,
+    ConcurrencyConflict,
+    TransactionOutcomeUnknown,
+    Unexpected,
+}
+
+/// <summary>
+/// Safe classification of a persistence failure. It carries no provider message, SQL, parameter value or
+/// connection detail. <see cref="DefaultCode"/> is only a default: feature adapters translate failures into
+/// their own port results (for example a duplicate idempotency key → existing outcome, a duplicate natural
+/// key → <c>CONFLICT</c>) and keep feature context, so not every database error maps to one HTTP status.
+/// </summary>
+/// <remarks>
+/// <see cref="IsTransient"/> means only that the server rolled the database work back without committing
+/// (deadlock, lock timeout). It does NOT make the business operation safe to repeat: a retry is allowed only
+/// for an idempotent operation (idempotency key or compare-and-set) with no external side effects inside the
+/// transaction, using freshly read state, with a bounded number of attempts.
+/// </remarks>
+public sealed record PersistenceFailure(
+    PersistenceFailureKind Kind,
+    string DefaultCode,
+    bool IsTransient,
+    int? ProviderErrorNumber,
+    string? ConstraintName);
+
+/// <summary>Classifies EF Core / MySQL exceptions into <see cref="PersistenceFailure"/> (BE-M4-D02a).</summary>
+public static partial class PersistenceErrorClassifier
+{
+    private const int MaxDepth = 16;
+
+    public static PersistenceFailure Classify(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        var current = exception;
+        for (var depth = 0; current is not null && depth < MaxDepth; depth++, current = current.InnerException)
+        {
+            switch (current)
+            {
+                case TransactionOutcomeUnknownException:
+                    return Failure(PersistenceFailureKind.TransactionOutcomeUnknown, null, null);
+                case DbUpdateConcurrencyException:
+                    return Failure(PersistenceFailureKind.ConcurrencyConflict, null, null);
+                case MySqlException mySql:
+                    return mySql.InnerException is TimeoutException
+                        ? Failure(PersistenceFailureKind.CommandTimeout, mySql.Number, null)
+                        : FromProviderError(mySql.Number, mySql.Message);
+                case TimeoutException:
+                    return Failure(PersistenceFailureKind.CommandTimeout, null, null);
+            }
+        }
+
+        return Failure(PersistenceFailureKind.Unexpected, null, null);
+    }
+
+    /// <summary>
+    /// Classifies a MySQL server/client error number. The provider message is used only to extract a
+    /// schema constraint name (never data values); the message itself is discarded.
+    /// </summary>
+    public static PersistenceFailure FromProviderError(int errorNumber, string? providerMessage)
+    {
+        var kind = KindOf(errorNumber);
+        var constraint = kind switch
+        {
+            PersistenceFailureKind.DuplicateKey => Extract(DuplicateKeyName(), providerMessage),
+            PersistenceFailureKind.ForeignKeyViolation => Extract(ForeignKeyName(), providerMessage),
+            _ => null,
+        };
+
+        return Failure(kind, errorNumber, constraint);
+    }
+
+    public static PersistenceFailureKind KindOf(int errorNumber) => errorNumber switch
+    {
+        1022 or 1062 or 1169 or 1586 => PersistenceFailureKind.DuplicateKey,
+        1216 or 1217 or 1451 or 1452 => PersistenceFailureKind.ForeignKeyViolation,
+        1213 => PersistenceFailureKind.Deadlock,
+        1205 => PersistenceFailureKind.LockTimeout,
+        1040 or 1042 or 1043 or 1045 or 1129 or 1130 or 1158 or 1159 or 1160 or 1161 or 2002 or 2003 or 2006
+            or 2013 or 2055 => PersistenceFailureKind.ConnectionFailure,
+        _ => PersistenceFailureKind.Unexpected,
+    };
+
+    private static PersistenceFailure Failure(PersistenceFailureKind kind, int? number, string? constraint) =>
+        new(kind, DefaultCodeOf(kind), IsTransient(kind), number, constraint);
+
+    private static string DefaultCodeOf(PersistenceFailureKind kind) => kind switch
+    {
+        PersistenceFailureKind.DuplicateKey => SharedErrorCodes.Conflict,
+        PersistenceFailureKind.ForeignKeyViolation => SharedErrorCodes.Conflict,
+        PersistenceFailureKind.ConcurrencyConflict => SharedErrorCodes.RevisionConflict,
+        PersistenceFailureKind.Deadlock => SharedErrorCodes.DependencyUnavailable,
+        PersistenceFailureKind.LockTimeout => SharedErrorCodes.DependencyUnavailable,
+        PersistenceFailureKind.ConnectionFailure => SharedErrorCodes.DependencyUnavailable,
+        PersistenceFailureKind.CommandTimeout => SharedErrorCodes.DependencyTimeout,
+        _ => SharedErrorCodes.InternalError,
+    };
+
+    /// <summary>
+    /// True when the server rolled the statement/transaction back without committing, so the whole
+    /// operation may be retried by the caller. Commit-unknown and timeouts are deliberately not transient.
+    /// </summary>
+    private static bool IsTransient(PersistenceFailureKind kind) =>
+        kind is PersistenceFailureKind.Deadlock or PersistenceFailureKind.LockTimeout;
+
+    private static string? Extract(Regex pattern, string? message)
+    {
+        if (string.IsNullOrEmpty(message))
+        {
+            return null;
+        }
+
+        var match = pattern.Match(message);
+        return match.Success ? match.Groups["name"].Value : null;
+    }
+
+    // MySQL: "Duplicate entry '<value>' for key '<table>.<key>'" — only the key name is captured.
+    [GeneratedRegex(@"for key '(?:[A-Za-z0-9_]+\.)?(?<name>[A-Za-z0-9_]{1,64})'\s*$", RegexOptions.CultureInvariant, 100)]
+    private static partial Regex DuplicateKeyName();
+
+    // MySQL: "... a foreign key constraint fails (`db`.`table`, CONSTRAINT `<name>` FOREIGN KEY ...".
+    [GeneratedRegex(@"CONSTRAINT `(?<name>[A-Za-z0-9_]{1,64})` FOREIGN KEY", RegexOptions.CultureInvariant, 100)]
+    private static partial Regex ForeignKeyName();
+}

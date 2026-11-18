@@ -149,6 +149,48 @@ public sealed class LayerDependencyTests
         Assert.DoesNotContain("Microsoft.AspNetCore.App", frameworkReferences);
     }
 
+    [Theory]
+    [InlineData(Domain)]
+    [InlineData(Application)]
+    public void Inner_layers_do_not_reference_entity_framework_or_mysql(string project)
+    {
+        static bool IsPersistence(string name) =>
+            name.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal)
+            || name.StartsWith("MySql", StringComparison.OrdinalIgnoreCase);
+
+        var compiled = Assemblies[project].GetReferencedAssemblies().Select(a => a.Name!).Where(IsPersistence).ToArray();
+        var declared = PackageReferences(project).Where(IsPersistence).ToArray();
+
+        Assert.True(compiled.Length == 0, $"{project} assembly must not reference: {string.Join(", ", compiled)}");
+        Assert.True(declared.Length == 0, $"{project} must not declare: {string.Join(", ", declared)}");
+    }
+
+    [Fact]
+    public void Persistence_packages_are_declared_only_where_approved()
+    {
+        Assert.Contains("MySql.EntityFrameworkCore", PackageReferences(Infrastructure));
+        Assert.DoesNotContain("MySql.EntityFrameworkCore", PackageReferences(Api));
+        Assert.DoesNotContain("Microsoft.EntityFrameworkCore.Design", PackageReferences(Infrastructure));
+
+        var design = XDocument.Load(RepositoryPaths.ProjectFile(Api))
+            .Descendants()
+            .Single(e => e.Name.LocalName == "PackageReference"
+                && (string?)e.Attribute("Include") == "Microsoft.EntityFrameworkCore.Design");
+        var privateAssets = (string?)design.Attribute("PrivateAssets")
+            ?? design.Elements().FirstOrDefault(e => e.Name.LocalName == "PrivateAssets")?.Value;
+
+        Assert.Equal("all", privateAssets?.Trim());
+    }
+
+    private static string[] PackageReferences(string project) =>
+        XDocument.Load(RepositoryPaths.ProjectFile(project))
+            .Descendants()
+            .Where(e => e.Name.LocalName == "PackageReference")
+            .Select(e => (string?)e.Attribute("Include"))
+            .Where(include => !string.IsNullOrWhiteSpace(include))
+            .Select(include => include!)
+            .ToArray();
+
     private static string[] DeclaredProjectReferences(string project)
     {
         var document = XDocument.Load(RepositoryPaths.ProjectFile(project));

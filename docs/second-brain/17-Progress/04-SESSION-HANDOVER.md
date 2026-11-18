@@ -100,3 +100,7 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 
 ## 2026-11-18 — STEP 05-E10
 - Run 44296302240: 25/27 (T06, T19 failed; T21, T25 passed). Option B approved; T06 acceptance revised to pin the limitation; T19 fixed with a UTC converter; T19D diagnostics; migration safety procedure documented. Infrastructure 221 cases; MySQL 28 tests. Re-run pending. G03 and independent reviews open.
+
+## 2026-11-18 — STEP 05-E11 final D02b evidence
+- Run 44301027243: all jobs green; MySQL 28/28 on 8.4.13. Timestamp root cause = provider's unconverted `DateTimeOffset` read path (T19D). Reviewer checklist (20) and D03 requirements (21) prepared; no schema or migration created.
+- D02 **not complete**: independent reviews, G03 licensing and public-repository acceptance, T06 version-guard follow-up, owner mapping decisions.

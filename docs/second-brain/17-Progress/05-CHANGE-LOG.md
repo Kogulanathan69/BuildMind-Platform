@@ -29,3 +29,5 @@
 2026-11-18 — STEP 05-E9: `MySqlModelConventions` (timestamps `datetime(6)`), spike migration and T21 updated, T25 ranged-deployment test, deployment docs switched to ranged scripts, CI exports idempotent + ranged scripts. Evidence EV-20261118-38..39.
 
 2026-11-18 — STEP 05-E10: UTC `DateTimeOffset`/`DateTime` converters in `MySqlModelConventions`, T19D diagnostics, T06 acceptance change (lead-approved Option B), migration safety procedure. Evidence EV-20261118-40..42.
+
+2026-11-18 — STEP 05-E11 (docs only): recorded the final 28/28 MySQL evidence and the T19D seven-stage root cause (read path), corrected the precision-loss wording, noted the T06 version-guard limitation, added the D02 reviewer checklist (20) and the D03 requirements (21). Evidence EV-20261118-43..44.

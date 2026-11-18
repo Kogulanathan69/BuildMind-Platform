@@ -309,3 +309,7 @@ Corrections: 1205 statement-level rollback semantics; unconfirmed rollback surfa
 ### Run 44296302240 and STEP 05-E10 (2026-11-18)
 
 25/27. **Second provider finding:** `DateTimeOffset` loses microseconds even in `datetime(6)`, so M4 stores timestamps as UTC `DateTime` through a converter (T19D traces the layers). Deployment: Option B (ranged scripts); idempotent scripts are a pinned provider limitation (T06). Both findings must be reassessed on any provider upgrade and weigh on the G03 provider-acceptance decision.
+
+### Final D02b evidence — run 44301027243 (2026-11-18)
+
+**28/28 passed on MySQL 8.4.13** (EV-20261118-43). **Correction to earlier wording:** the `DateTimeOffset` precision loss in `datetime(6)` is in the provider's **unconverted materialisation (read) path**. Storage, `DateTime`/`DateTimeOffset` parameters and EF writes all keep microseconds (T19D). The earlier phrase "`DateTimeOffset` loses microseconds even in `datetime(6)`" refers to that read path, not to writing. Mitigation: the UTC converter. The **compatibility spike passes** for internal development with two documented provider limitations (idempotent scripts; unconverted `DateTimeOffset` reads). **G03 stays OPEN**: commercial licensing and public-repository acceptance are unresolved, and provider acceptance is the lead's decision.

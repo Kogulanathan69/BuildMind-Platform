@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using MySql.Data.MySqlClient;
 using Xunit.Abstractions;
+using BuildMind.Infrastructure.Persistence.Connections;
 
 namespace BuildMind.Persistence.IntegrationTests;
 
@@ -97,7 +98,7 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
 
         await using (var connection = new MySqlConnection(database.ConnectionString))
         {
-            await connection.OpenAsync();
+            await MySqlConnectionOpenGate.OpenAsync(connection);
             await new MySqlScript(connection, script).ExecuteAsync();
         }
 
@@ -125,7 +126,7 @@ public sealed class BuildMindMigrationTests(ITestOutputHelper output)
     private static async Task<List<string>> ListAsync(DisposableMySqlDatabase database, string sql)
     {
         await using var connection = new MySqlConnection(database.ConnectionString);
-        await connection.OpenAsync();
+        await MySqlConnectionOpenGate.OpenAsync(connection);
         await using var command = new MySqlCommand(sql, connection);
         await using var reader = await command.ExecuteReaderAsync();
         var values = new List<string>();

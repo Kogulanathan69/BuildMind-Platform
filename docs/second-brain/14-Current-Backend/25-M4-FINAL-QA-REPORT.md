@@ -233,3 +233,135 @@ Failures map to 503/504 Problem Details. Readiness reports Python as Degraded on
 | Tests reliable and deterministic | The two 10-A tests pass deterministically, but whether they **detect** the original race is probabilistic (timer versus wait). Added 3 **deterministic** `Settle` tests: a blocking callback doesn't delay `Settle` (< 2 s) and the source stays alive until the probe ends; callback and probe failures are dropped and the source is still disposed; a finished probe is disposed immediately and never cancelled |
 
 Infrastructure **417** compiled (412 executed + 5 new). Full backend **1,258**.
+
+## 14. STEP 10-E — final QA FAILED: MySql.Data TLS concurrency defect (2026-11-19)
+
+**Final QA is NOT passed.**
+
+### Evidence
+- **PR #29** (`b0851f2`): run **#54** (pull_request) passed all three jobs.
+- **Post-merge run #55** (id 44376816439, push, `364171a`): `database-compatibility` **failed**.
+  - The three downloaded artifacts match run #55 by SHA-256: `mysql-compatibility-results` `0010e66a…`, `dotnet-test-results` `6da674ee…`, `python-test-results` `9604980b…`.
+  - **Executed 1,258; passed 1,257; failed 1.** Infrastructure 417, Requirements 233, Application 128, Workflow 70, Reports 54, M3 246, Python 54, MySQL **55/56**.
+- **Later `develop` runs on the same suite passed:** #56 (`4ddc2b1`, PR #28 M5) and #57 (`2ad74d1`, PR #25 M3). The failure is **intermittent**.
+- **Failed test:** `BuildMindMigrationTests.M03_migration_rolls_back_and_reapplies` (line 79, inside `MigrateAsync`).
+  - `System.InvalidOperationException: Operations that change non-concurrent collections must have exclusive access…`
+  - Stack: `Dictionary.Remove` ← `MySql.Data.Common.Ssl.StartSSLAsync` ← `NativeDriver.OpenAsync` ← `Driver.CreateAsync` ← `MySqlPool.CreateNewPooledConnectionAsync` ← `MySqlPool.GetPooledConnectionAsync/TryToGetDriverAsync/GetConnectionAsync` ← `MySqlConnection.OpenInternalAsync` ← EF `RelationalConnection.OpenAsync` ← `MySQLMigrator.MigrateAsync`.
+- **Versions:**
+  - MySql.Data **26.10.0** (assembly 26.10.0.0; net10.0 DLL SHA-256 `adda88e99fcef0b5…`);
+  - MySql.EntityFrameworkCore **10.0.12**;
+  - MySQL 8.4 (pinned digest);
+  - xUnit 2.9.3 (test classes run in parallel by default).
+- **Concurrent openers during M03's window (19:07:24.130–25.295 UTC):** `ReadinessLiveTests.RD02` (repeated readiness probes), `RequirementRevisionRepositoryTests.R07` (parallel first saves), and M03 itself. All three were opening TLS connections at the same time.
+
+### Root cause: CONFIRMED from the shipped provider IL
+Source: `<StartSSLAsync>d__11.MoveNext` in MySql.Data 26.10.0 (net10.0).
+1. `semaphoreSlim.WaitAsync` at IL 336.
+2. Reads and writes of the static `tlsRetry`/`tlsConnectionRef` under that semaphore.
+3. `Release` at IL 613.
+4. `SslStream.AuthenticateAsClientAsync` (the TLS handshake) at IL 716.
+5. Then **`tlsConnectionRef.set_Item` (891), `tlsRetry.Remove` (925), `tlsConnectionRef.Remove` (963) and `tlsRetry.get/set_Item` (998–1055), with NO lock held.**
+
+Both fields are **process-wide static `Dictionary` objects** (`private static`, field flags 17). The synchronous `StartSSL` has the same pattern (Wait IL 276, Release IL 412, then unlocked mutations at IL 493–652). Any two TLS handshakes that complete concurrently anywhere in the process can corrupt these dictionaries.
+
+**Upstream:** reported against Connector/NET since 8.0.33 ([Bug #111759](https://bugs.mysql.com/bug.php?id=111759), [#110717](https://bugs.mysql.com/bug.php?id=110717)); independent analyses describe the same fields in 26.7.0. **26.10.0 is the latest MySql.Data on NuGet, so no fixed version exists.**
+
+### What it is not (assessed)
+- Not caused by our migration code, the D07 readiness changes, the bulkhead or `TransactionRunner`. They are only some of the concurrent openers.
+- **Hypothesis only (not confirmed):** a readiness probe cancelled during its handshake (STEP 10-B `CancelAsync`) may exercise the provider's exception-path mutations more often.
+- Not test-only: the **production API** opens new pooled TLS connections concurrently under load, so it has the same exposure.
+  - The provider throws `InvalidOperationException`, which the classifier rightly treats as unexpected (500, not 503).
+  - **Hypothesis:** a corrupted static dictionary could keep failing later handshakes in that process.
+
+### Correction (implemented, uncommitted, awaiting review)
+- **`MySqlConnectionOpenGate`** (Infrastructure) serializes connection **opening** process-wide.
+  - An EF Core `DbConnectionInterceptor` is registered in the single `MySqlContextOptions.Apply` (runtime, design-time and tests). It holds the gate from `ConnectionOpening` until `ConnectionOpened`/`ConnectionFailed`, exactly once per connection; a waiter cancelled before acquiring holds nothing.
+  - An `OpenAsync` helper covers direct opens: all 12 direct test opens were changed, and the 3 spike test contexts register the interceptor.
+- **TLS is unchanged:** `DatabaseOptions` validation requires `SslMode=VerifyFull` in every non-Development environment and for any non-loopback server; `Required` is accepted only for a loopback server in Development/tests. The CI test accounts use TLS-only (`REQUIRE SSL`) loopback connections. The only `SslMode=Disabled` uses are pre-existing negative tests that expect refusal (wording corrected in STEP 10-F).
+- **No retries, no provider upgrade, no change to test parallelism, no skipped tests, no migration change.**
+- **Trade-off:** a burst of new physical connections opens one at a time. While MySQL is unreachable, waiters queue behind the open in progress, each bounded by its own cancellation; readiness still reports `timeout` truthfully.
+- **Remove the gate** only when a provider release is verified (same IL method) to no longer mutate these fields outside a lock.
+
+### Tests (compiled; NOT executed)
+- **Infrastructure +6 (`MySqlConnectionOpenGateTests`, deterministic, isolated gate instances):** parallel opens never overlap (max concurrency 1 over 16); a failed open releases the gate and keeps the original exception; cancellation while waiting leaks nothing; the interceptor holds exactly once from opening to opened/failed; a waiter cancelled before acquiring holds nothing; production contexts use the process-wide interceptor.
+- **MySQL +1 (`MySqlTlsConcurrencyLiveTests.SSL01`):** 6 rounds × 24 parallel **non-pooled** opens (every open is a new TLS handshake), mixing the production EF path and direct opens. Every connection must open AND report a non-empty `Ssl_cipher` (TLS proven, not weakened).
+- **Inventory (compiled):** Infrastructure **431** (= 425 on `develop` `2ad74d1`, which includes M5 PR #28's 8 new cases, + 6); MySQL **57**; Python 54. Run #57's executed totals have not been independently verified here (artifacts not downloaded).
+
+### Resolution criteria (not yet met)
+The issue may be declared resolved only after **repeated green CI runs** of `database-compatibility` on the fix branch (proposed: ≥ 5 consecutive runs, including SSL01). One green run proves little for an intermittent race; run #54 was green on the same faulty code.
+
+## 15. STEP 10-F — workaround audit, approval and CI delivery (2026-11-19)
+
+**Lead approval:** explicit in-session answer, 2026-11-19, covering:
+1. process-wide serialized MySQL connection opening;
+2. acceptance only after **5 consecutive green `database-compatibility` runs on the same candidate commit**;
+3. existing TLS policies and provider versions kept.
+
+Deferred: a stress workflow, an ungated reproduction and an upstream bug report.
+
+### Source audit against the shipped EF Core Relational 10.0.12 IL
+SHA-256 `a1e4f362…`; `RelationalConnection.OpenInternal` and `<OpenInternalAsync>d__72`.
+
+**Path traced:**
+- `ShouldLogConnectionOpen`, then `ConnectionOpening[Async]`.
+- `OpenDbConnection[Async]`, skipped if suppressed.
+- `ConnectionOpened[Async]`.
+- The catch calls `IExceptionDetector.IsCancellation`: a cancellation goes to **`ConnectionCanceled[Async]`**, which calls the interceptor's `ConnectionCanceled`; anything else goes to `ConnectionError[Async]`, which calls `ConnectionFailed[Async]`.
+
+**Paths covered:**
+- `MySQLRelationalConnection.Open/OpenAsync` → base `RelationalConnection.Open`.
+- `CreateSourceConnection` clones the dependencies, keeping the same logger and interceptors (gated).
+- Migrations open through the context connection (gated).
+- All 12 direct test opens go through the helper.
+
+| Audit item | Result |
+|---|---|
+| **G1 — cancelled open** | **CONFIRMED DEFECT (critical, fixed).** A cancelled open goes to `ConnectionCanceled`, never `ConnectionFailed`. The 10-E interceptor didn't override it, so a cancelled open (readiness deadline, request abort) left the process-wide gate held **forever**, deadlocking every later open. Fix: release on `ConnectionCanceled[Async]` too |
+| **G2 — bounded wait** | **CONFIRMED DEFECT (fixed).** The sync open (`Wait()`) and token-less async opens could wait for the gate without limit. The wait is now bounded by the connection's own `ConnectionTimeout` (fallback 30 s when 0). On expiry, `MySqlConnectionGateTimeoutException` is classified as `ConnectionFailure`, so 503 `DEPENDENCY_UNAVAILABLE`, not transient and never retried. Worst case ≈ 2 × the connect timeout |
+| Interceptors invoked on every open | `ShouldLogConnectionOpen` is per-context. When an interceptor is present, `NeedsEventData` resets the suppression. Verified live by **SSL02** (3 back-to-back opens of one context → 3 acquisitions) |
+| Exactly-once release, suppression, exception paths | Per-connection holder table; repeated or unacquired notifications are no-ops. Suppression by another interceptor still reaches `ConnectionOpened`. A failing `ConnectionOpened` goes to the catch, which releases or no-ops |
+| Cancellation before or after acquisition | Before: nothing held. After: `ConnectionCanceled` releases (G1) |
+| Deadlock and re-entrancy | The gate is held only between the opening and opened/failed/cancelled callbacks; no user code runs in between. The provider's internal connections don't use the gate, so it can't self-deadlock |
+| Queries and transactions serialized? | No. Only opening is gated |
+| **Residual risk R-1** (not fixable here) | `MySqlConnection.CancelQuery` (MySql.Data IL 17–63) opens its own unpooled connection (same TLS settings) and calls `Open()` directly for `KILL QUERY` when a running command is cancelled or times out. It bypasses EF Core and the gate, so the provider race remains possible in that rare path. Mitigation: provider fix upstream |
+| TLS | Unchanged. The STEP 10-E wording "`SslMode=Required` everywhere" was imprecise and is corrected above |
+
+### Tests added in 10-F
+- **Infrastructure +4:**
+  - cancelled open releases the gate (sync and async; repeated notification is a no-op);
+  - gate wait bounded by `ConnectionTimeout` (async, sync and direct; waiters take nothing);
+  - fallback bound when the timeout is 0;
+  - gate timeout → classified 503, not transient.
+- **MySQL +2 (dedicated observable interceptor and gate):**
+  - **SSL02:** every EF open is intercepted;
+  - **SSL03:** an open to a silent server, cancelled after 500 ms, still releases (canceled or failed path).
+- **Timeouts:** SSL01 180 s, SSL02/SSL03 60 s.
+
+### Compiled inventory (NOT executed)
+- Infrastructure **435** (425 on `develop` + 10).
+- MySQL **59** (56 + 3).
+- Python 54.
+
+**The full executed baseline at `2ad74d1` is UNVERIFIED.** Runs #56 (id 44377410926) and #57 (id 44377526848) both succeeded on attempt 1, but their artifacts were not read. Static counts can't reproduce the executed totals: Workflow is 46 static vs 70 executed, Reports 23 vs 54, and the M3 contract checks are runtime-only. **1,258 is NOT the current baseline.**
+
+Run #57 digests: `dotnet-test-results` `dc46aff9…`, `mysql-compatibility-results` `16756899…`, `python-test-results` `e92155c6…`.
+
+### Repeated CI verification
+- Required: **5 consecutive** green `database-compatibility` attempts on the **same candidate commit**.
+- Each attempt is recorded with run id, attempt number, SHA and the three artifact digests; SSL01, SSL02, SSL03 and M03 must pass, and there must be no skipped tests.
+- Any failure resets the count and requires investigation.
+- **Final QA stays OPEN until then.**
+
+| # | Run id | Attempt | Commit | Result | Artifact digests |
+|---|---|---|---|---|---|
+| 1 | pending | | | | |
+| 2 | pending | | | | |
+| 3 | pending | | | | |
+| 4 | pending | | | | |
+| 5 | pending | | | | |
+
+### Performance trade-off and removal conditions
+- **Trade-off:** physical connection opening (TCP + TLS + authentication) is process-wide sequential; pooled reuse is fast. A burst of N new connections takes about N × the handshake time. During an outage, waiters fail after their connect timeout (503).
+- **Remove the gate when either holds:**
+  1. a MySql.Data release whose `StartSSL`/`StartSSLAsync` IL no longer mutates `tlsConnectionRef`/`tlsRetry` outside a lock (verified the same way, with SSL01 kept as regression);
+  2. an approved provider change.

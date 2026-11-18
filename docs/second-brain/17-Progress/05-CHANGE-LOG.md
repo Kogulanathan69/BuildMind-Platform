@@ -59,3 +59,7 @@
 2026-11-19 — STEP 10-A: run #52 evidence verified; M4 final QA report (doc 25); readiness abandoned-probe cancellation fix. Evidence EV-20261119-01..02.
 
 2026-11-19 — STEP 10-B: readiness cancellation no longer runs callbacks inline (`ProbeDeadline`); M4 final handover (doc 26). Evidence EV-20261119-03.
+
+2026-11-19 — STEP 10-E: run #55 failure investigated; MySql.Data 26.10.0 TLS static-state race confirmed from IL; process-wide open gate implemented (uncommitted). Evidence EV-20261119-04..05.
+
+2026-11-19 — STEP 10-F: open-gate audit against the EF Core 10.0.12 IL; G1/G2 fixed; TLS policy wording corrected; lead approvals recorded. Evidence EV-20261119-06.

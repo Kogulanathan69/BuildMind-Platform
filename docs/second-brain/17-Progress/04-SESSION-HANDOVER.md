@@ -164,3 +164,14 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Inventory: 417 / 56 / 54 → 1,258 compiled (1,253 executed in run #52).
 - Next: CI on the draft PR → verify 1,258 → independent QA review.
 - M4 is not complete and not production-ready. M7/RAG not started.
+
+## 2026-11-19 — STEP 10-E MySql.Data TLS concurrency failure
+- Post-merge run #55 failed `M03` (intermittent; #54, #56 and #57 green). Root cause confirmed in the provider IL (doc 25 §14).
+- Fix on `feature/m4-mysql-ssl-concurrency-fix` (from `2ad74d1`): `MySqlConnectionOpenGate`, +7 tests. **Uncommitted, awaiting review.**
+- Final QA not passed; production readiness blocked. M7 not started.
+- Next: review → commit → draft PR → ≥5 consecutive green database runs.
+
+## 2026-11-19 — STEP 10-F workaround audit and delivery
+- Lead approval recorded. G1 (cancelled-open gate leak) and G2 (unbounded wait) fixed; R-1 documented.
+- Compiled: Infrastructure 435, MySQL 59.
+- Next: draft PR → 5 consecutive green database attempts on the same commit (record ids, attempts, digests in doc 25 §15) → independent review → post-merge CI.

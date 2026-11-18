@@ -70,3 +70,19 @@
 - Local C# test execution is blocked by Windows Smart App Control (G17, kept enabled). Linux CI is the verification path: download `dotnet-test-results`, `mysql-compatibility-results` and `python-test-results`, and check their digests against the run.
 - Setup steps and environment variable names: doc 25 §8.
 - No real secrets in the repository. CI passwords are random per run and masked.
+
+## 7. STEP 10-E update (2026-11-19): final QA failed, correction pending
+Post-merge run #55 failed one MySQL test because of a confirmed **MySql.Data 26.10.0 defect**: static TLS dictionaries are mutated outside the provider's lock (doc 25 §14).
+
+- **Correction:** `MySqlConnectionOpenGate` serializes connection opening process-wide, with TLS unchanged. It is on `feature/m4-mysql-ssl-concurrency-fix` and **uncommitted, awaiting review**.
+- **Outstanding work (adds to §5):**
+  - **13.** Verify the fix with ≥ 5 consecutive green `database-compatibility` runs.
+  - **14.** Track upstream Connector/NET for a real fix; remove the gate only after IL verification.
+  - **15.** Measure the connection-open latency impact under load once real endpoints exist.
+- **M4 production readiness remains BLOCKED.**
+
+## 8. STEP 10-F update (2026-11-19)
+- The workaround was **lead-approved**. The audit found and fixed two critical gate defects: **G1** (a cancelled open leaked the gate, deadlocking all opens) and **G2** (unbounded gate wait).
+- **Residual risk R-1:** MySql.Data's internal `KILL QUERY` connection bypasses the gate.
+- **Outstanding:** 5 consecutive green database runs on the candidate commit (doc 25 §15), then independent review, then a separately verified post-merge CI run.
+- **Final QA OPEN; production readiness BLOCKED.**

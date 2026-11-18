@@ -8,6 +8,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using MySql.Data.MySqlClient;
 using Xunit.Abstractions;
+using BuildMind.Infrastructure.Persistence.Connections;
 
 namespace BuildMind.Persistence.IntegrationTests;
 
@@ -69,7 +70,7 @@ public sealed class ReadinessLiveTests(ITestOutputHelper output)
     private static async Task<object?> ScalarAsync(DisposableMySqlDatabase database, string sql)
     {
         await using var connection = new MySqlConnection(database.ConnectionString);
-        await connection.OpenAsync();
+        await MySqlConnectionOpenGate.OpenAsync(connection);
         await using var command = new MySqlCommand(sql, connection);
         return await command.ExecuteScalarAsync();
     }

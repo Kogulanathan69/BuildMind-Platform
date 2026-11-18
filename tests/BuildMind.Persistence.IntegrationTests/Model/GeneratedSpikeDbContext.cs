@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using BuildMind.Infrastructure.Persistence.Connections;
 
 namespace BuildMind.Persistence.IntegrationTests.Model;
 
@@ -24,6 +25,7 @@ public sealed class GeneratedSpikeDbContext(DbContextOptions<GeneratedSpikeDbCon
                 mysql.MigrationsAssembly(typeof(GeneratedSpikeDbContext).Assembly.GetName().Name);
                 mysql.MigrationsHistoryTable(HistoryTable);
             })
+            .AddInterceptors(MySqlConnectionOpenGate.Interceptor) // STEP 10-E: MySql.Data TLS-state race
             .EnableSensitiveDataLogging(false)
             .Options);
 

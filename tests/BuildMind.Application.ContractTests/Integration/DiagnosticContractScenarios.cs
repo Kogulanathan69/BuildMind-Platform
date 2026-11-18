@@ -149,10 +149,16 @@ internal static class DiagnosticContractScenarios
             const string sensitive = "SQL connection user=admin secret=private";
             var diagnostic = PlanEditorFailureMapper.FromDependencyException(
                 PlanEditorDependencyOperation.Validation, new InvalidOperationException(sensitive), "corr-internal");
+            var invalidData = PlanEditorFailureMapper.FromDependencyException(
+                PlanEditorDependencyOperation.RequirementRevision,
+                new InvalidDataException(sensitive), "corr-invalid-data");
             Check(diagnostic.Code == PlanEditorErrorCodes.UnexpectedInternalFailure,
                 "Unexpected failure code changed.");
+            Check(invalidData.Code == PlanEditorErrorCodes.UnexpectedInternalFailure,
+                "A general InvalidDataException was treated as a proven dependency response violation.");
             Check(!diagnostic.SafeMessage.Contains("SQL", StringComparison.OrdinalIgnoreCase) &&
-                !diagnostic.SafeMessage.Contains("secret", StringComparison.OrdinalIgnoreCase),
+                !diagnostic.SafeMessage.Contains("secret", StringComparison.OrdinalIgnoreCase) &&
+                !invalidData.SafeMessage.Contains("secret", StringComparison.OrdinalIgnoreCase),
                 "Internal exception details escaped into the diagnostic.");
         });
 

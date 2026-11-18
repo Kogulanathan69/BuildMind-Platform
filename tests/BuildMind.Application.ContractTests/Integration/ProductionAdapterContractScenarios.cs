@@ -1,6 +1,7 @@
 using BuildMind.Application.Abstractions;
 using BuildMind.Application.Features.PlanEditor.Confirmation;
 using BuildMind.Application.Features.PlanEditor.Contracts;
+using BuildMind.Application.Features.PlanEditor.Diagnostics;
 using BuildMind.Application.Features.PlanEditor.Editing;
 using BuildMind.Application.Features.PlanEditor.Integration;
 using BuildMind.Application.Features.PlanEditor.Versioning;
@@ -137,8 +138,38 @@ internal static class ProductionAdapterContractScenarios
                 var contradictoryAdapter = new RequirementRevisionAdapter(
                     new RequirementRepositoryDouble((_, _, _) =>
                         Task.FromResult<RequirementRevision?>(contradictory)));
-                CheckThrows<InvalidDataException>(() => contradictoryAdapter
+                CheckThrows<Exception>(() => contradictoryAdapter
                     .GetAsync(requestedProject, requestedRevision, default).GetAwaiter().GetResult());
+            }
+
+            var ownerId = Guid.NewGuid();
+            var project = Project(ownerId);
+            var expectedRequirementId = Guid.NewGuid();
+            foreach (var contradictory in new[]
+                     {
+                         RequirementRevision(Guid.NewGuid(), expectedRequirementId),
+                         RequirementRevision(project.Id, Guid.NewGuid())
+                     })
+            {
+                var calls = new List<string>();
+                var dependencies = new ComposedPreviewDependencies(project.Id, expectedRequirementId, calls);
+                var ownership = new ProjectOwnershipGate(new ProjectRepositoryDouble((_, _, _) =>
+                    Task.FromResult<Project?>(project)));
+                var requirements = new RequirementRevisionAdapter(
+                    new RequirementRepositoryDouble((_, _, _) =>
+                        Task.FromResult<RequirementRevision?>(contradictory)));
+
+                var result = PreviewService(ownership, requirements, dependencies).PreviewAsync(
+                    Command(project.Id, dependencies.PlanId, Guid.NewGuid()), ownerId).Result;
+                var diagnostic = PlanEditorFailureMapper.FromCandidatePreview(result.Status);
+
+                Check(result.Status == CandidatePreviewResultStatus.InvalidDependencyResponse,
+                    "A contradictory requirement identity was classified as an internal failure.");
+                Check(dependencies.UnexpectedAccesses == 0,
+                    "A contradictory requirement response reached later dependencies.");
+                Check(!diagnostic.SafeMessage.Contains(project.Id.ToString(), StringComparison.Ordinal) &&
+                      !diagnostic.SafeMessage.Contains(expectedRequirementId.ToString(), StringComparison.Ordinal),
+                    "A contradictory requirement response disclosed protected identifiers.");
             }
         });
 

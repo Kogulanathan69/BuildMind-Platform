@@ -37,3 +37,7 @@ Existing starter layout historically observed: `src/BuildMind.API`, `src/BuildMi
 ## Persistence foundation — BE-M4-D02a (2026-11-18, uncommitted, awaiting review)
 
 Infrastructure owns `BuildMindDbContext`, `MySqlContextOptions`, the design-time factory, the internal `TransactionRunner` and `PersistenceErrorClassifier`. The API binds `DatabaseOptions` and validates them at start-up (C8). Domain and Application stay free of EF Core and MySQL references, enforced by `LayerDependencyTests`. The database is disabled by default. There are no feature mappings or migrations yet, and the application never migrates itself. Details: [18 §D02a](18-MYSQL-PROVIDER-STUDY.md).
+
+## Persistence adapters — BE-M4-D03 (uncommitted)
+
+Infrastructure maps **persistence records** (`Persistence/Records`), never domain types. Mappers rebuild domain objects through their validating constructors (no reflection). Repositories implement existing Application ports inside `TransactionRunner`. First adapter: `RequirementRevisionRepository` (M5 port). See [22](22-M4-D03-SCHEMA-REGISTER.md).

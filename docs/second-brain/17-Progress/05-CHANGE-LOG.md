@@ -31,3 +31,7 @@
 2026-11-18 — STEP 05-E10: UTC `DateTimeOffset`/`DateTime` converters in `MySqlModelConventions`, T19D diagnostics, T06 acceptance change (lead-approved Option B), migration safety procedure. Evidence EV-20261118-40..42.
 
 2026-11-18 — STEP 05-E11 (docs only): recorded the final 28/28 MySQL evidence and the T19D seven-stage root cause (read path), corrected the precision-loss wording, noted the T06 version-guard limitation, added the D02 reviewer checklist (20) and the D03 requirements (21). Evidence EV-20261118-43..44.
+
+2026-11-18 — STEP 06-A (uncommitted): BE-M4-D03 schema records/configurations, requirement-revision mapper and repository, database-free and live tests, D03 register (22). PR #21: T06 provider-version fix `b5208bc` (CI red, under investigation). Evidence EV-20261118-47..48 (renumbered from 45..46 because the D02b branch already uses those IDs).
+
+2026-11-18 — STEP 06-C/06-D: D03 audit fixes (truthful conflict translation, identity-reuse detection, project-FK-only `ProjectNotFound`, version length guard, constraint-table extraction, explicit composite-FK index), CI migration generation/verification step and migration tests, merge of D02b `59c4d08`. Evidence EV-20261118-49.

@@ -28,3 +28,7 @@ Design proposal; table names must reconcile with actual source and approved migr
 Proposed indexes: Users normalized email unique; Projects(ownerId,status); child FKs; unique(projectId,revision); unique(planId,versionNumber); unique(jobId,alternativeId); idempotency unique per project/operation. Use application-managed concurrency token compatible with selected MySQL provider. Do not assume SQL Server rowversion or T-SQL. Version confirmation and revision updates transactional; no cascade deletion of historical reports without policy.
 
 Migration workflow: feature owner supplies entity and mapping proposal, M4 integrates DbContext/model snapshot exclusively; inspect generated migration SQL; use disposable test database; verify empty apply, upgrade, constraints, rollback/forward recovery, provider compatibility. No destructive change on existing DB without explicit approval and backup/recovery plan. Do not store raw survey files or credentials in Git or DB blobs by default; store private artifact references.
+
+## Implemented physical schema — BE-M4-D03 (2026-11-18, uncommitted, not yet executed against MySQL)
+
+`users`, `projects`, `requirement_revisions`, `project_requirement_heads`. Details, keys and blocked areas: [22](22-M4-D03-SCHEMA-REGISTER.md). The logical tables above remain proposals until their owners' contracts and approvals exist.

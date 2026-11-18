@@ -104,3 +104,12 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 ## 2026-11-18 — STEP 05-E11 final D02b evidence
 - Run 44301027243: all jobs green; MySQL 28/28 on 8.4.13. Timestamp root cause = provider's unconverted `DateTimeOffset` read path (T19D). Reviewer checklist (20) and D03 requirements (21) prepared; no schema or migration created.
 - D02 **not complete**: independent reviews, G03 licensing and public-repository acceptance, T06 version-guard follow-up, owner mapping decisions.
+
+## 2026-11-18 — STEP 06-A BE-M4-D03 (uncommitted)
+- PR #21 open (0 reviews). T06 fix `b5208bc` pushed; its CI failed in the MySQL tests (cause unconfirmed; artifact needed).
+- D03 branch from `b5208bc`: schema (4 tables), mapper, M5 requirement-revision repository, tests (259 / 38), compiled only. Migration not generated (G17). Blocked items in [22](../14-Current-Backend/22-M4-D03-SCHEMA-REGISTER.md).
+- Next (lead): review the diff; supply the run-44305808458 artifact; approve a migration-generation path; M1 rehydration factories.
+
+## 2026-11-18 — STEP 06-C/06-D
+- D03 audit fixes, CI migration generation step, migration tests; merged D02b `59c4d08` into D03 (normal merge). Tests 279 / 43, compiled only.
+- Next (lead): open a draft PR D03 → `feature/m4-mysql-compatibility` (it depends on PR #21); download the `buildmind-migration/` artifact; review it; then M4 commits the migration.

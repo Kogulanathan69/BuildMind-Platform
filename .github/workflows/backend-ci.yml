@@ -165,6 +165,28 @@ jobs:
           dotnet tool run dotnet-ef migrations script --context GeneratedSpikeDbContext \
             --configuration Release --output TestResults/generated-spike-migration-ranged.sql \
             --project "$SPIKE_PROJECT" --startup-project "$SPIKE_PROJECT"
+      - name: Generate or verify the BuildMindDbContext migration (review artifact only)
+        # BE-M4-D03: local dotnet-ef is blocked by Smart App Control (G17). While no migration is committed, this
+        # generates the initial feature-schema migration in this disposable workspace for REVIEW ONLY; it is never
+        # committed by CI. Once a reviewed migration is committed, nothing is generated and the snapshot is verified.
+        env:
+          BUILDMIND_MIGRATIONS_CONNECTION: Server=127.0.0.1;Port=3306;Database=buildmind_test_tooling;User ID=bm_test;SslMode=Required
+        run: |
+          migrations=src/BuildMind.Infrastructure/Persistence/Migrations
+          ef() {
+            dotnet tool run dotnet-ef "$@" --context BuildMindDbContext --configuration Release \
+              --project src/BuildMind.Infrastructure --startup-project src/BuildMind.API
+          }
+          mkdir -p TestResults/buildmind-migration
+          if ls "$migrations"/*.cs >/dev/null 2>&1; then
+            echo "Committed migrations found: verifying only."
+          else
+            ef migrations add InitialFeatureSchema --output-dir Persistence/Migrations
+          fi
+          ef migrations has-pending-model-changes
+          ef migrations list --no-connect
+          ef migrations script 0 --output TestResults/buildmind-migration/buildmind-ranged-from-0.sql
+          cp "$migrations"/*.cs TestResults/buildmind-migration/
       - name: Run MySQL compatibility tests
         env:
           BUILDMIND_TEST_MYSQL: Server=127.0.0.1;Port=3306;User ID=bm_test;SslMode=Required;Password=${{ env.BM_TEST_PASSWORD }}
@@ -203,6 +225,7 @@ jobs:
           path: |
             TestResults/*.trx
             TestResults/generated-spike-migration-*.sql
+            TestResults/buildmind-migration/
           retention-days: 14
           if-no-files-found: warn
       - name: Remove disposable MySQL container

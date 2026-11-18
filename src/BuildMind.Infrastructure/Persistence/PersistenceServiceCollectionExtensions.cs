@@ -1,4 +1,6 @@
+using BuildMind.Application.Features.Requirements.Abstractions;
 using BuildMind.Infrastructure.Configuration;
+using BuildMind.Infrastructure.Persistence.Repositories.Requirements;
 using BuildMind.Infrastructure.Persistence.Transactions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -24,6 +26,10 @@ internal static class PersistenceServiceCollectionExtensions
 
         services.TryAddScoped<IDbTransactionSource, DbContextTransactionSource>();
         services.TryAddScoped<TransactionRunner>();
+
+        // BE-M4-D03: persistence adapters for existing Application ports (only where the port's semantics and a
+        // reflection-free domain reconstruction exist). Resolving them while the database is disabled fails safely.
+        services.TryAddScoped<IRequirementRevisionRepository, RequirementRevisionRepository>();
 
         return services;
     }

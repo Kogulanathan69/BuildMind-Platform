@@ -44,6 +44,13 @@ public sealed record PersistenceFailure(
     string? ConstraintName)
 {
     public bool ServerRolledBackTransaction => Kind == PersistenceFailureKind.Deadlock;
+
+    /// <summary>
+    /// Table of a duplicate-key constraint when MySQL reports it (<c>'table.key'</c>). Needed because MySQL names
+    /// every primary key <c>PRIMARY</c>, so the key name alone cannot tell which table's key was violated.
+    /// A schema name only; never a value.
+    /// </summary>
+    public string? ConstraintTable { get; init; }
 }
 
 /// <summary>Classifies EF Core / MySQL exceptions into <see cref="PersistenceFailure"/> (BE-M4-D02a).</summary>
@@ -91,8 +98,11 @@ public static partial class PersistenceErrorClassifier
             PersistenceFailureKind.ForeignKeyViolation => Extract(ForeignKeyName(), providerMessage),
             _ => null,
         };
+        var table = kind == PersistenceFailureKind.DuplicateKey
+            ? Extract(DuplicateKeyName(), providerMessage, "table")
+            : null;
 
-        return Failure(kind, errorNumber, constraint);
+        return Failure(kind, errorNumber, constraint) with { ConstraintTable = table };
     }
 
     public static PersistenceFailureKind KindOf(int errorNumber) => errorNumber switch
@@ -129,7 +139,7 @@ public static partial class PersistenceErrorClassifier
     private static bool IsTransient(PersistenceFailureKind kind) =>
         kind is PersistenceFailureKind.Deadlock or PersistenceFailureKind.LockTimeout;
 
-    private static string? Extract(Regex pattern, string? message)
+    private static string? Extract(Regex pattern, string? message, string group = "name")
     {
         if (string.IsNullOrEmpty(message))
         {
@@ -137,11 +147,12 @@ public static partial class PersistenceErrorClassifier
         }
 
         var match = pattern.Match(message);
-        return match.Success ? match.Groups["name"].Value : null;
+        return match.Success && match.Groups[group].Success ? match.Groups[group].Value : null;
     }
 
-    // MySQL: "Duplicate entry '<value>' for key '<table>.<key>'" — only the key name is captured.
-    [GeneratedRegex(@"for key '(?:[A-Za-z0-9_]+\.)?(?<name>[A-Za-z0-9_]{1,64})'\s*$", RegexOptions.CultureInvariant, 100)]
+    // MySQL: "Duplicate entry '<value>' for key '<table>.<key>'" — only the table and key names are captured,
+    // anchored at the end of the message so a value can never be mistaken for them.
+    [GeneratedRegex(@"for key '(?:(?<table>[A-Za-z0-9_]{1,64})\.)?(?<name>[A-Za-z0-9_]{1,64})'\s*$", RegexOptions.CultureInvariant, 100)]
     private static partial Regex DuplicateKeyName();
 
     // MySQL: "... a foreign key constraint fails (`db`.`table`, CONSTRAINT `<name>` FOREIGN KEY ...".

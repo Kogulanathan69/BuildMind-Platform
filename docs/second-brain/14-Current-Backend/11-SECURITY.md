@@ -29,3 +29,5 @@ Start-up failure tests must prove the failure is an `OptionsValidationException`
 - (D02b) Server identity: `SslMode=VerifyFull` is required outside Development and for any non-loopback server. A rollback that can't be confirmed is reported as such, never as a clean rollback. CI workflow token is read-only and runs on `pull_request` only; database CI credentials are random per run, masked and never uploaded.
 
 - (D02b) Timestamps are stored as unambiguous UTC (`datetime(6)`); non-UTC `DateTime` values are rejected. Migrations: single authorized executor, history check, backup before DDL, no automatic or production migrations.
+
+- (D03) Repositories filter every query by project; ports are not authorization guards, so callers must establish ownership first. Constraint violations are translated without values (for example a duplicate email); stored customer content is never echoed in errors. FKs use RESTRICT (no cascading deletes).

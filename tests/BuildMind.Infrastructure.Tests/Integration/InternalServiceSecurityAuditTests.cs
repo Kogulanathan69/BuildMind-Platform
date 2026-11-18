@@ -245,6 +245,140 @@ public sealed class InternalServiceSecurityAuditTests
     }
 
     [Fact]
+    public async Task Abandoned_mysql_probe_is_cancelled_so_the_gate_is_released_promptly()
+    {
+        // STEP 10-A: a probe that ends ONLY when its token is cancelled (no provider timeout of its own).
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        using var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services);
+        var gate = new ReadinessProbeGate();
+        var probeCancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var check = new MySqlReadinessCheck(
+            Options.Create(new DatabaseOptions { Enabled = true }),
+            Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(provider),
+            gate,
+            async (_, token) =>
+            {
+                try
+                {
+                    await Task.Delay(Timeout.Infinite, token);
+                    return true;
+                }
+                finally
+                {
+                    probeCancelled.TrySetResult();
+                }
+            },
+            TimeSpan.FromMilliseconds(100));
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var result = await check.CheckHealthAsync(new HealthCheckContext());
+            Assert.Equal("timeout", (string)result.Data["reason"]); // never "check_in_progress": the previous probe was cancelled
+            await probeCancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await WaitForGateAsync(gate.Semaphore);
+            probeCancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+    }
+
+    [Fact]
+    public async Task Abandoned_python_probe_is_cancelled_so_the_gate_is_released_promptly()
+    {
+        var gate = new ReadinessProbeGate();
+        var check = new PythonReadinessCheck(token => Task.Delay(Timeout.Infinite, token), true, gate, TimeSpan.FromMilliseconds(100));
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var result = await check.CheckHealthAsync(new HealthCheckContext());
+            Assert.Equal("timeout", (string)result.Data["reason"]);
+            await WaitForGateAsync(gate.For("python"));
+        }
+    }
+
+    [Fact]
+    public async Task Settle_cancels_an_abandoned_probe_without_running_a_blocking_callback_inline()
+    {
+        // STEP 10-B, deterministic: no timer race. A callback that blocks must not delay the readiness result.
+        var source = new CancellationTokenSource();
+        using var unblock = new ManualResetEventSlim(false);
+        source.Token.Register(() => unblock.Wait(TimeSpan.FromSeconds(10)));
+        var probe = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        ProbeDeadline.Settle(probe.Task, source);
+
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), $"Settle blocked for {watch.ElapsedMilliseconds} ms");
+        Assert.True(source.IsCancellationRequested);
+        Assert.False(IsDisposed(source)); // probe and callback still running: the source must stay usable
+
+        unblock.Set();
+        await Task.Delay(50);
+        Assert.False(IsDisposed(source)); // callback done, probe still running
+        probe.SetResult();
+        await WaitUntilAsync(() => IsDisposed(source));
+    }
+
+    [Fact]
+    public async Task Settle_drops_callback_failures_and_still_disposes_after_the_probe_finishes()
+    {
+        var source = new CancellationTokenSource();
+        source.Token.Register(() => throw new InvalidOperationException("SYNTHETIC-SECRET-callback"));
+        var probe = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var settle = Record.Exception(() => ProbeDeadline.Settle(probe.Task, source));
+        probe.SetException(new InvalidOperationException("SYNTHETIC-SECRET-probe"));
+
+        Assert.Null(settle);
+        Assert.True(source.IsCancellationRequested);
+        await WaitUntilAsync(() => IsDisposed(source));
+    }
+
+    [Fact]
+    public void Settle_disposes_immediately_when_the_probe_already_finished()
+    {
+        var source = new CancellationTokenSource();
+
+        ProbeDeadline.Settle(Task.CompletedTask, source);
+
+        Assert.False(source.IsCancellationRequested); // a finished probe is never cancelled
+        Assert.True(IsDisposed(source));
+    }
+
+    private static bool IsDisposed(CancellationTokenSource source)
+    {
+        try
+        {
+            _ = source.Token;
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            return true;
+        }
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition() && watch.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.True(condition());
+    }
+
+    private static async Task WaitForGateAsync(SemaphoreSlim semaphore)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        while (semaphore.CurrentCount == 0 && watch.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.Equal(1, semaphore.CurrentCount);
+    }
+
+    [Fact]
     public async Task Mysql_readiness_gate_is_released_even_when_scope_disposal_throws()
     {
         var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();

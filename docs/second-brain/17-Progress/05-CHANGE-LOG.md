@@ -55,3 +55,7 @@
 2026-11-18 — STEP 09-A: verified run #50 evidence; D06 persistence fallback mapping and concurrency tests (uncommitted). Evidence EV-20261118-61..62.
 
 2026-11-18 — STEP 09-B: D06 mapping lead-approved; uncertainty precedence, cancellation boundary, Development-log leak and guard wording corrected. Evidence EV-20261118-63.
+
+2026-11-19 — STEP 10-A: run #52 evidence verified; M4 final QA report (doc 25); readiness abandoned-probe cancellation fix. Evidence EV-20261119-01..02.
+
+2026-11-19 — STEP 10-B: readiness cancellation no longer runs callbacks inline (`ProbeDeadline`); M4 final handover (doc 26). Evidence EV-20261119-03.

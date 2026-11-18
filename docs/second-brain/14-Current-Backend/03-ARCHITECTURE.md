@@ -33,3 +33,7 @@ Existing starter layout historically observed: `src/BuildMind.API`, `src/BuildMi
 - Infrastructure: `TimeProvider.System` registration; `Configuration/ServicesOptions.cs`, `InternalServiceOptions.cs` (types + validation rules only).
 - API: `Errors/` (Problem Details, exception handler, validation helpers, trace IDs), `Routing/`, `Security/HttpContextCurrentUser.cs`, `Configuration/ServicesOptionsValidation.cs`, `ApiServiceCollectionExtensions.cs`.
 - Details and decision mapping: [17-SHARED-CONVENTIONS-PROPOSAL §21](17-SHARED-CONVENTIONS-PROPOSAL.md).
+
+## Persistence foundation — BE-M4-D02a (2026-11-18, uncommitted, awaiting review)
+
+Infrastructure owns `BuildMindDbContext`, `MySqlContextOptions`, the design-time factory, the internal `TransactionRunner` and `PersistenceErrorClassifier`. The API binds `DatabaseOptions` and validates them at start-up (C8). Domain and Application stay free of EF Core and MySQL references, enforced by `LayerDependencyTests`. The database is disabled by default. There are no feature mappings or migrations yet, and the application never migrates itself. Details: [18 §D02a](18-MYSQL-PROVIDER-STUDY.md).

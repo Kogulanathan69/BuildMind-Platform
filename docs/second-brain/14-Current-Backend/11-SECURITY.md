@@ -16,3 +16,10 @@ Upload: allowlist formats PDF/JPG/PNG only per approved contract, content signat
 ### Test reliability note — start-up validation (2026-11-18, `2d2a474`)
 
 Start-up failure tests must prove the failure is an `OptionsValidationException`. With minimal hosting, `WebApplicationFactory` can surface `ObjectDisposedException` instead (start-up race). That exception is accepted only when the host itself recorded an `OptionsValidationException`; the credential-leak logging test also requires the host failure entry to be captured, so it cannot pass with empty logs.
+
+### Database controls — BE-M4-D02a (2026-11-18, uncommitted)
+
+- Connection strings are never committed: they come only from `ConnectionStrings:BuildMind` or `BUILDMIND_MIGRATIONS_CONNECTION` (User Secrets or environment variables). Validation messages name keys only; `root`, `Persist Security Info` and `Allow Load Local Infile` are rejected.
+- No automatic database creation or migration. Least-privilege accounts are proposed: `bm_runtime` (DML only), `bm_migrator` (DDL on `buildmind_dev`), `bm_test` (`buildmind\_test\_%` only).
+- EF sensitive-data logging and detailed errors are off. EF failure events that quote provider messages (which can contain stored values such as emails) are suppressed. The error classifier keeps only kind, error number and constraint name.
+- A commit failure is reported as an unknown outcome and never retried.

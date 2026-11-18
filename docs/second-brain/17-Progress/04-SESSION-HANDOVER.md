@@ -74,3 +74,9 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - CI: final PR run 44251191661 and post-merge run 44251341941 success; exact counts not retrieved (403). History: 124/126 → 125/126 → corrected (`27d320d`, `2d2a474`).
 - D02: environment and provider revalidated read-only; implementation readiness plan added to [18](../14-Current-Backend/18-MYSQL-PROVIDER-STUDY.md). **Stopped at G03 provider/licence approval gate.** No package, database, migration or production code change.
 - Next action (lead): (1) licence decision on Oracle provider for commercial use; (2) approve exact package set; (3) create disposable database + least-privilege accounts outside the repo; (4) authorize the spike; (5) arrange independent review of PR #8/#10/#11.
+
+## 2026-11-18 — STEP 05-B BE-M4-D02a database infrastructure (interrupted once, recovered)
+- Branch `feature/m4-database-infrastructure`: docs commit `3ebf7aa` (not pushed); D02a implementation **uncommitted** pending diff review. Remote `develop` moved to `860d5fe` (PR #15/#16: `BuildMind.sln`, CI contract-check step, tests README); not merged into this branch.
+- Implemented: approved packages, `DatabaseOptions` plus validation, `BuildMindDbContext` (no entities), DI, design-time factory, `TransactionRunner`, `PersistenceErrorClassifier`, log hardening, database-free tests, spike project (22 tests), account SQL proposal, CI job proposal ([19](../14-Current-Backend/19-DATABASE-CI-PROPOSAL.md)).
+- Verified: restore; Release build 0/0; spike project build 0/0; no vulnerable packages; pytest 54 passed. **No C# test executed** (G17 locally; CI not yet run for this branch). **No database touched.**
+- Next (lead): review the diff → approve commit and push → PR CI runs the 189 database-free cases; approve the database CI job and/or run the account SQL; decide on the G03 licence; get M1/M3/M5 agreement on mappings.

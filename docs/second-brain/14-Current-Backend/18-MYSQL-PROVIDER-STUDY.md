@@ -275,3 +275,23 @@ Edits: `Infrastructure/DependencyInjection.cs`, `API/ApiServiceCollectionExtensi
 4. Spike project: run the 20 tests and the two extras, and record the evidence.
 5. G03 becomes a recorded decision.
 6. D02b and later: per-feature mappings and migrations with each owner's agreement (M1 users and projects first), then the M5/M3 atomic adapters.
+
+## BE-M4-D02a implementation — 2026-11-18 (uncommitted, awaiting review)
+
+G03: **CONDITIONAL INTERNAL DEVELOPMENT AND COMPATIBILITY TESTING AUTHORIZATION — PRODUCTION AND COMMERCIAL DISTRIBUTION LICENSING REVIEW PENDING**. G03 stays open.
+
+| Component | Implementation |
+|---|---|
+| Packages | Infrastructure: `Microsoft.EntityFrameworkCore` and `.Relational` 10.0.12 (explicit pins) and `MySql.EntityFrameworkCore` 10.0.12 (resolves `MySql.Data` 26.10.0). API: `Microsoft.EntityFrameworkCore.Design` 10.0.12 with `PrivateAssets=all`. Root `dotnet-tools.json`: `dotnet-ef` 10.0.12. No vulnerable packages, including transitive ones |
+| Configuration | `Database:Enabled` (default **false**) and `Database:CommandTimeoutSeconds` (1–300, default 30). The connection string comes **only** from `ConnectionStrings:BuildMind` (User Secrets or environment variable) and is validated at start-up only when enabled. Rejected: missing server, database or user; `root`; `Persist Security Info=true`; `Allow Load Local Infile=true`; unparseable strings. Messages name keys only |
+| Context | `BuildMindDbContext` with no entity types. It discovers `IEntityTypeConfiguration<T>` classes under `BuildMind.Infrastructure.Persistence.Configurations.*` and has no migrations. Registered as scoped; when disabled, resolving it throws a fixed safe message. It never connects, creates databases or migrates at start-up |
+| Provider options | One place (`MySqlContextOptions`): `UseMySQL`, command timeout, migrations assembly = Infrastructure, no retrying execution strategy, sensitive-data logging and detailed errors off, and failure events that quote provider messages (`CommandError`, `SaveChangesFailed`, `QueryIterationFailed`, `OptimisticConcurrencyException`) ignored. `Microsoft.EntityFrameworkCore` logs at Warning |
+| Design time | `BuildMindDesignTimeDbContextFactory`: only `BUILDMIND_MIGRATIONS_CONNECTION` is read, with no fallback to application configuration; same validation (no root); nothing runs automatically |
+| Transactions | Internal `TransactionRunner` (with an `IDbTransactionSource` seam): begin → operation → commit. On an operation failure or cancellation it rolls back and rethrows the original exception; a rollback failure never masks it. Commit is never cancelled midway; a commit failure raises `TransactionOutcomeUnknownException` and is never retried. The transaction is always disposed and nested transactions are rejected. No generic repository or unit of work |
+| Error translation | `PersistenceErrorClassifier` produces `PersistenceFailure` (kind, default shared code, transient flag, provider error number, constraint name). Duplicate (1022/1062/1169/1586) → `CONFLICT`; FK (1216/1217/1451/1452) → `CONFLICT`; deadlock 1213 and lock timeout 1205 → `DEPENDENCY_UNAVAILABLE` (transient); connection failures → `DEPENDENCY_UNAVAILABLE`; command timeout → `DEPENDENCY_TIMEOUT`; `DbUpdateConcurrencyException` → `REVISION_CONFLICT`; unknown commit outcome and anything else → `INTERNAL_ERROR`. Only schema constraint names are extracted; values and messages are dropped. Feature adapters choose the final code (for example `DUPLICATE_REQUEST`) |
+| Database-free tests (`BuildMind.Infrastructure.Tests/Persistence`, + `LayerDependencyTests`) | 39 methods / 63 cases (suite total 110 / 189). Compiled; **not executed locally (G17)** |
+| Spike project `tests/BuildMind.Persistence.IntegrationTests` | 22 tests (T01–T20, LP, SQL), synthetic model and a hand-written migration. **Outside `BuildMind.sln`**; compiled; **not executed** (needs disposable MySQL and approval) |
+| Account setup | `tools/database/mysql/001-dev-test-accounts.sql` with placeholders, run manually by the lead, and a README |
+| CI | Proposal [19-DATABASE-CI-PROPOSAL](19-DATABASE-CI-PROPOSAL.md); workflow unchanged |
+
+**Not done:** feature mappings and migrations (need owner agreement), repository adapters, readiness and database health integration, and execution of any database test. MySQL 8.4 compatibility is **UNVERIFIED**.

@@ -79,3 +79,8 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
   - G03: provider revalidated (EV-20261118-24): no change from the study; **licence acceptance for commercial use is the blocking decision**, then the disposable-database spike. G03 open.
   - G17: still open (Smart App Control enabled); C# execution stays on Linux CI.
   - New dependency for D02 (proposal only): domain entities `Report`, `ArchitectRequest`, `RequirementRevision` are immutable without parameterless constructors and with nested value objects; persistence mapping strategy (separate persistence models vs. EF mapping of domain types) must be agreed with M1/M3/M5 before feature schemas are frozen.
+
+- 2026-11-18 (STEP 05-B, BE-M4-D02a):
+  - **G03 lead decision:** **CONDITIONAL INTERNAL DEVELOPMENT AND COMPATIBILITY TESTING AUTHORIZATION — PRODUCTION AND COMMERCIAL DISTRIBUTION LICENSING REVIEW PENDING**. Approved for internal development and compatibility testing only: `MySql.EntityFrameworkCore` 10.0.12 (+MySQL26.10.0), `Microsoft.EntityFrameworkCore` / `.Relational` / `.Design` 10.0.12, repository-local `dotnet-ef` 10.0.12. This is **not** legal clearance and **not** approval for commercial distribution. No deliverable containing the provider may be published or distributed until the licensing obligations are reviewed and accepted. **G03 remains OPEN** (licence review, the 22 spike tests on MySQL 8.4, final acceptance).
+  - Database CI job: proposal only ([19](19-DATABASE-CI-PROPOSAL.md)); the workflow is unchanged.
+  - Persistence mapping strategy for immutable domain types and per-feature schemas: still need M1/M3/M5 agreement.

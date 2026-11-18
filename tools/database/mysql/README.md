@@ -25,11 +25,29 @@
    ```
 5. Turn on database access in the API only when it's needed: `Database:Enabled=true`, set through User Secrets or an environment variable.
 
-**Migrations are never applied by the application.** Process:
-1. Find the last applied migration (`SELECT MigrationId FROM __EFMigrationsHistory`).
-2. Generate a **ranged** script from it: `dotnet tool run dotnet-ef migrations script <last-applied> <target> --project src/BuildMind.Infrastructure --startup-project src/BuildMind.API`.
-3. Review the script, then apply it once with `bm_migrator`. The history rows it inserts prevent reapplication.
+## Migration deployment (lead decision 2026-11-18: Option B, internal development scope)
 
-**Don't use `--idempotent`.** With `MySql.EntityFrameworkCore` 10.0.12, idempotent scripts contain SQL Server-style `IF NOT EXISTS(...) BEGIN … END;` blocks that MySQL rejects (CI T06, 2026-11-18). This is an open provider limitation. MySQL DDL also auto-commits, so a failed script can leave a partly applied migration: review it and apply it during a maintenance window.
+**Migrations are never applied by the application or automatically.** The only supported mechanism is a **reviewed, ranged script** applied by **one authorized executor** with the `bm_migrator` identity.
+
+1. **Single executor:** only the person assigned by M4 runs migrations against a given database, and announces it first. No two people migrate the same database at the same time.
+2. **Check the history before running anything:** `SELECT MigrationId, ProductVersion FROM __EFMigrationsHistory ORDER BY MigrationId;`. The last row must be exactly the `<from>` migration of the script. If it isn't, **stop**: the script was generated for a different state.
+3. **Generate the ranged script:** `dotnet tool run dotnet-ef migrations script <from> <to> --project src/BuildMind.Infrastructure --startup-project src/BuildMind.API --output <file>.sql`. Review it as code: DDL, data changes, and the history `INSERT` it appends.
+4. **Back up first:** take a full logical backup of the target schema (for example `mysqldump --single-transaction --routines --triggers <schema>`), stored outside the repository, and confirm it can be restored.
+5. **Apply once** with `bm_migrator` (the `mysql` client or a reviewed tool), then **verify**:
+   - the expected `MigrationId` rows exist in `__EFMigrationsHistory`;
+   - tables, columns (`information_schema.columns`), indexes and foreign keys match the reviewed script;
+   - the application starts and its smoke checks pass.
+
+**What history does and does not guarantee.** The history rows stop a ranged script from being applied again **by a process that follows step 2**. They do not make a raw ranged script idempotent: running the same script twice by hand fails or duplicates work. They also don't make the deployment atomic.
+
+**MySQL DDL commits implicitly.** Every `CREATE`/`ALTER`/`DROP` commits immediately, even inside `START TRANSACTION`. So a script that fails partway leaves the earlier DDL applied and **no history row** for that migration.
+
+**Recovering a partial failure:**
+1. Stop; never rerun the whole script.
+2. Compare the actual schema with the script to see which statements were applied.
+3. Either complete the remaining statements by hand and insert the history row, or restore the backup from step 4.
+4. Record what happened, then repeat step 5's verification.
+
+**`--idempotent` is not supported.** `MySql.EntityFrameworkCore` 10.0.x generates SQL Server-style `IF NOT EXISTS(...) BEGIN … END;` blocks that MySQL rejects (error 1064; CI T06). This is a **documented provider limitation**, pinned by T06. Reassess it on any provider upgrade: T06 fails if the provider starts emitting executable SQL.
 
 **Production** is out of scope here. It needs its own identities, TLS with certificate validation (`SslMode=VerifyFull`) and a secret store, and the G03 licence review must be accepted first.

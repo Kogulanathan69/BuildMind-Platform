@@ -97,3 +97,6 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 
 ## 2026-11-18 — STEP 05-E9 MySQL failure recovery
 - Live run 24/26. T19 fixed (`datetime(6)` convention); T06 = provider limitation, kept failing pending a lead decision (options A/B/C in open decisions); T25 added. MySQL tests 27; infrastructure 214 cases. Re-run pending. G03 open; independent reviews outstanding.
+
+## 2026-11-18 — STEP 05-E10
+- Run 44296302240: 25/27 (T06, T19 failed; T21, T25 passed). Option B approved; T06 acceptance revised to pin the limitation; T19 fixed with a UTC converter; T19D diagnostics; migration safety procedure documented. Infrastructure 221 cases; MySQL 28 tests. Re-run pending. G03 and independent reviews open.

@@ -95,6 +95,38 @@ public static class SpikeModel
     }
 }
 
+/// <summary>Diagnostic-only row for T19D (table <c>ts_probe</c> is created by the test itself).</summary>
+public sealed class TimestampProbe
+{
+    public int Id { get; set; }
+
+    public DateTimeOffset Ts { get; set; }
+}
+
+/// <summary>
+/// Diagnostic-only context WITHOUT the M4 timestamp converter, used to record the provider's own
+/// DateTimeOffset mapping behaviour (T19D). Never used for anything else.
+/// </summary>
+public sealed class RawTimestampContext(DbContextOptions<RawTimestampContext> options) : DbContext(options)
+{
+    public DbSet<TimestampProbe> Probes => Set<TimestampProbe>();
+
+    public static RawTimestampContext Create(string connectionString) =>
+        new(new DbContextOptionsBuilder<RawTimestampContext>()
+            .UseMySQL(connectionString)
+            .EnableSensitiveDataLogging(false)
+            .Options);
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<TimestampProbe>(probe =>
+        {
+            probe.ToTable("ts_probe");
+            probe.HasKey(p => p.Id);
+            probe.Property(p => p.Id).HasColumnName("id").ValueGeneratedNever();
+            probe.Property(p => p.Ts).HasColumnName("ts").HasColumnType("datetime(6)");
+        });
+}
+
 /// <summary>Adapts the production transaction helper's seam to the spike context.</summary>
 internal sealed class SpikeTransactionSource(SpikeDbContext context) : IDbTransactionSource
 {

@@ -305,3 +305,7 @@ Corrections: 1205 statement-level rollback semantics; unconfirmed rollback surfa
 ### Live results — 2026-11-18 (run 44292102702, MySQL 8.4.13)
 
 24/26 passed. Verified on the live server: connectivity, TLS 1.2, plaintext refusal, least privilege, scoped wildcard grant, CRUD, FK and unique constraints with safe translation, commit and rollback, optimistic concurrency, single-winner compare-and-set, 1205 semantics, GUID `char(36)`, `decimal(18,4)`, JSON (semantic), the CLI-generated migration path, and index use. **Corrected:** timestamp precision (`datetime(6)` convention). **Provider limitation:** idempotent migration scripts are not MySQL-executable, so deployment uses ranged scripts (T25). MySQL 8.4 compatibility is therefore **largely verified, with one open limitation**; the re-run after the corrections is pending. G03 open (licence).
+
+### Run 44296302240 and STEP 05-E10 (2026-11-18)
+
+25/27. **Second provider finding:** `DateTimeOffset` loses microseconds even in `datetime(6)`, so M4 stores timestamps as UTC `DateTime` through a converter (T19D traces the layers). Deployment: Option B (ranged scripts); idempotent scripts are a pinned provider limitation (T06). Both findings must be reassessed on any provider upgrade and weigh on the G03 provider-acceptance decision.

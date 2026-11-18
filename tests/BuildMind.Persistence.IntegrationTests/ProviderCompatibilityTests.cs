@@ -89,8 +89,17 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
         Assert.Empty(await context.Database.GetAppliedMigrationsAsync());
     }
 
+    /// <summary>
+    /// ACCEPTANCE CHANGED 2026-11-18 (lead-approved Option B, STEP 05-E10). The original criterion, "the
+    /// idempotent script is safe to rerun", FAILED on MySQL 8.4.13 in CI runs 44292102702 and 44296302240:
+    /// <c>MySql.EntityFrameworkCore</c> 10.0.x emits SQL Server-style <c>IF NOT EXISTS(...) BEGIN … END;</c> blocks
+    /// that MySQL rejects. This test now pins that KNOWN PROVIDER LIMITATION, so the evidence stays visible and a
+    /// provider upgrade forces reassessment: if the provider starts emitting executable SQL, this test fails and the
+    /// decision must be revisited. Raw idempotent scripts are NOT a supported deployment mechanism; T25 covers the
+    /// supported ranged-script path. Reapplying migrations through the migrator is still verified here.
+    /// </summary>
     [Fact]
-    public async Task T06_migration_reapplies_and_idempotent_script_is_safe_to_rerun()
+    public async Task T06_migrations_reapply_and_raw_idempotent_script_is_a_known_provider_limitation()
     {
         await using var database = await DisposableMySqlDatabase.CreateAsync();
         await using var context = SpikeDbContext.Create(database.ConnectionString);
@@ -101,13 +110,24 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
         await migrator.MigrateAsync(SpikeInitialMigration.Id);
         Assert.Equal(2L, await SpikeTableCountAsync(database));
 
+        var providerAssembly = context.GetService<Microsoft.EntityFrameworkCore.Storage.IDatabaseProvider>().GetType().Assembly.GetName();
+        var providerVersion = providerAssembly.Version!;
+        output.WriteLine($"Provider assembly: {providerAssembly.Name} {providerVersion}");
+        Assert.Equal(10, providerVersion.Major); // reassess this limitation on any provider upgrade
+
         var script = migrator.GenerateScript(options: MigrationsSqlGenerationOptions.Idempotent);
         output.WriteLine(script);
-        await RunScriptAsync(database.ConnectionString, script);
-        await RunScriptAsync(database.ConnectionString, script);
+        Assert.Contains("IF NOT EXISTS(SELECT", script, StringComparison.Ordinal);
+        Assert.Contains("BEGIN", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("THEN", script, StringComparison.Ordinal); // not MySQL IF … THEN … END IF syntax
 
+        var rejected = await Assert.ThrowsAsync<MySqlException>(() => RunScriptAsync(database.ConnectionString, script));
+        Assert.Equal(1064, rejected.Number); // ER_PARSE_ERROR: a syntax rejection, not an unrelated failure
+        Assert.Contains("IF NOT EXISTS", rejected.Message, StringComparison.Ordinal);
+
+        // The rejected script must not have damaged the applied schema or its history.
         Assert.Equal(2L, await SpikeTableCountAsync(database));
-        Assert.Single(await context.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(new[] { SpikeInitialMigration.Id }, await context.Database.GetAppliedMigrationsAsync());
     }
 
     [Fact]
@@ -338,6 +358,86 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
         Assert.Equal(utc, loadedUtc);
         Assert.Equal(TimeSpan.Zero, loadedUtc.Offset);
         Assert.Equal(offset.UtcDateTime, loadedOffset.UtcDateTime); // the instant must never shift
+    }
+
+    /// <summary>
+    /// Diagnostic for T19 (STEP 05-E10): records, stage by stage, where microseconds survive. It asserts only
+    /// what the converter fix relies on (server stores 6 digits; UTC DateTime parameters keep them; the
+    /// converted EF path round-trips exactly) and RECORDS the provider's unconverted DateTimeOffset behaviour.
+    /// </summary>
+    [Fact]
+    public async Task T19D_timestamp_precision_is_traced_through_each_layer()
+    {
+        await using var database = await MigratedDatabaseAsync();
+        const string expectedText = "2026-11-18 10:20:30.123456";
+        var instant = new DateTimeOffset(2026, 11, 18, 10, 20, 30, TimeSpan.Zero).AddTicks(1_234_560);
+
+        await using var connection = new MySqlConnection(database.ConnectionString);
+        await connection.OpenAsync();
+        await ExecuteAsync(connection, "CREATE TABLE ts_probe (id INT PRIMARY KEY, ts DATETIME(6) NOT NULL);");
+
+        // 1. Direct SQL literal with six fractional digits.
+        await ExecuteAsync(connection, $"INSERT INTO ts_probe VALUES (1, '{expectedText}');");
+        // 2. Parameterized UTC DateTime.
+        await ExecuteAsync(connection, "INSERT INTO ts_probe VALUES (2, @v);", ("@v", instant.UtcDateTime));
+        // 3. Parameterized DateTimeOffset (driver behaviour, recorded only).
+        await ExecuteAsync(connection, "INSERT INTO ts_probe VALUES (3, @v);", ("@v", instant));
+
+        // 4. EF without the converter (the provider's own DateTimeOffset mapping) and 5. EF with the converter.
+        await using (var unconverted = RawTimestampContext.Create(database.ConnectionString))
+        {
+            unconverted.Probes.Add(new TimestampProbe { Id = 4, Ts = instant });
+            await unconverted.SaveChangesAsync();
+        }
+
+        var converted = NewOwner("owner-precision", instant);
+        await using (var context = SpikeDbContext.Create(database.ConnectionString))
+        {
+            context.Owners.Add(converted);
+            await context.SaveChangesAsync();
+        }
+
+        // 6. Raw stored representation.
+        var raw = new Dictionary<int, string>();
+        await using (var command = new MySqlCommand("SELECT id, DATE_FORMAT(ts, '%Y-%m-%d %H:%i:%s.%f') FROM ts_probe ORDER BY id;", connection))
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                raw[reader.GetInt32(0)] = reader.GetString(1);
+            }
+        }
+
+        var ownerRaw = (string?)await ScalarAsync(
+            database.ConnectionString,
+            "SELECT DATE_FORMAT(created_at_utc, '%Y-%m-%d %H:%i:%s.%f') FROM spike_owners WHERE name = 'owner-precision';");
+
+        // 7. Materialisation: the unconverted EF read of the exact SQL literal, and the converted EF read.
+        DateTimeOffset unconvertedRead;
+        await using (var unconverted = RawTimestampContext.Create(database.ConnectionString))
+        {
+            unconvertedRead = (await unconverted.Probes.AsNoTracking().SingleAsync(p => p.Id == 1)).Ts;
+        }
+
+        DateTimeOffset convertedRead;
+        await using (var reader = SpikeDbContext.Create(database.ConnectionString))
+        {
+            convertedRead = (await reader.Owners.AsNoTracking().SingleAsync(o => o.Id == converted.Id)).CreatedAtUtc;
+        }
+
+        output.WriteLine($"1 SQL literal             -> stored {raw.GetValueOrDefault(1)}");
+        output.WriteLine($"2 DateTime parameter      -> stored {raw.GetValueOrDefault(2)}");
+        output.WriteLine($"3 DateTimeOffset parameter-> stored {raw.GetValueOrDefault(3)}");
+        output.WriteLine($"4 EF unconverted write    -> stored {raw.GetValueOrDefault(4)}");
+        output.WriteLine($"5 EF converted write      -> stored {ownerRaw}");
+        output.WriteLine($"6 EF unconverted read of literal -> {unconvertedRead:O}");
+        output.WriteLine($"7 EF converted read       -> {convertedRead:O}");
+
+        Assert.Equal(expectedText, raw[1]);
+        Assert.Equal(expectedText, raw[2]);
+        Assert.Equal(expectedText, ownerRaw);
+        Assert.Equal(instant, convertedRead);
+        Assert.Equal(TimeSpan.Zero, convertedRead.Offset);
     }
 
     [Fact]
@@ -612,6 +712,17 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
         }
 
         return await command.ExecuteScalarAsync();
+    }
+
+    private static async Task ExecuteAsync(MySqlConnection connection, string sql, params (string Name, object Value)[] parameters)
+    {
+        await using var command = new MySqlCommand(sql, connection);
+        foreach (var (name, value) in parameters)
+        {
+            command.Parameters.AddWithValue(name, value);
+        }
+
+        await command.ExecuteNonQueryAsync();
     }
 
     private static async Task<string?> SessionStatusAsync(MySqlConnection connection, string variable)

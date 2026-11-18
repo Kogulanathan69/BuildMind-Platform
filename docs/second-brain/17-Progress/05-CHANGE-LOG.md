@@ -27,3 +27,5 @@
 2026-11-18 — STEP 05-E8: `fix(ci)` for the PR #21 `database-compatibility` job (restore before EF tooling, .NET 10 SDK selection, grant preflight). Evidence EV-20261118-36..37.
 
 2026-11-18 — STEP 05-E9: `MySqlModelConventions` (timestamps `datetime(6)`), spike migration and T21 updated, T25 ranged-deployment test, deployment docs switched to ranged scripts, CI exports idempotent + ranged scripts. Evidence EV-20261118-38..39.
+
+2026-11-18 — STEP 05-E10: UTC `DateTimeOffset`/`DateTime` converters in `MySqlModelConventions`, T19D diagnostics, T06 acceptance change (lead-approved Option B), migration safety procedure. Evidence EV-20261118-40..42.

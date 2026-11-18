@@ -1,6 +1,6 @@
 # BuildMind.Persistence.IntegrationTests — MySQL provider compatibility (BE-M4-D02)
 
-**Status:** 27 tests. First live run (CI 44292102702, MySQL 8.4.13): 24/26 passed; T06 and T19 failed (see below). T25 was added afterwards. They run only in the `database-compatibility` CI job (BE-M4-D02b), on a disposable MySQL 8.4 container. They have not been run locally (Smart App Control, G17). G03 covers internal compatibility testing only; the commercial licence review is still pending.
+**Status:** 28 tests (T19D added in STEP 05-E10). Live runs on MySQL 8.4.13: 44292102702 → 24/26 passed (T06, T19 failed); 44296302240 → 25/27 passed (T06, T19 failed; T21 and T25 passed). They run only in the `database-compatibility` CI job (BE-M4-D02b), on a disposable MySQL 8.4 container. They have not been run locally (Smart App Control, G17). G03 covers internal compatibility testing only; the commercial licence review is still pending.
 
 This project is **not in `BuildMind.sln`** on purpose: the standard `dotnet-build` job never runs it. Only the dedicated CI job (or an approved disposable local server) runs it.
 
@@ -38,11 +38,12 @@ T21 then checks that the generated snapshot matches the model (`HasPendingModelC
 |---|---|
 | T01–T02 | Connectivity (server version 8.4) and DbContext initialisation |
 | T03 | Model-to-SQL generation (in-process `dotnet ef` pipeline) |
-| T04–T06 | Hand-written migration: apply, roll back to empty, reapply, idempotent script run twice |
+| T04–T06 | Hand-written migration: apply, roll back to empty, reapply; T06 also pins the idempotent-script provider limitation |
 | T07–T09 | Insert/read, update with revision increment, delete |
 | T10–T12 | Foreign-key and unique constraints, and translation of duplicate errors (constraint name kept, values dropped) |
 | T13–T14 | `TransactionRunner` commit and rollback (no stale tracked entity afterwards) |
 | T15–T16 | Optimistic concurrency; conditional revision update with exactly one winner among 8 concurrent writers |
+| T19D | Timestamp precision traced through each layer (diagnostic) |
 | T17–T20 | GUID, `DECIMAL(18,4)`, UTC `DateTimeOffset` to the microsecond, and JSON semantic round-trips |
 | T21 | **CLI-generated** migration and snapshot apply and roll back |
 | T22–T23 | Sessions use TLS (`Ssl_version` / `Ssl_cipher`); plaintext login for `bm_test` is refused |
@@ -52,7 +53,7 @@ T21 then checks that the generated snapshot matches the model (`HasPendingModelC
 | SQL | Owner-scoped query uses `ix_spike_items_owner_id` (checked with `EXPLAIN`) |
 
 **Findings and limitations:**
-- **T19 (fixed):** the provider's default `datetime` dropped microseconds. Timestamps now use `datetime(6)` through `MySqlModelConventions` (shared with `BuildMindDbContext`); T19's exact-microsecond assertion is unchanged.
-- **T06 (open provider limitation):** `MySql.EntityFrameworkCore` 10.0.12 generates idempotent scripts in SQL Server syntax (`IF NOT EXISTS(...) BEGIN … END;`), which MySQL rejects whatever executes them. T06 is **kept unchanged and is expected to fail** until the lead decides whether to change its acceptance criteria. T25 proves the safe alternative.
+- **T19:** the provider lost microseconds with `datetime` (run 44292102702) and **still** with `datetime(6)` (run 44296302240), so its own `DateTimeOffset` path drops them. `MySqlModelConventions` now converts every `DateTimeOffset` to its UTC `DateTime` in `datetime(6)` and reads it back at +00:00; UTC-only `DateTime`. T19's exact-microsecond assertion is unchanged. **T19D** records, layer by layer, where precision survives (SQL literal, `DateTime` parameter, `DateTimeOffset` parameter, EF unconverted, EF converted, raw stored text, materialisation).
+- **T06 (acceptance changed, lead-approved Option B, 2026-11-18):** originally "the idempotent script is safe to rerun". That failed in runs 44292102702 and 44296302240 because `MySql.EntityFrameworkCore` 10.0.x emits SQL Server syntax (`IF NOT EXISTS(...) BEGIN … END;`). T06 now pins this **known provider limitation**: the pattern is present, MySQL rejects it with 1064, and no schema or history damage results. It must be reassessed on a provider upgrade. Supported deployment is the ranged script (T25).
 - The hand-written spike migration (T04–T06) has no snapshot, so `PendingModelChangesWarning` is suppressed for `SpikeDbContext` only. T21 covers the generated path with that check enabled.
 - If a test process is killed, its `buildmind_test_<guid>` database can be left behind. In CI the container is discarded anyway; locally, remove leftovers by name.

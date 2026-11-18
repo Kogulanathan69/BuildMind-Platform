@@ -45,3 +45,7 @@
 2026-11-18 — STEP 07-A (uncommitted): BE-M4-D04 readiness (`/health/ready`, C11b) and safe response headers, security regression tests, security and API docs. Evidence EV-20261118-55.
 
 2026-11-18 — STEP 07-B: D04 audit fixes (EF ConnectionError suppression, readiness deadline + single-flight gate + deferred scope disposal, explicit status mapping), readiness behaviour and live tests. Evidence EV-20261118-56.
+
+2026-11-18 — STEP 08-A (uncommitted): BE-M4-D05 internal service client, dependency-failure Problem Details, Python readiness; docs. Evidence EV-20261118-57..58.
+
+2026-11-18 — STEP 08-B: D05 security audit fixes and regression tests; live Python contract probe; D05 integration document (23) with CI smoke proposal. Evidence EV-20261118-59.

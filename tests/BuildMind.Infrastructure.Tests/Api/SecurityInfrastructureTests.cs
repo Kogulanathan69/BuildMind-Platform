@@ -84,8 +84,13 @@ public sealed class SecurityInfrastructureTests
             && e.AllText.Contains("127.0.0.1", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// D04 originally asserted Python "unverified" (no client existed). Since D05, Python has a real check against
+    /// its confirmed /health contract, so a configured but failing Python is "unreachable"; still Degraded, never
+    /// Healthy. RAG has no service contract and stays "unverified".
+    /// </summary>
     [Fact]
-    public async Task Configured_internal_services_are_never_reported_healthy_before_a_real_check_exists()
+    public async Task Unverified_or_failing_internal_services_are_never_reported_healthy()
     {
         await using var factory = new BuildMindApiFactory(
             "Production",
@@ -93,14 +98,17 @@ public sealed class SecurityInfrastructureTests
             {
                 ["Services:Python:Enabled"] = "true",
                 ["Services:Python:BaseUrl"] = "http://python-services.internal:8000",
+                ["Services:Rag:Enabled"] = "true",
+                ["Services:Rag:BaseUrl"] = "http://rag.internal:8001",
             });
-        using var client = factory.CreateClient();
+        await using var host = factory.WithPythonTransport(StubHttpHandler.Throws(new HttpRequestException("synthetic connection refused")));
+        using var client = host.CreateClient();
 
         using var response = await client.GetAsync(Readiness.Path);
         var (_, checks) = await ReadReadinessAsync(response);
 
-        Assert.Equal(("Degraded", "unverified"), checks["python"]);
-        Assert.Equal(("Degraded", "not_configured"), checks["rag"]);
+        Assert.Equal(("Degraded", "unreachable"), checks["python"]);
+        Assert.Equal(("Degraded", "unverified"), checks["rag"]);
     }
 
     [Fact]

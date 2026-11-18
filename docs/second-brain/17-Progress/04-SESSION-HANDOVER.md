@@ -130,3 +130,10 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 
 ## 2026-11-18 — STEP 07-B security audit + delivery
 - 3 defects fixed (hostname in logs, ineffective timeout/pile-up, missing 200-path coverage). Tests: infrastructure 299 cases, MySQL 45. Committed and pushed `feature/m4-security-infrastructure`; draft PR to `develop` to be created by the lead; CI then runs everything.
+
+## 2026-11-18 — STEP 08-A BE-M4-D05 (uncommitted)
+- PR #24 merged (`439d52b`, 0 reviews); post-merge MySQL 45/45; infrastructure/Python counts not in artifacts. STEP 06-F docs reconciled by merge `6b0eaf3`.
+- D05: shared hardened client, 503/504 contract, Python readiness on `/health`; 48 new test cases (compiled only). Blocked: feature routes, G11, storage, RAG.
+
+## 2026-11-18 — STEP 08-B D05 audit + delivery
+- 5 integration defects fixed (encoded-path SSRF guard, proxy, connection bound, Python readiness deadline/single-flight, base-URL defence). Live FastAPI `/health` verified on loopback; C# live smoke proposed (CI). Infrastructure 385 cases (compiled; not executed locally), MySQL 45. Committed and pushed; draft PR to be created by the lead.

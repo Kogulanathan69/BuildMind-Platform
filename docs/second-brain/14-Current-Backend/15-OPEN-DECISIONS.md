@@ -102,3 +102,7 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
 - 2026-11-18 (STEP 06-F): PR #23 merged (0 reviews, G19). **Decisions requested from M1:** `User`/`Project` rehydration factories (signatures in 22); revision semantics of `IProjectRepository.UpdateAsync`; concurrency for `IUserRepository.UpdateAsync` (lost-update risk). Still open: `normalized_email` collation, head-number constraint, G03, G17, G19, G20, G12.
 
 - 2026-11-18 (STEP 07-A, D04): readiness implemented per C11b. Still blocking the rest of D04: **C6** (frontend origin), **C7** (OpenAPI package), **A1/A2** (token storage, password hashing; M1 + frontend), the JwtBearer package approval, and M2 upload limits. Unchanged: G03, G12, G17, G19 (PR #22/#23 merged with 0 reviews), G20, M1 rehydration factories (D03).
+
+- 2026-11-18 (STEP 08-A, D05): PR #24 merged (0 reviews; G19). D05 shared client implemented without feature routes. Still open: **G11** (internal transport/authentication, hosting), `/internal/v1` (C1 internal convention), M2/M3/M6 Python route and DTO contracts, M2 private storage contract, RAG service contract, safe-retry idempotency contract (no retries until then). Unchanged: C6, C7, A1, A2, G03, G12, G17, G20, D03 M1 dependencies.
+
+- 2026-11-18 (STEP 08-B): approval needed for the **Linux CI C#-to-Python smoke test** ([23](../14-Current-Backend/23-M4-D05-INTERNAL-INTEGRATION.md)). New finding for M6/G11: disable FastAPI `/docs` and `/openapi.json` outside development. G11 remains OPEN.

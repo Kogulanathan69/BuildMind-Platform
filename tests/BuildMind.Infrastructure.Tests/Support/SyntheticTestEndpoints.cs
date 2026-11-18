@@ -57,6 +57,15 @@ internal sealed class SyntheticTestEndpoints : IApiEndpointModule
         tests.MapGet("/require-user", (ICurrentUser currentUser) =>
             Results.Ok(new { userId = currentUser.GetRequiredUserId() }));
 
+        // BE-M4-D05: drives the real Python typed client (stub transport in tests) through the public error contract.
+        tests.MapGet("/python-health", async (BuildMind.Infrastructure.Integration.PythonServiceClient python, CancellationToken token) =>
+        {
+            await python.CheckHealthAsync(token);
+            return Results.NoContent();
+        });
+
+        tests.MapGet("/dependency-failure/{kind}", ThrowDependencyFailure);
+
         tests.MapGet("/current-user", (ICurrentUser currentUser) => Results.Ok(new
         {
             isAuthenticated = currentUser.IsAuthenticated,
@@ -77,6 +86,9 @@ internal sealed class SyntheticTestEndpoints : IApiEndpointModule
 
     private static IResult ThrowServerSideCancellation() =>
         throw new OperationCanceledException($"Server-side cancellation {SyntheticSecret}");
+
+    private static IResult ThrowDependencyFailure(DependencyFailureKind kind) =>
+        throw new DependencyFailureException("python", kind, 503);
 
     private static IResult ThrowBadHttpRequest(int status) =>
         throw new BadHttpRequestException($"Framework detail {SyntheticSecret}", status);

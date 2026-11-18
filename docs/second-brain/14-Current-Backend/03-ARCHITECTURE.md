@@ -41,3 +41,9 @@ Infrastructure owns `BuildMindDbContext`, `MySqlContextOptions`, the design-time
 ## Persistence adapters — BE-M4-D03 (uncommitted)
 
 Infrastructure maps **persistence records** (`Persistence/Records`), never domain types. Mappers rebuild domain objects through their validating constructors (no reflection). Repositories implement existing Application ports inside `TransactionRunner`. First adapter: `RequirementRevisionRepository` (M5 port). See [22](22-M4-D03-SCHEMA-REGISTER.md).
+
+## Internal service integration — BE-M4-D05 (uncommitted)
+
+`Infrastructure/Integration/InternalServiceClient` (BCL `HttpClient`) is the only path to private services; feature clients wrap it (`PythonServiceClient`). The API composition root wires it through `IHttpClientFactory` with a hardened `SocketsHttpHandler`. Failures surface as Application `DependencyFailureException` (Problem Details 503/504). Readiness uses the same client for Python's confirmed `/health`. Feature routes, internal authentication (G11) and `/internal/v1` are pending; nothing is invented.
+
+Details, audit and smoke-test proposal for the internal integration: [23](23-M4-D05-INTERNAL-INTEGRATION.md).

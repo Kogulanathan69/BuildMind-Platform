@@ -68,3 +68,52 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Not implemented (pending decisions): CORS, OpenAPI, JWT/A1/A2, readiness, database, internal service calls, `/internal/v1`, M3 runner wiring.
 - No source outside M4 scope, no CI/DB/RAG change; nothing staged, committed or pushed.
 - Next action (lead): approve STEP 04-J (commit, push, PR, Linux CI); arrange independent review (PR #8, PR #10, this slice).
+
+## 2026-11-18 — STEP 04-K post-merge + STEP 05-A D02 preparation
+- PR #11 squash-merged as `0a4d70a` (0 reviews). `develop` fast-forwarded to `08ec48a` (also includes PR #9 M3, #13 M1, #14 M5). New branch `feature/m4-database-infrastructure` from `08ec48a`; all earlier branches preserved.
+- CI: final PR run 44251191661 and post-merge run 44251341941 success; exact counts not retrieved (403). History: 124/126 → 125/126 → corrected (`27d320d`, `2d2a474`).
+- D02: environment and provider revalidated read-only; implementation readiness plan added to [18](../14-Current-Backend/18-MYSQL-PROVIDER-STUDY.md). **Stopped at G03 provider/licence approval gate.** No package, database, migration or production code change.
+- Next action (lead): (1) licence decision on Oracle provider for commercial use; (2) approve exact package set; (3) create disposable database + least-privilege accounts outside the repo; (4) authorize the spike; (5) arrange independent review of PR #8/#10/#11.
+
+## 2026-11-18 — STEP 05-B BE-M4-D02a database infrastructure (interrupted once, recovered)
+- Branch `feature/m4-database-infrastructure`: docs commit `3ebf7aa` (not pushed); D02a implementation **uncommitted** pending diff review. Remote `develop` moved to `860d5fe` (PR #15/#16: `BuildMind.sln`, CI contract-check step, tests README); not merged into this branch.
+- Implemented: approved packages, `DatabaseOptions` plus validation, `BuildMindDbContext` (no entities), DI, design-time factory, `TransactionRunner`, `PersistenceErrorClassifier`, log hardening, database-free tests, spike project (22 tests), account SQL proposal, CI job proposal ([19](../14-Current-Backend/19-DATABASE-CI-PROPOSAL.md)).
+- Verified: restore; Release build 0/0; spike project build 0/0; no vulnerable packages; pytest 54 passed. **No C# test executed** (G17 locally; CI not yet run for this branch). **No database touched.**
+- Next (lead): review the diff → approve commit and push → PR CI runs the 189 database-free cases; approve the database CI job and/or run the account SQL; decide on the G03 licence; get M1/M3/M5 agreement on mappings.
+
+## 2026-11-18 — STEP 05-C BE-M4-D02a delivery
+- Backup: `C:\Users\kogul\Documents\BuildMind-Backups\d02a-20261118-150452` (bundle + working files).
+- Review fixed 6 issues (EV-20261118-29). Commit `2ee8324`; merged `develop` `fef5814` → `3ff94e0`; pushed, remote matches.
+- Builds 0/0; no vulnerable packages; pytest 54 passed. **No C# test executed yet; no database touched; spike not run.**
+- Pending (lead): create the draft PR (no CLI here), let the PR CI run and share the log archive or counts; approve the database CI job ([19](../14-Current-Backend/19-DATABASE-CI-PROPOSAL.md)); confirm G03 fits the public repo; G03 licence review; independent review of PR #8/#10/#11 and this PR.
+
+## 2026-11-18 — STEP 05-D/E BE-M4-D02b
+- PR #18 merged `940a5b7` (0 reviews; CI passed, counts not retrieved). `develop` fast-forwarded to `065f929`; new branch `feature/m4-mysql-compatibility`; previous branches kept.
+- Commit `947d8f8`: persistence corrections, `database-compatibility` CI job, generated-migration context, T21–T24. Builds 0/0, no vulnerable packages, pytest 54.
+- **Pending:** PR creation (manual) → first live MySQL run; then record the actual results (MySQL version, column types, TLS, grants, cleanup, counts). Don't mark D02 complete. G03 open.
+
+## 2026-11-18 — STEP 05-E8 PR #21 CI recovery
+- PR #21 first run: standard jobs passed (C# 210 + 485, M3 246, Python 54); the database job failed before the tests (NETSDK1004 + SDK 11.0.100). Fixed in the database job only (SDK pin, restore, assets check, build, grant preflight). **MySQL tests still not executed**; awaiting the re-run. G03 and independent review open.
+
+## 2026-11-18 — STEP 05-E9 MySQL failure recovery
+- Live run 24/26. T19 fixed (`datetime(6)` convention); T06 = provider limitation, kept failing pending a lead decision (options A/B/C in open decisions); T25 added. MySQL tests 27; infrastructure 214 cases. Re-run pending. G03 open; independent reviews outstanding.
+
+## 2026-11-18 — STEP 05-E10
+- Run 44296302240: 25/27 (T06, T19 failed; T21, T25 passed). Option B approved; T06 acceptance revised to pin the limitation; T19 fixed with a UTC converter; T19D diagnostics; migration safety procedure documented. Infrastructure 221 cases; MySQL 28 tests. Re-run pending. G03 and independent reviews open.
+
+## 2026-11-18 — STEP 05-E11 final D02b evidence
+- Run 44301027243: all jobs green; MySQL 28/28 on 8.4.13. Timestamp root cause = provider's unconverted `DateTimeOffset` read path (T19D). Reviewer checklist (20) and D03 requirements (21) prepared; no schema or migration created.
+- D02 **not complete**: independent reviews, G03 licensing and public-repository acceptance, T06 version-guard follow-up, owner mapping decisions.
+
+## 2026-11-18 — STEP 06-A BE-M4-D03 (uncommitted)
+- PR #21 open (0 reviews). T06 fix `b5208bc` pushed; its CI failed in the MySQL tests (cause unconfirmed; artifact needed).
+- D03 branch from `b5208bc`: schema (4 tables), mapper, M5 requirement-revision repository, tests (259 / 38), compiled only. Migration not generated (G17). Blocked items in [22](../14-Current-Backend/22-M4-D03-SCHEMA-REGISTER.md).
+- Next (lead): review the diff; supply the run-44305808458 artifact; approve a migration-generation path; M1 rehydration factories.
+
+## 2026-11-18 — STEP 06-C/06-D
+- D03 audit fixes, CI migration generation step, migration tests; merged D02b `59c4d08` into D03 (normal merge). Tests 279 / 43, compiled only.
+- Next (lead): open a draft PR D03 → `feature/m4-mysql-compatibility` (it depends on PR #21); download the `buildmind-migration/` artifact; review it; then M4 commits the migration.
+
+## 2026-11-18 — STEP 06-E3 initial migration
+- PR #22 merged (`95b1e8a`), PR #21 closed superseded; post-merge CI green; MySQL 43/43.
+- Branch `feature/m4-initial-database-migration`: committed `20261118133137_InitialFeatureSchema` (byte-identical), tests switched to the committed migration, deployment safety docs. Next: draft PR → CI must show the verify-only path and 43/43; independent review; collation and head-number decisions.

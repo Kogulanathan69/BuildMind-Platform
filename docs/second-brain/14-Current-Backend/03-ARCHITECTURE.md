@@ -27,9 +27,17 @@ Existing starter layout historically observed: `src/BuildMind.API`, `src/BuildMi
 - Packages added: Application → `Microsoft.Extensions.DependencyInjection.Abstractions` 10.0.12; Infrastructure → that plus `Microsoft.Extensions.Configuration.Abstractions` 10.0.12. Domain has no packages or project references.
 - Dependency rules are enforced by `LayerDependencyTests` (declared and compiled references, no cycles, only API references Infrastructure). Local execution currently blocked (G17).
 
-## Implemented composition — BE-M4-D01c (2026-11-18, uncommitted, test execution pending)
+## Implemented composition — BE-M4-D01c (2026-11-18; merged to `develop` as `0a4d70a` via PR #11, CI passed, independent review outstanding)
 - `Program.cs`: `AddApplication().AddInfrastructure(configuration).AddBuildMindApiInfrastructure(configuration)`; middleware `UseExceptionHandler()` → `UseStatusCodePages()`; `GET /health` unchanged; `MapBuildMindApiV1()` maps DI-registered `IApiEndpointModule` implementations under `/api/v1`.
 - Application: `Abstractions/ICurrentUser.cs`, `Abstractions/Errors/SharedErrorCodes.cs`, `Abstractions/Errors/UnauthenticatedAccessException.cs` (no ASP.NET Core reference — enforced by `LayerDependencyTests.Inner_layers_do_not_reference_aspnetcore`).
 - Infrastructure: `TimeProvider.System` registration; `Configuration/ServicesOptions.cs`, `InternalServiceOptions.cs` (types + validation rules only).
 - API: `Errors/` (Problem Details, exception handler, validation helpers, trace IDs), `Routing/`, `Security/HttpContextCurrentUser.cs`, `Configuration/ServicesOptionsValidation.cs`, `ApiServiceCollectionExtensions.cs`.
 - Details and decision mapping: [17-SHARED-CONVENTIONS-PROPOSAL §21](17-SHARED-CONVENTIONS-PROPOSAL.md).
+
+## Persistence foundation — BE-M4-D02a (2026-11-18, uncommitted, awaiting review)
+
+Infrastructure owns `BuildMindDbContext`, `MySqlContextOptions`, the design-time factory, the internal `TransactionRunner` and `PersistenceErrorClassifier`. The API binds `DatabaseOptions` and validates them at start-up (C8). Domain and Application stay free of EF Core and MySQL references, enforced by `LayerDependencyTests`. The database is disabled by default. There are no feature mappings or migrations yet, and the application never migrates itself. Details: [18 §D02a](18-MYSQL-PROVIDER-STUDY.md).
+
+## Persistence adapters — BE-M4-D03 (uncommitted)
+
+Infrastructure maps **persistence records** (`Persistence/Records`), never domain types. Mappers rebuild domain objects through their validating constructors (no reflection). Repositories implement existing Application ports inside `TransactionRunner`. First adapter: `RequirementRevisionRepository` (M5 port). See [22](22-M4-D03-SCHEMA-REGISTER.md).

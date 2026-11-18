@@ -72,3 +72,29 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
   - G17: local C# runs blocked different assemblies across rebuilds (Infrastructure, Domain, then the test assembly). **Open**; Smart App Control remains enabled.
   - C8 dependency note: Infrastructure-level options binding would require `Microsoft.Extensions.Options.ConfigurationExtensions` 10.0.12 — not installed; binding kept in the API composition root.
   - G01, G03, G04 (C2, C5b, C6, C7, C12, `/internal/v1`, feature diagnostics, A1, A2), G09, G10, G11, G13, G18, G19, G20: **open**. G14 deferred.
+
+- 2026-11-18 (STEP 04-K / 05-A, nothing resolved):
+  - G19 theme: PR #11 (BE-M4-D01c) merged as `0a4d70a` with **0 recorded reviews**; the same is true for PR #9 (M3), #13 (M1) and #14 (M5) per GitHub API. Independent review of PR #8, #10, #11 outstanding; no approval or waiver recorded.
+  - G13: no required status checks; CI nevertheless passed on all recent `develop` pushes (EV-20261118-21). Exact test counts require admin log access.
+  - G03: provider revalidated (EV-20261118-24): no change from the study; **licence acceptance for commercial use is the blocking decision**, then the disposable-database spike. G03 open.
+  - G17: still open (Smart App Control enabled); C# execution stays on Linux CI.
+  - New dependency for D02 (proposal only): domain entities `Report`, `ArchitectRequest`, `RequirementRevision` are immutable without parameterless constructors and with nested value objects; persistence mapping strategy (separate persistence models vs. EF mapping of domain types) must be agreed with M1/M3/M5 before feature schemas are frozen.
+
+- 2026-11-18 (STEP 05-B, BE-M4-D02a):
+  - **G03 lead decision:** **CONDITIONAL INTERNAL DEVELOPMENT AND COMPATIBILITY TESTING AUTHORIZATION — PRODUCTION AND COMMERCIAL DISTRIBUTION LICENSING REVIEW PENDING**. Approved for internal development and compatibility testing only: `MySql.EntityFrameworkCore` 10.0.12 (+MySQL26.10.0), `Microsoft.EntityFrameworkCore` / `.Relational` / `.Design` 10.0.12, repository-local `dotnet-ef` 10.0.12. This is **not** legal clearance and **not** approval for commercial distribution. No deliverable containing the provider may be published or distributed until the licensing obligations are reviewed and accepted. **G03 remains OPEN** (licence review, the 22 spike tests on MySQL 8.4, final acceptance).
+  - Database CI job: proposal only ([19](19-DATABASE-CI-PROPOSAL.md)); the workflow is unchanged.
+  - Persistence mapping strategy for immutable domain types and per-feature schemas: still need M1/M3/M5 agreement.
+
+- 2026-11-18 (STEP 05-C): the repository is **public**. The D02a push publishes source and package references only (no provider binaries); the lead should confirm this is consistent with the G03 conditional internal-testing authorization. G03 open. The database CI job is still a proposal ([19](19-DATABASE-CI-PROPOSAL.md), revised: TLS, `partial_revokes` pre-check, `dotnet-ef` tooling smoke check).
+
+- 2026-11-18 (STEP 05-D/E): lead authorized the isolated MySQL CI job for internal compatibility testing only; implemented on `feature/m4-mysql-compatibility`. G03 **open** (commercial licence review; whether a public repository is acceptable is a separate decision). PR #18 merged with 0 reviews (G19 theme).
+
+- 2026-11-18 (STEP 05-E9) **Decision needed (G03 / D02b): T06 acceptance criteria.** `MySql.EntityFrameworkCore` 10.0.12 cannot produce MySQL-executable idempotent migration scripts (it emits SQL Server `IF NOT EXISTS … BEGIN … END`). Options: (A) keep T06 failing as a recorded provider limitation (CI job stays red); (B) change the requirement to ranged scripts with history tracking (proven by T25) and turn T06 into a test that documents the limitation; (C) reassess the provider (the fallback in the study). No change made without approval. G03 remains open.
+
+- 2026-11-18 (STEP 05-E10): **resolved for internal development: migration deployment Option B** (ranged scripts + history + `bm_migrator` + backup/verification; raw idempotent SQL is a documented provider limitation; T06 acceptance changed accordingly; reassess on provider upgrade). Production migration process and G03 commercial licensing remain **open**.
+
+- 2026-11-18 (STEP 06-A, D03): lead-reported team approval for D03 (no per-member record). Open: (1) **M1:** add `User`/`Project` rehydration factories (and decide `IUserRepository.UpdateAsync` concurrency) to unblock M1 repositories; (2) **migration generation path** (CI job or approved machine; local dotnet-ef blocked by G17); (3) Report/ArchitectRequest source tables and G12; (4) G20 for the M3 store; (5) version/status column limits (M4 defaults: 64/32). G03 open.
+
+- 2026-11-18 (STEP 06-C/D): migration-generation path implemented as a CI review artifact (G17 still open for local execution). Open: M1 rehydration factories; Report/ArchitectRequest sources and G12; G20; G03; review and commit of the generated initial migration.
+
+- 2026-11-18 (STEP 06-E3): PR #21 closed as superseded by PR #22 (squash, 0 reviews; G19). New D03 decisions: `normalized_email` collation (binary versus inherited `ai_ci`); optional database constraint for `current_revision_number`. Still open: G03, G17 (local execution), G19 (reviews), G20, M1 rehydration factories, Report/ArchitectRequest sources (G12).

@@ -15,3 +15,27 @@
 2026-11-18 — STEP 03-G: recorded lead decisions (C1, C3, C4, C5, C8, C9, C10 approved; C11b approved as architectural design; G03 conditional testing approval; G18 preference; G20 recommendations) in the shared conventions proposal §20, provider study, 05-API-CONTRACTS, API register, open decisions, task/evidence registers and handover; index labels updated. Documentation only; committed on `feature/m4-shared-contracts` for PR review.
 
 2026-11-18 — BE-M4-D01c (uncommitted, `feature/m4-shared-infrastructure`): shared infrastructure implementation per lead decisions C1, C3, C4, C5, C8, C9, C10; 117 C# test cases authored (local execution blocked, G17); docs updated (17 §21, 03, 05, 11, 13, 15, API register, registers, tests README). Recorded PR #10 merge evidence and governance finding (no review).
+
+2026-11-18 — STEP 04-K/05-A (docs only, branch `feature/m4-database-infrastructure`). Recorded PR #11 merge (`0a4d70a`), both earlier CI failures and corrective commits, final CI status, missing reviews (PR #9/#11/#13/#14), D02 environment audit and provider revalidation (EV-20261118-17..24); added D02 implementation readiness plan to 18-MYSQL-PROVIDER-STUDY. Task register: D01c MERGED (review outstanding), D02 PREPARATION (stopped at G03 gate). No source, dependency, database, CI or RAG change.
+
+2026-11-18 — BE-M4-D02a (uncommitted). EF Core 10.0.12 + Oracle MySQL provider (G03 conditional internal-testing authorization), database options and validation, `BuildMindDbContext`, design-time factory, transaction helper, error classifier, log hardening; 63 new database-free test cases; spike project (22 tests, outside the solution); account SQL proposal; database CI proposal (19). Docs: 03, 11, 15, 18, task/evidence registers, handover. Workflow, solution file, feature code and RAG unchanged.
+
+2026-11-18 — STEP 05-C: D02a review corrections (TLS mandatory, change-tracker discard, safe failure log, retry semantics, spike probe, `partial_revokes` check), implementation commit `2ee8324`, `develop` merge `3ff94e0`, push; database CI proposal revised. Evidence EV-20261118-29..31.
+
+2026-11-18 — BE-M4-D02b (`947d8f8`): persistence safety corrections, isolated MySQL 8.4 CI job (digest-pinned, TLS-only least-privilege accounts, masked random credentials, cleanup checks), CLI-generated migration verification on a synthetic model, 4 new live tests (26 total) and 14 new database-free cases (210). Evidence EV-20261118-32..35. Live results pending.
+
+2026-11-18 — STEP 05-E8: `fix(ci)` for the PR #21 `database-compatibility` job (restore before EF tooling, .NET 10 SDK selection, grant preflight). Evidence EV-20261118-36..37.
+
+2026-11-18 — STEP 05-E9: `MySqlModelConventions` (timestamps `datetime(6)`), spike migration and T21 updated, T25 ranged-deployment test, deployment docs switched to ranged scripts, CI exports idempotent + ranged scripts. Evidence EV-20261118-38..39.
+
+2026-11-18 — STEP 05-E10: UTC `DateTimeOffset`/`DateTime` converters in `MySqlModelConventions`, T19D diagnostics, T06 acceptance change (lead-approved Option B), migration safety procedure. Evidence EV-20261118-40..42.
+
+2026-11-18 — STEP 05-E11 (docs only): recorded the final 28/28 MySQL evidence and the T19D seven-stage root cause (read path), corrected the precision-loss wording, noted the T06 version-guard limitation, added the D02 reviewer checklist (20) and the D03 requirements (21). Evidence EV-20261118-43..44.
+
+2026-11-18 — STEP 06-A (uncommitted): BE-M4-D03 schema records/configurations, requirement-revision mapper and repository, database-free and live tests, D03 register (22). PR #21: T06 provider-version fix `b5208bc` (CI red, under investigation). Evidence EV-20261118-47..48 (renumbered from 45..46 because the D02b branch already uses those IDs).
+
+2026-11-18 — STEP 06-B: T06 distinguishes the provider's NuGet package version (10.0.12) from its assembly version (26.10.0.0); evidence EV-20261118-45..46 (on the D02b branch).
+
+2026-11-18 — STEP 06-C/06-D: D03 audit fixes (truthful conflict translation, identity-reuse detection, project-FK-only `ProjectNotFound`, version length guard, constraint-table extraction, explicit composite-FK index), CI migration generation/verification step and migration tests, merge of D02b `59c4d08`. Evidence EV-20261118-49.
+
+2026-11-18 — STEP 06-E3: committed the reviewed initial migration `20261118133137_InitialFeatureSchema`; tests expect it; EnsureCreated fallback removed; migration deployment safety (authorization, destructive rollback) documented. Evidence EV-20261118-50..52.

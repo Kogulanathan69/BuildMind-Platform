@@ -1,3 +1,4 @@
+using BuildMind.Infrastructure.Persistence;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -25,6 +26,10 @@ public static class DependencyInjection
 
         // Shared clock (BCL). Services take TimeProvider so tests can supply deterministic time.
         services.TryAddSingleton(TimeProvider.System);
+
+        // BE-M4-D02a: DbContext + transaction helper. Disabled by default (Database:Enabled = false);
+        // registration never connects, creates a database or applies migrations.
+        services.AddBuildMindPersistence();
 
         return services;
     }

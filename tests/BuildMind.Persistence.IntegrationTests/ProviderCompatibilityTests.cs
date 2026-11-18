@@ -21,6 +21,12 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
 {
     private const string Secret = "SYNTHETIC-SECRET-7f3a9c41";
 
+    /// <summary>The G03-authorized NuGet package version (resolved dependency metadata).</summary>
+    private const string ApprovedProviderPackageVersion = "10.0.12";
+
+    /// <summary>Assembly version shipped in that package (observed in CI run 44305808458 and in the package DLL).</summary>
+    private static readonly Version ObservedProviderAssemblyVersion = new(26, 10, 0, 0);
+
     [Fact]
     public async Task T01_connects_to_a_mysql_8_4_server()
     {
@@ -112,12 +118,26 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
 
         // The provider's own options extension lives in the Oracle provider assembly (IDatabaseProvider's runtime
         // type is EF Core's generic DatabaseProvider<T>, which reported Microsoft.EntityFrameworkCore; EV-20261118-44).
+        // NuGet package version and assembly version are DIFFERENT for this provider (run 44305808458): package
+        // 10.0.12 ships assembly version 26.10.0.0 (the MySQL connector line), with informational version
+        // "10.0.12.0+MySQL26.10.0". All three are pinned exactly, so ANY provider upgrade fails here and forces
+        // reassessment of this limitation.
         var providerAssembly = context.GetService<IDbContextOptions>().Extensions
-            .Select(extension => extension.GetType().Assembly.GetName())
-            .Single(name => string.Equals(name.Name, "MySql.EntityFrameworkCore", StringComparison.Ordinal));
-        var providerVersion = providerAssembly.Version!;
-        output.WriteLine($"Provider assembly: {providerAssembly.Name} {providerVersion}");
-        Assert.Equal(10, providerVersion.Major); // reassess this limitation on any provider upgrade
+            .Select(extension => extension.GetType().Assembly)
+            .Distinct()
+            .Single(assembly => string.Equals(assembly.GetName().Name, "MySql.EntityFrameworkCore", StringComparison.Ordinal));
+        var assemblyVersion = providerAssembly.GetName().Version!;
+        var informationalVersion = providerAssembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .Cast<System.Reflection.AssemblyInformationalVersionAttribute>()
+            .Single().InformationalVersion;
+        var resolvedPackageVersion = ResolvedPackageVersion("MySql.EntityFrameworkCore");
+        output.WriteLine($"Provider package (resolved): MySql.EntityFrameworkCore {resolvedPackageVersion}");
+        output.WriteLine($"Provider assembly: {providerAssembly.GetName().Name} {assemblyVersion}; informational {informationalVersion}");
+
+        Assert.Equal(ApprovedProviderPackageVersion, resolvedPackageVersion);
+        Assert.Equal(ObservedProviderAssemblyVersion, assemblyVersion);
+        Assert.StartsWith(ApprovedProviderPackageVersion + ".", informationalVersion, StringComparison.Ordinal);
 
         var script = migrator.GenerateScript(options: MigrationsSqlGenerationOptions.Idempotent);
         output.WriteLine(script);
@@ -659,6 +679,22 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
         Assert.True(await reader.ReadAsync());
 
         Assert.Equal("ix_spike_items_owner_id", reader["key"] as string);
+    }
+
+    /// <summary>
+    /// Reads the package version NuGet actually resolved for this test run from the test assembly's
+    /// <c>.deps.json</c> (the runtime's own dependency manifest): library keys are "&lt;package&gt;/&lt;version&gt;".
+    /// </summary>
+    private static string ResolvedPackageVersion(string packageId)
+    {
+        var depsFile = Path.Combine(
+            AppContext.BaseDirectory,
+            typeof(ProviderCompatibilityTests).Assembly.GetName().Name + ".deps.json");
+        using var deps = JsonDocument.Parse(File.ReadAllText(depsFile));
+
+        return deps.RootElement.GetProperty("libraries").EnumerateObject()
+            .Select(library => library.Name.Split('/'))
+            .Single(parts => parts.Length == 2 && string.Equals(parts[0], packageId, StringComparison.OrdinalIgnoreCase))[1];
     }
 
     private static SpikeOwner NewOwner(string name, DateTimeOffset? createdAt = null) => new()

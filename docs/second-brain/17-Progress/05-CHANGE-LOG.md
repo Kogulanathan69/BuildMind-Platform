@@ -31,3 +31,5 @@
 2026-11-18 — STEP 05-E10: UTC `DateTimeOffset`/`DateTime` converters in `MySqlModelConventions`, T19D diagnostics, T06 acceptance change (lead-approved Option B), migration safety procedure. Evidence EV-20261118-40..42.
 
 2026-11-18 — STEP 05-E11 (docs only): recorded the final 28/28 MySQL evidence and the T19D seven-stage root cause (read path), corrected the precision-loss wording, noted the T06 version-guard limitation, added the D02 reviewer checklist (20) and the D03 requirements (21). Evidence EV-20261118-43..44.
+
+2026-11-18 — STEP 06-B: T06 distinguishes the provider's NuGet package version (10.0.12) from its assembly version (26.10.0.0); evidence EV-20261118-45..46 (on the D02b branch).

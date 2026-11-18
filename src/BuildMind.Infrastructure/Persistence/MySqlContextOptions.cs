@@ -10,9 +10,14 @@ internal static class MySqlContextOptions
     /// <summary>Migrations live in this assembly under <c>Persistence/Migrations</c> (none exist yet).</summary>
     public static readonly string MigrationsAssembly = typeof(BuildMindDbContext).Assembly.GetName().Name!;
 
-    /// <summary>EF Core failure events whose log text includes raw provider exception messages.</summary>
+    /// <summary>
+    /// EF Core failure events whose log text includes raw provider exception messages or connection details.
+    /// <see cref="RelationalEventId.ConnectionError"/> (added in BE-M4-D04) logs the database name and server host
+    /// on every failed connection, for example on each readiness probe while MySQL is down.
+    /// </summary>
     public static readonly EventId[] SuppressedFailureEvents =
     [
+        RelationalEventId.ConnectionError,
         RelationalEventId.CommandError,
         CoreEventId.SaveChangesFailed,
         CoreEventId.QueryIterationFailed,

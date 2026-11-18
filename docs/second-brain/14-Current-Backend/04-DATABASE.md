@@ -32,3 +32,6 @@ Migration workflow: feature owner supplies entity and mapping proposal, M4 integ
 ## Implemented physical schema — BE-M4-D03 (2026-11-18, uncommitted, not yet executed against MySQL)
 
 `users`, `projects`, `requirement_revisions`, `project_requirement_heads`. Details, keys and blocked areas: [22](22-M4-D03-SCHEMA-REGISTER.md). The logical tables above remain proposals until their owners' contracts and approvals exist.
+
+## BE-M4-D06 persistence, transactions and concurrency (STEP 09-A/09-B; mapping lead-approved)
+`TransactionRunner` was audited and left unchanged: it already provides atomicity, unknown-commit and unconfirmed-rollback handling, cancellation safety, ReadCommitted by default, quiet disposal and no retries. Optimistic concurrency uses `projects.revision` (concurrency token) and requirement-revision compare-and-set. New live tests cover lost-update prevention and parallel writers. No schema change and no migration change. See [24-M4-D06-PERSISTENCE-CONCURRENCY.md](24-M4-D06-PERSISTENCE-CONCURRENCY.md).

@@ -49,3 +49,13 @@ Approved by the Team lead (M4 + M7; GitHub `Kogulanathan69`): **C1** (`/api/v1`,
 
 ## Implementation status of approved conventions (2026-11-18)
 BE-M4-D01c implements C1, C3, C4, C5 (shared codes) and the C8/C9/C10 infrastructure on `feature/m4-shared-infrastructure` — **build verified, automated tests pending Linux CI, not merged**. Behaviour: every non-2xx response from the API is RFC 9457 `application/problem+json` with `code` and `traceId` (when the client accepts JSON); `/api/v1` hosts no product endpoints yet. See [17 §21](17-SHARED-CONVENTIONS-PROPOSAL.md).
+
+## Database failure fallback mapping (BE-M4-D06; lead-approved 2026-11-18, STEP 09-B)
+A database failure that escapes a feature returns:
+- stale token → 409 `REVISION_CONFLICT`;
+- duplicate key → 409 `CONFLICT`;
+- unreachable, deadlock or lock wait → 503 `DEPENDENCY_UNAVAILABLE` (implements C11b for persistence);
+- database command timeout → 504 `DEPENDENCY_TIMEOUT`;
+- foreign key, unknown commit outcome, unconfirmed rollback or unexpected → 500 `INTERNAL_ERROR`.
+
+Non-database exceptions are unaffected. Feature adapters keep precedence. No idempotency contract is implied (C2/C5b open). See [24-M4-D06-PERSISTENCE-CONCURRENCY.md](24-M4-D06-PERSISTENCE-CONCURRENCY.md).

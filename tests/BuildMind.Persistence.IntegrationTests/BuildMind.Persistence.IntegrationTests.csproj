@@ -35,6 +35,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/BuildMind.Infrastructure/BuildMind.Infrastructure.csproj" />
+    <!-- BE-M4-D04: live readiness check (MySqlReadinessCheck) against the disposable database. -->
+    <ProjectReference Include="../../src/BuildMind.API/BuildMind.API.csproj" />
   </ItemGroup>
 
 </Project>

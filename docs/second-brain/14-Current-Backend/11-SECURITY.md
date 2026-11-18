@@ -31,3 +31,28 @@ Start-up failure tests must prove the failure is an `OptionsValidationException`
 - (D02b) Timestamps are stored as unambiguous UTC (`datetime(6)`); non-UTC `DateTime` values are rejected. Migrations: single authorized executor, history check, backup before DDL, no automatic or production migrations.
 
 - (D03) Repositories filter every query by project; ports are not authorization guards, so callers must establish ownership first. Constraint violations are translated without values (for example a duplicate email); stored customer content is never echoed in errors. FKs use RESTRICT (no cascading deletes).
+
+- (STEP 06-F) Risk noted for M1: `IUserRepository.UpdateAsync` has no concurrency check, so concurrent profile/password/activation updates would be last-writer-wins. Decide before the user repository is implemented. Password hashes are stored only as provided (`password_hash` varchar(512)); hashing (A1/A2) is not implemented by M4.
+
+### Implemented controls — BE-M4-D04 (2026-11-18, uncommitted)
+
+- **Readiness** `GET /health/ready` (C11b): MySQL mandatory (503 when not configured or unreachable); Python/RAG Degraded and never Healthy until real checks exist (D05). Response = names, statuses and fixed reason codes; no hosts, users, exception text or connection details. `/health` liveness unchanged and dependency-free.
+- **Response headers** on every response (including errors): `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`; `/api` responses default to `Cache-Control: no-store`. Kestrel `Server` header disabled.
+- **Log hygiene regression:** bearer tokens, cookies, API keys and query-string tokens never appear in logs (tested in Production and Development). Precondition: `Microsoft.AspNetCore` stays at `Warning` (request-start logs include the query string), and **tokens must never be sent in query strings**.
+- **Not yet in place (blocked):** CORS allowlist (C6), authentication/JWT and shared authorization policies (A1/A2, M1), request body limits (M2; Kestrel's 30 MB default applies), OpenAPI (C7, Development only). Until authentication exists, `ICurrentUser` is always anonymous and no endpoint may rely on it for ownership.
+
+- (STEP 07-B) EF Core `ConnectionError` events are suppressed (they logged the server host and database name). MySQL readiness enforces its own 3 s deadline and runs at most one probe at a time per host; abandoned probes dispose their scope when they finish. The Kestrel `Server` header setting does not control headers added by a reverse proxy or load balancer.
+
+- (D05) Internal calls: destinations only from the validated configuration (no user-supplied URLs, relative-path SSRF guard); no redirects followed; no cookies; user `Authorization`/`Cookie` never forwarded; bounded time and response size; failures carry no URL/host/payload; framework HttpClient request logs removed (they include internal URLs). **No internal service authentication yet (G11)**: Python must stay network-private until it is decided.
+
+- (STEP 08-B) Internal paths are allowlisted (`[A-Za-z0-9_-]` segments; no encodings, dot segments, query or fragment); private traffic bypasses system proxies; ≤32 connections per internal service; Python readiness has a hard deadline and single-flight. **Configuration and DNS are the trust boundary for internal destinations** (no claim of complete SSRF immunity). Python's FastAPI `/docs` and `/openapi.json` are exposed by default: to be disabled outside development (M6/G11).
+
+- (STEP 08-C) Internal calls are bulkheaded (≤64 in-flight + queued per dependency, fail fast), so a slow dependency cannot accumulate unbounded waiting requests. Readiness single-flight gates are always released, even if cleanup throws. The CI Python service binds to 127.0.0.1 only and is stopped in an `always()` step.
+
+- (STEP 09-A) Escaped database failures are logged as EventId 1006 with the failure kind, provider error number and schema constraint name only; never the provider message, SQL, values or connection string. Problem bodies carry fixed text. An architecture test forbids HTTP or internal-service dependencies in persistence types (no external calls inside transactions).
+
+- (STEP 09-B) Database failures are never logged with the exception object, **including in Development** (EventId 1006 warning, 1007 error), because provider messages can contain SQL and values. Commit or rollback uncertainty anywhere in an exception chain is always 500 and never a conflict or outage. Cancellation is never classified as a database failure. The persistence architecture test is structural only and cannot detect indirect calls.
+
+- (STEP 10-A) Readiness probes abandoned at their deadline are now always cancelled, so a hung dependency cannot pin the single-flight gate. Open security findings S1–S8 (no authn/authz, no CORS, `AllowedHosts: *`, no HTTPS/HSTS, no request size or rate limits, Actions not SHA-pinned, FastAPI docs exposed, G11, 0 reviews) are recorded in [25](25-M4-FINAL-QA-REPORT.md). None is simulated.
+
+- (STEP 10-B) Abandoned readiness probes are cancelled with `CancelAsync()`: cancellation callbacks never run on the readiness thread, so a blocking callback cannot delay `/health/ready`. Callback failures are dropped, never logged.

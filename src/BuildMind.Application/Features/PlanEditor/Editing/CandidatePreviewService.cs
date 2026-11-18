@@ -60,6 +60,8 @@ public sealed class CandidatePreviewService(
         catch (Exception exception) when (exception is TimeoutException or OperationCanceledException)
         { return new(CandidatePreviewResultStatus.DependencyTimeout); }
         catch (HttpRequestException) { return new(CandidatePreviewResultStatus.DependencyUnavailable); }
+        catch (InvalidDependencyResponseException)
+        { return new(CandidatePreviewResultStatus.InvalidDependencyResponse); }
         catch (Exception) { return new(CandidatePreviewResultStatus.UnexpectedInternalFailure); }
         if (current is null) return new(CandidatePreviewResultStatus.RevisionNotFound);
         if (current.ProjectId != command.ProjectId || current.PlanId != command.PlanId)

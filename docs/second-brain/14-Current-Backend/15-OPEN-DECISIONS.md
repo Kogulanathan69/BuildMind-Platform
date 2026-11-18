@@ -98,3 +98,19 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
 - 2026-11-18 (STEP 06-C/D): migration-generation path implemented as a CI review artifact (G17 still open for local execution). Open: M1 rehydration factories; Report/ArchitectRequest sources and G12; G20; G03; review and commit of the generated initial migration.
 
 - 2026-11-18 (STEP 06-E3): PR #21 closed as superseded by PR #22 (squash, 0 reviews; G19). New D03 decisions: `normalized_email` collation (binary versus inherited `ai_ci`); optional database constraint for `current_revision_number`. Still open: G03, G17 (local execution), G19 (reviews), G20, M1 rehydration factories, Report/ArchitectRequest sources (G12).
+
+- 2026-11-18 (STEP 06-F): PR #23 merged (0 reviews, G19). **Decisions requested from M1:** `User`/`Project` rehydration factories (signatures in 22); revision semantics of `IProjectRepository.UpdateAsync`; concurrency for `IUserRepository.UpdateAsync` (lost-update risk). Still open: `normalized_email` collation, head-number constraint, G03, G17, G19, G20, G12.
+
+- 2026-11-18 (STEP 07-A, D04): readiness implemented per C11b. Still blocking the rest of D04: **C6** (frontend origin), **C7** (OpenAPI package), **A1/A2** (token storage, password hashing; M1 + frontend), the JwtBearer package approval, and M2 upload limits. Unchanged: G03, G12, G17, G19 (PR #22/#23 merged with 0 reviews), G20, M1 rehydration factories (D03).
+
+- 2026-11-18 (STEP 08-A, D05): PR #24 merged (0 reviews; G19). D05 shared client implemented without feature routes. Still open: **G11** (internal transport/authentication, hosting), `/internal/v1` (C1 internal convention), M2/M3/M6 Python route and DTO contracts, M2 private storage contract, RAG service contract, safe-retry idempotency contract (no retries until then). Unchanged: C6, C7, A1, A2, G03, G12, G17, G20, D03 M1 dependencies.
+
+- 2026-11-18 (STEP 08-B): approval needed for the **Linux CI C#-to-Python smoke test** ([23](../14-Current-Backend/23-M4-D05-INTERNAL-INTEGRATION.md)). New finding for M6/G11: disable FastAPI `/docs` and `/openapi.json` outside development. G11 remains OPEN.
+
+- 2026-11-18 (STEP 08-C): **lead approved** (explicit in-session answer) the live C#-to-Python CI smoke test and the TRX/JUnit result artifacts; implemented. G11 (internal authentication, transport, hosting) remains **OPEN**; the smoke test uses loopback only and proves no authentication model. FastAPI `/docs`/`/openapi.json` exposure finding for M6 still open.
+
+- 2026-11-18 (STEP 09-A): the D06 persistence fallback mapping applies C11b and C5 codes and **needs source review** before commit. Still open: idempotency for duplicate requests (C2/C5b), the production database account policy (D06 checklist 04 beyond CI), the M1 rehydration factories, the M2/M3/M6 job and revision persistence contracts, and the M5 report snapshot.
+
+- 2026-11-18 (STEP 09-B): **lead approved** the D06 database-failure fallback mapping (409 `REVISION_CONFLICT` / 409 `CONFLICT` / 503 for unreachable, deadlock and lock-wait / 504 command timeout / 500 for unknown commit, unconfirmed rollback and unexpected) with no automatic write retries. Still open: idempotency (C2/C5b), the production database account policy, the M1 rehydration factories, the M2/M3/M6 job and revision contracts, the M5 report snapshot, G11, G17 and G19 (independent human review still required).
+
+- 2026-11-19 (STEP 10-A): approvals still needed before M4 can be called production-ready: A1/A2, C6, C7, C2/C5b, G11, the hosting posture (AllowedHosts, HTTPS/HSTS), request size and rate limits, GitHub Actions SHA pinning, the production database account policy, and independent review of PRs #8–#27 (G19). See [25-M4-FINAL-QA-REPORT.md](25-M4-FINAL-QA-REPORT.md).

@@ -117,3 +117,50 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 ## 2026-11-18 — STEP 06-E3 initial migration
 - PR #22 merged (`95b1e8a`), PR #21 closed superseded; post-merge CI green; MySQL 43/43.
 - Branch `feature/m4-initial-database-migration`: committed `20261118133137_InitialFeatureSchema` (byte-identical), tests switched to the committed migration, deployment safety docs. Next: draft PR → CI must show the verify-only path and 43/43; independent review; collation and head-number decisions.
+
+## 2026-11-18 — STEP 06-F remaining repositories
+- PR #23 merged (`8221523`, 0 reviews); post-merge CI green; MySQL 43/43 (artifact re-read).
+- Reassessment: nothing unblocked (no upstream contract changes). No code written. Proposed M1 rehydration factories and decisions recorded in 22.
+- Next: M1 decision; then M4 implements `UserRepository`/`ProjectRepository` with tests.
+
+## 2026-11-18 — STEP 07-A BE-M4-D04 (uncommitted)
+- STEP 06-F docs committed on `feature/m4-remaining-repositories` (`515052c`, pushed; not merged).
+- Branch `feature/m4-security-infrastructure` from `8221523`: readiness + safe headers + 12 security test cases. Build 0/0; not executed (CI after push).
+- Blocked: CORS (C6), OpenAPI (C7), JWT/authorization policies (A1/A2/M1), request limits (M2).
+
+## 2026-11-18 — STEP 07-B security audit + delivery
+- 3 defects fixed (hostname in logs, ineffective timeout/pile-up, missing 200-path coverage). Tests: infrastructure 299 cases, MySQL 45. Committed and pushed `feature/m4-security-infrastructure`; draft PR to `develop` to be created by the lead; CI then runs everything.
+
+## 2026-11-18 — STEP 08-A BE-M4-D05 (uncommitted)
+- PR #24 merged (`439d52b`, 0 reviews); post-merge MySQL 45/45; infrastructure/Python counts not in artifacts. STEP 06-F docs reconciled by merge `6b0eaf3`.
+- D05: shared hardened client, 503/504 contract, Python readiness on `/health`; 48 new test cases (compiled only). Blocked: feature routes, G11, storage, RAG.
+
+## 2026-11-18 — STEP 08-B D05 audit + delivery
+- 5 integration defects fixed (encoded-path SSRF guard, proxy, connection bound, Python readiness deadline/single-flight, base-URL defence). Live FastAPI `/health` verified on loopback; C# live smoke proposed (CI). Infrastructure 385 cases (compiled; not executed locally), MySQL 45. Committed and pushed; draft PR to be created by the lead.
+
+## 2026-11-18 — STEP 08-C live C#-to-Python smoke test
+- Lead approved (in session) the CI smoke-test workflow change and the result artifacts. Implemented: real FastAPI on loopback in the database job, 7 live tests, TRX/JUnit artifacts. Fixed: unbounded queued requests (bulkhead) and a readiness gate leak. Infrastructure 388, MySQL 52, Python 54; compiled only. Next: draft PR → first CI run → download `dotnet-test-results`, `python-test-results`, `mysql-compatibility-results` to verify the counts.
+
+## 2026-11-18 — STEP 09-A BE-M4-D06
+- Run #50 artifacts verified by digest (1,225 passed). Branch `feature/m4-persistence-concurrency` was created from `894fc4a`.
+- D06 is implemented but **uncommitted, awaiting source review**: persistence fallback Problem Details mapping, 4 live concurrency tests, 15 infrastructure cases.
+- Next: review → commit → draft PR → CI → verify 403 / 56.
+
+## 2026-11-18 — STEP 09-B BE-M4-D06 audit
+- Mapping lead-approved. 4 audit defects fixed (see doc 24).
+- Infrastructure 412, MySQL 56, Python 54.
+- Next: draft PR → CI → download the 3 artifacts and verify 1,253 → independent human review (G19). Do not merge automatically.
+
+## 2026-11-19 — STEP 10-A BE-M4-D07 final QA
+- Run #52 verified by digest (1,253 passed). Branch `feature/m4-infrastructure-final-qa` created from `1ab1f98`.
+- Final QA report: doc 25. One M4 defect fixed (readiness abandoned probe), +2 tests (Infrastructure 414 compiled). **Uncommitted, awaiting source review.**
+- PR #28 (M5) is open and touches no M4 file; it needs independent review.
+- M7 not started.
+- Next: review → commit → draft PR → CI (expect 1,255).
+
+## 2026-11-19 — STEP 10-B BE-M4-D07 final audit and handover
+- Readiness correction audited; defect R2 fixed (`ProbeDeadline`), +3 deterministic tests.
+- **Final M4 handover: [26-M4-FINAL-HANDOVER.md](../14-Current-Backend/26-M4-FINAL-HANDOVER.md)**, with the exact outstanding work in §5.
+- Inventory: 417 / 56 / 54 → 1,258 compiled (1,253 executed in run #52).
+- Next: CI on the draft PR → verify 1,258 → independent QA review.
+- M4 is not complete and not production-ready. M7/RAG not started.

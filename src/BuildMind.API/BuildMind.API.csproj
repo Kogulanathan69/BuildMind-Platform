@@ -9,6 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- BE-M4-D04: tests drive the readiness probe seam (timeouts, single-flight) without a database. -->
+    <InternalsVisibleTo Include="BuildMind.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="BuildMind.Persistence.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../BuildMind.Application/BuildMind.Application.csproj" />
     <ProjectReference Include="../BuildMind.Infrastructure/BuildMind.Infrastructure.csproj" />
   </ItemGroup>

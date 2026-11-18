@@ -57,6 +57,18 @@ internal sealed class SyntheticTestEndpoints : IApiEndpointModule
         tests.MapGet("/require-user", (ICurrentUser currentUser) =>
             Results.Ok(new { userId = currentUser.GetRequiredUserId() }));
 
+        // BE-M4-D05: drives the real Python typed client (stub transport in tests) through the public error contract.
+        tests.MapGet("/python-health", async (BuildMind.Infrastructure.Integration.PythonServiceClient python, CancellationToken token) =>
+        {
+            await python.CheckHealthAsync(token);
+            return Results.NoContent();
+        });
+
+        tests.MapGet("/dependency-failure/{kind}", ThrowDependencyFailure);
+
+        // BE-M4-D06: database failures escaping a feature (EF exception types; no database involved).
+        tests.MapGet("/database-failure/{kind}", ThrowDatabaseFailure);
+
         tests.MapGet("/current-user", (ICurrentUser currentUser) => Results.Ok(new
         {
             isAuthenticated = currentUser.IsAuthenticated,
@@ -77,6 +89,25 @@ internal sealed class SyntheticTestEndpoints : IApiEndpointModule
 
     private static IResult ThrowServerSideCancellation() =>
         throw new OperationCanceledException($"Server-side cancellation {SyntheticSecret}");
+
+    private static IResult ThrowDatabaseFailure(string kind) => throw (kind switch
+    {
+        "stale-token" => new Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException($"Stale {SyntheticSecret}"),
+        "db-timeout" => new Microsoft.EntityFrameworkCore.DbUpdateException($"Save {SyntheticSecret}", new TimeoutException()),
+        "db-unexpected" => new Microsoft.EntityFrameworkCore.DbUpdateException($"Save {SyntheticSecret}"),
+        "plain-timeout" => new TimeoutException($"Not a database timeout {SyntheticSecret}"),
+        "rollback-unconfirmed-conflict" => new BuildMind.Infrastructure.Persistence.Transactions.TransactionRollbackUncertainException(
+            new Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException($"Stale {SyntheticSecret}"),
+            new InvalidOperationException($"Rollback {SyntheticSecret}")),
+        "commit-unknown-duplicate" => new BuildMind.Infrastructure.Persistence.Transactions.TransactionOutcomeUnknownException(
+            new Microsoft.EntityFrameworkCore.DbUpdateException($"Commit {SyntheticSecret}", new TimeoutException())),
+        "cancelled-db" => new OperationCanceledException($"Cancelled {SyntheticSecret}",
+            new Microsoft.EntityFrameworkCore.DbUpdateException($"Save {SyntheticSecret}", new TimeoutException())),
+        _ => new InvalidOperationException("unknown synthetic kind"),
+    });
+
+    private static IResult ThrowDependencyFailure(DependencyFailureKind kind) =>
+        throw new DependencyFailureException("python", kind, 503);
 
     private static IResult ThrowBadHttpRequest(int status) =>
         throw new BadHttpRequestException($"Framework detail {SyntheticSecret}", status);

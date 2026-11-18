@@ -58,19 +58,59 @@ public static partial class PersistenceErrorClassifier
 {
     private const int MaxDepth = 16;
 
+    /// <summary>
+    /// BE-M4-D06: classifies ONLY when the exception chain really contains a database failure (MySQL provider
+    /// exception, EF <see cref="DbUpdateException"/>, unknown commit outcome or unconfirmed rollback). Unrelated
+    /// exceptions (for example a <see cref="TimeoutException"/> from elsewhere) return false and are never mistaken
+    /// for database failures.
+    /// </summary>
+    /// <remarks>
+    /// Order: (1) an unknown commit outcome or unconfirmed rollback ANYWHERE in the chain always wins (it can never
+    /// be reported as a conflict, timeout or outage); (2) otherwise a cancellation anywhere in the chain is NOT a
+    /// database failure (false: the caller keeps its cancellation handling); (3) otherwise a MySQL/EF exception.
+    /// </remarks>
+    public static bool TryClassifyDatabaseFailure(Exception exception, out PersistenceFailure failure)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        if (FindUncertainty(exception) is { } uncertain)
+        {
+            failure = uncertain;
+            return true;
+        }
+
+        var isDatabaseFailure = false;
+        var current = exception;
+        for (var depth = 0; current is not null && depth < MaxDepth; depth++, current = current.InnerException)
+        {
+            if (current is OperationCanceledException)
+            {
+                failure = null!;
+                return false;
+            }
+
+            isDatabaseFailure |= current is MySqlException or DbUpdateException;
+        }
+
+        failure = isDatabaseFailure ? Classify(exception) : null!;
+        return isDatabaseFailure;
+    }
+
     public static PersistenceFailure Classify(Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);
+
+        // D06: commit/rollback uncertainty takes precedence over any provider error nested inside or around it.
+        if (FindUncertainty(exception) is { } uncertain)
+        {
+            return uncertain;
+        }
 
         var current = exception;
         for (var depth = 0; current is not null && depth < MaxDepth; depth++, current = current.InnerException)
         {
             switch (current)
             {
-                case TransactionOutcomeUnknownException:
-                    return Failure(PersistenceFailureKind.TransactionOutcomeUnknown, null, null);
-                case TransactionRollbackUncertainException:
-                    return Failure(PersistenceFailureKind.RollbackUnconfirmed, null, null);
                 case DbUpdateConcurrencyException:
                     return Failure(PersistenceFailureKind.ConcurrencyConflict, null, null);
                 case MySqlException mySql:
@@ -83,6 +123,23 @@ public static partial class PersistenceErrorClassifier
         }
 
         return Failure(PersistenceFailureKind.Unexpected, null, null);
+    }
+
+    private static PersistenceFailure? FindUncertainty(Exception exception)
+    {
+        var current = exception;
+        for (var depth = 0; current is not null && depth < MaxDepth; depth++, current = current.InnerException)
+        {
+            switch (current)
+            {
+                case TransactionOutcomeUnknownException:
+                    return Failure(PersistenceFailureKind.TransactionOutcomeUnknown, null, null);
+                case TransactionRollbackUncertainException:
+                    return Failure(PersistenceFailureKind.RollbackUnconfirmed, null, null);
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

@@ -140,3 +140,13 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 
 ## 2026-11-18 — STEP 08-C live C#-to-Python smoke test
 - Lead approved (in session) the CI smoke-test workflow change and the result artifacts. Implemented: real FastAPI on loopback in the database job, 7 live tests, TRX/JUnit artifacts. Fixed: unbounded queued requests (bulkhead) and a readiness gate leak. Infrastructure 388, MySQL 52, Python 54; compiled only. Next: draft PR → first CI run → download `dotnet-test-results`, `python-test-results`, `mysql-compatibility-results` to verify the counts.
+
+## 2026-11-18 — STEP 09-A BE-M4-D06
+- Run #50 artifacts verified by digest (1,225 passed). Branch `feature/m4-persistence-concurrency` was created from `894fc4a`.
+- D06 is implemented but **uncommitted, awaiting source review**: persistence fallback Problem Details mapping, 4 live concurrency tests, 15 infrastructure cases.
+- Next: review → commit → draft PR → CI → verify 403 / 56.
+
+## 2026-11-18 — STEP 09-B BE-M4-D06 audit
+- Mapping lead-approved. 4 audit defects fixed (see doc 24).
+- Infrastructure 412, MySQL 56, Python 54.
+- Next: draft PR → CI → download the 3 artifacts and verify 1,253 → independent human review (G19). Do not merge automatically.

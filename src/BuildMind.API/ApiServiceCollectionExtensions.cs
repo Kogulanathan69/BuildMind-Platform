@@ -1,6 +1,7 @@
 using BuildMind.API.Configuration;
 using BuildMind.API.Errors;
 using BuildMind.API.Health;
+using BuildMind.Infrastructure.Integration;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using BuildMind.API.Security;
@@ -53,10 +54,17 @@ public static class ApiServiceCollectionExtensions
         services.AddHealthChecks()
             .AddCheck<MySqlReadinessCheck>(
                 "mysql", HealthStatus.Unhealthy, [Readiness.Tag], Readiness.RegistrationTimeout)
-            .AddTypeActivatedCheck<InternalServiceReadinessCheck>(
-                "python", HealthStatus.Degraded, [Readiness.Tag], Readiness.RegistrationTimeout, "python")
+            .AddCheck<PythonReadinessCheck>(
+                "python", HealthStatus.Degraded, [Readiness.Tag], Readiness.RegistrationTimeout)
             .AddTypeActivatedCheck<InternalServiceReadinessCheck>(
                 "rag", HealthStatus.Degraded, [Readiness.Tag], Readiness.RegistrationTimeout, "rag");
+
+        // BE-M4-D05: hardened typed client for the private Python service (only confirmed routes; G11 auth open).
+        services.AddSingleton<InternalServiceBulkhead>(); // STEP 08-C: bounded in-flight + queued calls per dependency
+        services.AddHttpClient<PythonServiceClient>()
+            .ConfigureHttpClient(client => client.Timeout = Timeout.InfiniteTimeSpan) // the client enforces TimeoutSeconds itself
+            .ConfigurePrimaryHttpMessageHandler(CreateInternalServiceHandler)
+            .RemoveAllLoggers(); // framework request logs would record internal URLs
 
         // BE-M4-D04: do not advertise the server implementation. This only affects Kestrel; a reverse proxy
         // or load balancer in front of the API may add its own headers and must be configured separately.
@@ -64,6 +72,28 @@ public static class ApiServiceCollectionExtensions
 
         return services;
     }
+
+    /// <summary>Upper bound on concurrent connections to one internal service (requests beyond it queue).</summary>
+    public const int MaxInternalConnectionsPerServer = 32;
+
+    /// <summary>
+    /// Transport for private internal services (BE-M4-D05): never follows redirects (a redirect could point
+    /// anywhere), never stores or sends cookies, no automatic decompression, bounded connect time and pooled
+    /// connections recycled so DNS changes are picked up.
+    /// </summary>
+    public static HttpMessageHandler CreateInternalServiceHandler() => new SocketsHttpHandler
+    {
+        AllowAutoRedirect = false,
+        UseCookies = false,
+        // STEP 08-B: never route private traffic through HTTP(S)_PROXY / ALL_PROXY or a system proxy.
+        UseProxy = false,
+        // STEP 08-B: bound concurrent connections, so a slow dependency cannot accumulate unbounded outstanding work.
+        MaxConnectionsPerServer = MaxInternalConnectionsPerServer,
+        AutomaticDecompression = System.Net.DecompressionMethods.None,
+        ConnectTimeout = TimeSpan.FromSeconds(5),
+        PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+        MaxResponseHeadersLength = 64, // KiB
+    };
 
     /// <summary>True only when a registered <c>IExceptionHandler</c> service handled the exception.</summary>
     public static bool ShouldSuppressFrameworkDiagnostics(ExceptionHandlerSuppressDiagnosticsContext context)

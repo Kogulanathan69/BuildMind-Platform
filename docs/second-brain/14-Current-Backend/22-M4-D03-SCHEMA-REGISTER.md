@@ -54,3 +54,32 @@ See EV-20261118-49. Additional notes:
   1. *Email uniqueness collation:* the table inherits the database default; `utf8mb4_0900_ai_ci` is case- and **accent-insensitive**. With M1 already normalizing (upper-casing), a binary collation (`utf8mb4_bin`) on `normalized_email` would make uniqueness exact. Needs M1 + M4 agreement and a follow-up migration.
   2. *Head number consistency:* `current_revision_number` is guaranteed only by the repository. A database guarantee would need a 3-column FK `(project_id, current_revision_id, current_revision_number)` → a 3-column alternate key on revisions. Optional; follow-up migration if wanted.
 - Deployment: ranged scripts only, explicit M4-lead authorization per database, backup first, destructive rollback warning (`tools/database/mysql/README.md`). Nothing has been deployed beyond disposable CI databases.
+
+## STEP 06-F — reassessment and proposed M1 contract change (2026-11-18)
+
+**Result: no repository unblocked; no code written.** Domain and Application are unchanged since `fdf7baa` (EV-20261118-54).
+
+### Proposal for M1 (owner decision; M4 will not edit M1 files)
+Add validating rehydration factories, so persisted rows can be rebuilt without reflection, mirroring M5's `ArchitectRequest.Rehydrate`:
+
+```csharp
+// BuildMind.Domain.Entities.User
+public static User Rehydrate(Guid id, string email, string normalizedEmail, string passwordHash,
+    string? fullName, string? phoneNumber, bool isActive, DateTimeOffset createdAtUtc);
+// BuildMind.Domain.Entities.Project
+public static Project Rehydrate(Guid id, Guid ownerId, string name, string? projectType,
+    string? locationReference, string status, long revision, DateTimeOffset createdAtUtc, DateTimeOffset? updatedAtUtc);
+```
+
+Expected validation: non-empty ids; required strings non-blank; `revision >= 1`; `updatedAtUtc` not before `createdAtUtc`; timestamps kept as UTC.
+
+### Further M1 decisions needed before the M1 repositories
+1. **`IProjectRepository.UpdateAsync(project, ownerId, expectedRevision)`**: who produces the next revision? The domain `Project` cannot change `Revision`/`UpdatedAtUtc`. M4 can increment `revision` in the database compare-and-set (`WHERE id = @id AND owner_id = @owner AND revision = @expected`), but the caller's object would then be stale. Options: return the updated project, or add a domain method that yields the next state.
+2. **`IUserRepository.UpdateAsync(user)` has no concurrency token**: concurrent profile and password updates would silently overwrite each other (last writer wins). Options: accept it explicitly, or add an expected-revision parameter (needs a `users.revision` column, so a new migration).
+3. **`normalized_email` collation** (open since STEP 06-E3): binary versus inherited `ai_ci`.
+
+### Ready on the M4 side once these exist
+Tables `users`/`projects` and their indexes are already migrated. The repositories would use the same patterns as `RequirementRevisionRepository`: explicit mapper, owner-filtered queries (`GetByIdAndOwnerAsync`, `GetByOwnerIdAsync` ordered by `created_at_utc`, `id`), CAS update, duplicate email → safe translation without the value, `TransactionRunner`, no reflection.
+
+### Unchanged blockers
+Report (`IReportRepository`) needs persisted plan/confirmation/validation/land sources (M2/M3/M6) and the snapshot hashing decision. ArchitectRequest needs G12. M3 `IPlanRevisionStore` and candidate operations need G20.

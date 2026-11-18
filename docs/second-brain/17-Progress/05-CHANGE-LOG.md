@@ -34,4 +34,6 @@
 
 2026-11-18 — STEP 06-A (uncommitted): BE-M4-D03 schema records/configurations, requirement-revision mapper and repository, database-free and live tests, D03 register (22). PR #21: T06 provider-version fix `b5208bc` (CI red, under investigation). Evidence EV-20261118-47..48 (renumbered from 45..46 because the D02b branch already uses those IDs).
 
+2026-11-18 — STEP 06-B: T06 distinguishes the provider's NuGet package version (10.0.12) from its assembly version (26.10.0.0); evidence EV-20261118-45..46 (on the D02b branch).
+
 2026-11-18 — STEP 06-C/06-D: D03 audit fixes (truthful conflict translation, identity-reuse detection, project-FK-only `ProjectNotFound`, version length guard, constraint-table extraction, explicit composite-FK index), CI migration generation/verification step and migration tests, merge of D02b `59c4d08`. Evidence EV-20261118-49.

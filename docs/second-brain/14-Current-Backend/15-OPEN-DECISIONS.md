@@ -99,4 +99,6 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
 
 - 2026-11-18 (STEP 06-E3): PR #21 closed as superseded by PR #22 (squash, 0 reviews; G19). New D03 decisions: `normalized_email` collation (binary versus inherited `ai_ci`); optional database constraint for `current_revision_number`. Still open: G03, G17 (local execution), G19 (reviews), G20, M1 rehydration factories, Report/ArchitectRequest sources (G12).
 
+- 2026-11-18 (STEP 06-F): PR #23 merged (0 reviews, G19). **Decisions requested from M1:** `User`/`Project` rehydration factories (signatures in 22); revision semantics of `IProjectRepository.UpdateAsync`; concurrency for `IUserRepository.UpdateAsync` (lost-update risk). Still open: `normalized_email` collation, head-number constraint, G03, G17, G19, G20, G12.
+
 - 2026-11-18 (STEP 07-A, D04): readiness implemented per C11b. Still blocking the rest of D04: **C6** (frontend origin), **C7** (OpenAPI package), **A1/A2** (token storage, password hashing; M1 + frontend), the JwtBearer package approval, and M2 upload limits. Unchanged: G03, G12, G17, G19 (PR #22/#23 merged with 0 reviews), G20, M1 rehydration factories (D03).

@@ -40,6 +40,8 @@
 
 2026-11-18 — STEP 06-E3: committed the reviewed initial migration `20261118133137_InitialFeatureSchema`; tests expect it; EnsureCreated fallback removed; migration deployment safety (authorization, destructive rollback) documented. Evidence EV-20261118-50..52.
 
+2026-11-18 — STEP 06-F (docs only, uncommitted): PR #23 evidence; reassessment that no repository is unblocked; proposed M1 contract change and decisions. Evidence EV-20261118-53..54.
+
 2026-11-18 — STEP 07-A (uncommitted): BE-M4-D04 readiness (`/health/ready`, C11b) and safe response headers, security regression tests, security and API docs. Evidence EV-20261118-55.
 
 2026-11-18 — STEP 07-B: D04 audit fixes (EF ConnectionError suppression, readiness deadline + single-flight gate + deferred scope disposal, explicit status mapping), readiness behaviour and live tests. Evidence EV-20261118-56.

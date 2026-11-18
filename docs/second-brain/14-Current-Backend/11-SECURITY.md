@@ -32,6 +32,8 @@ Start-up failure tests must prove the failure is an `OptionsValidationException`
 
 - (D03) Repositories filter every query by project; ports are not authorization guards, so callers must establish ownership first. Constraint violations are translated without values (for example a duplicate email); stored customer content is never echoed in errors. FKs use RESTRICT (no cascading deletes).
 
+- (STEP 06-F) Risk noted for M1: `IUserRepository.UpdateAsync` has no concurrency check, so concurrent profile/password/activation updates would be last-writer-wins. Decide before the user repository is implemented. Password hashes are stored only as provided (`password_hash` varchar(512)); hashing (A1/A2) is not implemented by M4.
+
 ### Implemented controls — BE-M4-D04 (2026-11-18, uncommitted)
 
 - **Readiness** `GET /health/ready` (C11b): MySQL mandatory (503 when not configured or unreachable); Python/RAG Degraded and never Healthy until real checks exist (D05). Response = names, statuses and fixed reason codes; no hosts, users, exception text or connection details. `/health` liveness unchanged and dependency-free.

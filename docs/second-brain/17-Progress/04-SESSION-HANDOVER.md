@@ -113,3 +113,7 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 ## 2026-11-18 — STEP 06-C/06-D
 - D03 audit fixes, CI migration generation step, migration tests; merged D02b `59c4d08` into D03 (normal merge). Tests 279 / 43, compiled only.
 - Next (lead): open a draft PR D03 → `feature/m4-mysql-compatibility` (it depends on PR #21); download the `buildmind-migration/` artifact; review it; then M4 commits the migration.
+
+## 2026-11-18 — STEP 06-E3 initial migration
+- PR #22 merged (`95b1e8a`), PR #21 closed superseded; post-merge CI green; MySQL 43/43.
+- Branch `feature/m4-initial-database-migration`: committed `20261118133137_InitialFeatureSchema` (byte-identical), tests switched to the committed migration, deployment safety docs. Next: draft PR → CI must show the verify-only path and 43/43; independent review; collation and head-number decisions.

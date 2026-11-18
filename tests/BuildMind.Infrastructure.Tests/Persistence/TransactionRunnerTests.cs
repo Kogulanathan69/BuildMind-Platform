@@ -39,17 +39,43 @@ public sealed class TransactionRunnerTests
     }
 
     [Fact]
-    public async Task Rollback_failure_does_not_mask_the_original_exception()
+    public async Task Rollback_failure_is_reported_as_unconfirmed_and_keeps_the_original_exception()
     {
         var source = new FakeTransactionSource { FailRollback = true };
+        var original = new InvalidOperationException("synthetic");
+
+        var thrown = await Assert.ThrowsAsync<TransactionRollbackUncertainException>(() =>
+            new TransactionRunner(source).ExecuteAsync<int>(_ => throw original, CancellationToken.None));
+
+        Assert.Same(original, thrown.InnerException);
+        Assert.IsType<InvalidOperationException>(thrown.RollbackFailure);
+        Assert.Equal(0, source.Transaction!.Commits);
+        Assert.Equal(1, source.Discards);
+        Assert.True(source.Transaction.Disposed);
+    }
+
+    [Fact]
+    public async Task Disposal_failure_never_replaces_the_operation_failure()
+    {
+        var source = new FakeTransactionSource { FailDispose = true };
         var original = new InvalidOperationException("synthetic");
 
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             new TransactionRunner(source).ExecuteAsync<int>(_ => throw original, CancellationToken.None));
 
         Assert.Same(original, thrown);
-        Assert.Equal(1, source.Discards);
-        Assert.True(source.Transaction!.Disposed);
+        Assert.Equal(1, source.Transaction!.Rollbacks);
+    }
+
+    [Fact]
+    public async Task Disposal_failure_after_commit_does_not_turn_success_into_failure()
+    {
+        var source = new FakeTransactionSource { FailDispose = true };
+
+        var result = await new TransactionRunner(source).ExecuteAsync(_ => Task.FromResult(7), CancellationToken.None);
+
+        Assert.Equal(7, result);
+        Assert.Equal(1, source.Transaction!.Commits);
     }
 
     [Fact]
@@ -148,6 +174,8 @@ public sealed class TransactionRunnerTests
 
         public bool FailRollback { get; init; }
 
+        public bool FailDispose { get; init; }
+
         public int BeginCount { get; private set; }
 
         public int Discards { get; private set; }
@@ -163,12 +191,12 @@ public sealed class TransactionRunnerTests
             cancellationToken.ThrowIfCancellationRequested();
             BeginCount++;
             LastIsolationLevel = isolationLevel;
-            Transaction = new FakeTransaction(FailCommit, FailRollback);
+            Transaction = new FakeTransaction(FailCommit, FailRollback, FailDispose);
             return Task.FromResult<IDbContextTransaction>(Transaction);
         }
     }
 
-    private sealed class FakeTransaction(bool failCommit, bool failRollback) : IDbContextTransaction
+    private sealed class FakeTransaction(bool failCommit, bool failRollback, bool failDispose) : IDbContextTransaction
     {
         public Guid TransactionId { get; } = Guid.NewGuid();
 
@@ -209,7 +237,9 @@ public sealed class TransactionRunnerTests
         public ValueTask DisposeAsync()
         {
             Disposed = true;
-            return ValueTask.CompletedTask;
+            return failDispose
+                ? throw new InvalidOperationException("synthetic dispose failure")
+                : ValueTask.CompletedTask;
         }
     }
 }

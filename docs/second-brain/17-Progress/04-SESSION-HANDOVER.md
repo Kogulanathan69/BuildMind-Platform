@@ -86,3 +86,30 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Review fixed 6 issues (EV-20261118-29). Commit `2ee8324`; merged `develop` `fef5814` → `3ff94e0`; pushed, remote matches.
 - Builds 0/0; no vulnerable packages; pytest 54 passed. **No C# test executed yet; no database touched; spike not run.**
 - Pending (lead): create the draft PR (no CLI here), let the PR CI run and share the log archive or counts; approve the database CI job ([19](../14-Current-Backend/19-DATABASE-CI-PROPOSAL.md)); confirm G03 fits the public repo; G03 licence review; independent review of PR #8/#10/#11 and this PR.
+
+## 2026-11-18 — STEP 05-D/E BE-M4-D02b
+- PR #18 merged `940a5b7` (0 reviews; CI passed, counts not retrieved). `develop` fast-forwarded to `065f929`; new branch `feature/m4-mysql-compatibility`; previous branches kept.
+- Commit `947d8f8`: persistence corrections, `database-compatibility` CI job, generated-migration context, T21–T24. Builds 0/0, no vulnerable packages, pytest 54.
+- **Pending:** PR creation (manual) → first live MySQL run; then record the actual results (MySQL version, column types, TLS, grants, cleanup, counts). Don't mark D02 complete. G03 open.
+
+## 2026-11-18 — STEP 05-E8 PR #21 CI recovery
+- PR #21 first run: standard jobs passed (C# 210 + 485, M3 246, Python 54); the database job failed before the tests (NETSDK1004 + SDK 11.0.100). Fixed in the database job only (SDK pin, restore, assets check, build, grant preflight). **MySQL tests still not executed**; awaiting the re-run. G03 and independent review open.
+
+## 2026-11-18 — STEP 05-E9 MySQL failure recovery
+- Live run 24/26. T19 fixed (`datetime(6)` convention); T06 = provider limitation, kept failing pending a lead decision (options A/B/C in open decisions); T25 added. MySQL tests 27; infrastructure 214 cases. Re-run pending. G03 open; independent reviews outstanding.
+
+## 2026-11-18 — STEP 05-E10
+- Run 44296302240: 25/27 (T06, T19 failed; T21, T25 passed). Option B approved; T06 acceptance revised to pin the limitation; T19 fixed with a UTC converter; T19D diagnostics; migration safety procedure documented. Infrastructure 221 cases; MySQL 28 tests. Re-run pending. G03 and independent reviews open.
+
+## 2026-11-18 — STEP 05-E11 final D02b evidence
+- Run 44301027243: all jobs green; MySQL 28/28 on 8.4.13. Timestamp root cause = provider's unconverted `DateTimeOffset` read path (T19D). Reviewer checklist (20) and D03 requirements (21) prepared; no schema or migration created.
+- D02 **not complete**: independent reviews, G03 licensing and public-repository acceptance, T06 version-guard follow-up, owner mapping decisions.
+
+## 2026-11-18 — STEP 06-A BE-M4-D03 (uncommitted)
+- PR #21 open (0 reviews). T06 fix `b5208bc` pushed; its CI failed in the MySQL tests (cause unconfirmed; artifact needed).
+- D03 branch from `b5208bc`: schema (4 tables), mapper, M5 requirement-revision repository, tests (259 / 38), compiled only. Migration not generated (G17). Blocked items in [22](../14-Current-Backend/22-M4-D03-SCHEMA-REGISTER.md).
+- Next (lead): review the diff; supply the run-44305808458 artifact; approve a migration-generation path; M1 rehydration factories.
+
+## 2026-11-18 — STEP 06-C/06-D
+- D03 audit fixes, CI migration generation step, migration tests; merged D02b `59c4d08` into D03 (normal merge). Tests 279 / 43, compiled only.
+- Next (lead): open a draft PR D03 → `feature/m4-mysql-compatibility` (it depends on PR #21); download the `buildmind-migration/` artifact; review it; then M4 commits the migration.

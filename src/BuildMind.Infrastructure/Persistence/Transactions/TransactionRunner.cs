@@ -39,14 +39,27 @@ internal sealed class TransactionOutcomeUnknownException(Exception innerExceptio
     : Exception("The database transaction outcome is unknown.", innerException);
 
 /// <summary>
+/// The operation failed and the rollback request also failed, so the rollback is NOT confirmed. Nothing was
+/// committed by this helper, but the caller must not report a clean rollback. The operation failure is the
+/// inner exception; the rollback failure is kept separately.
+/// </summary>
+internal sealed class TransactionRollbackUncertainException(Exception operationFailure, Exception rollbackFailure)
+    : Exception("The operation failed and the database rollback could not be confirmed.", operationFailure)
+{
+    public Exception RollbackFailure { get; } = rollbackFailure;
+}
+
+/// <summary>
 /// Minimal internal helper that runs one atomic persistence operation in one database transaction
 /// (BE-M4-D02a). It is not a unit-of-work or repository abstraction and never retries.
 /// </summary>
 /// <remarks>
 /// Semantics: begin → operation → commit. Any exception from the operation (including cancellation)
-/// rolls back and is rethrown unchanged. Cancellation is honoured until commit starts; commit itself is not
-/// cancelled midway, and a failed commit raises <see cref="TransactionOutcomeUnknownException"/>.
-/// The transaction is always disposed. Nested use on the same context is rejected rather than silently joined.
+/// rolls back and is rethrown unchanged once the rollback is confirmed; if the rollback itself fails,
+/// <see cref="TransactionRollbackUncertainException"/> is thrown with the original failure as inner exception.
+/// Cancellation is honoured until commit starts; commit itself is not cancelled midway, and a failed commit
+/// raises <see cref="TransactionOutcomeUnknownException"/>. The transaction is always disposed, and a disposal
+/// failure never replaces the outcome. Nested use on the same context is rejected rather than silently joined.
 /// Operations must not call external services inside the transaction. After a rollback or an unknown commit
 /// outcome all tracked entities are discarded, so stale state can never be saved later in the same scope;
 /// callers re-read what they need. A retry is the caller's decision and requires an idempotent operation
@@ -68,33 +81,46 @@ internal sealed class TransactionRunner(IDbTransactionSource source)
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        await using var transaction = await source.BeginTransactionAsync(isolationLevel, cancellationToken)
+        var transaction = await source.BeginTransactionAsync(isolationLevel, cancellationToken)
             .ConfigureAwait(false);
-
-        T result;
         try
         {
-            result = await operation(cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-        }
-        catch
-        {
-            await RollBackQuietlyAsync(transaction).ConfigureAwait(false);
-            source.DiscardTrackedChanges();
-            throw;
-        }
+            T result;
+            try
+            {
+                result = await operation(cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            catch (Exception operationFailure)
+            {
+                var rollbackFailure = await TryRollBackAsync(transaction).ConfigureAwait(false);
+                source.DiscardTrackedChanges();
+                if (rollbackFailure is not null)
+                {
+                    // Never present an unconfirmed rollback as a normal one; the original failure stays inner.
+                    throw new TransactionRollbackUncertainException(operationFailure, rollbackFailure);
+                }
 
-        try
-        {
-            await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (Exception exception)
-        {
-            source.DiscardTrackedChanges();
-            throw new TransactionOutcomeUnknownException(exception);
-        }
+                throw;
+            }
 
-        return result;
+            try
+            {
+                await transaction.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                source.DiscardTrackedChanges();
+                throw new TransactionOutcomeUnknownException(exception);
+            }
+
+            return result;
+        }
+        finally
+        {
+            // Disposal must never replace the original exception (or turn a committed success into a failure).
+            await DisposeQuietlyAsync(transaction).ConfigureAwait(false);
+        }
     }
 
     public Task ExecuteAsync(
@@ -114,16 +140,30 @@ internal sealed class TransactionRunner(IDbTransactionSource source)
             isolationLevel);
     }
 
-    private static async Task RollBackQuietlyAsync(IDbContextTransaction transaction)
+    /// <summary>Returns the rollback failure, or null when the rollback was confirmed.</summary>
+    private static async Task<Exception?> TryRollBackAsync(IDbContextTransaction transaction)
     {
         try
         {
             await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            return null;
+        }
+        catch (Exception exception)
+        {
+            return exception;
+        }
+    }
+
+    private static async Task DisposeQuietlyAsync(IDbContextTransaction transaction)
+    {
+        try
+        {
+            await transaction.DisposeAsync().ConfigureAwait(false);
         }
         catch (Exception)
         {
-            // The original exception is what callers need. If rollback fails (for example the connection
-            // dropped), the server discards the uncommitted transaction and disposal releases it.
+            // Nothing safe can be reported here without hiding the real outcome. An uncommitted transaction
+            // is discarded by the server when its connection is reset or closed.
         }
     }
 }

@@ -3,7 +3,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace BuildMind.Persistence.IntegrationTests.Model;
 
-/// <summary>Hand-written spike migration (test-only, synthetic schema). Column types are left to the provider.</summary>
+/// <summary>
+/// Hand-written spike migration (test-only, synthetic schema). Column types are left to the provider except
+/// timestamps, which use <c>datetime(6)</c> to match the M4 model convention (MySqlModelConventions).
+/// </summary>
 [DbContext(typeof(SpikeDbContext))]
 [Migration(Id)]
 public sealed class SpikeInitialMigration : Migration
@@ -19,7 +22,7 @@ public sealed class SpikeInitialMigration : Migration
                 id = table.Column<Guid>(nullable: false),
                 name = table.Column<string>(maxLength: 100, nullable: false),
                 revision = table.Column<long>(nullable: false),
-                created_at_utc = table.Column<DateTimeOffset>(nullable: false),
+                created_at_utc = table.Column<DateTimeOffset>(type: "datetime(6)", nullable: false),
             },
             constraints: table => table.PrimaryKey("pk_spike_owners", x => x.id));
 

@@ -297,3 +297,19 @@ G03: **CONDITIONAL INTERNAL DEVELOPMENT AND COMPATIBILITY TESTING AUTHORIZATION 
 **Not done:** feature mappings and migrations (need owner agreement), repository adapters, readiness and database health integration, and execution of any database test. MySQL 8.4 compatibility is **UNVERIFIED**.
 
 **STEP 05-C review corrections (2026-11-18, commit `2ee8324`):** TLS is mandatory (`SslMode` ≥ Required; accounts `REQUIRE SSL`; production should use `VerifyFull`); tracked entities are discarded after a rollback or an unknown commit; `PersistenceLog` restores safe failure diagnostics; the retry semantics of `IsTransient` are documented; the spike least-privilege probe no longer selects an existing database; the account SQL checks `partial_revokes`. Test inventory: `BuildMind.Infrastructure.Tests` 113 methods / 196 cases (66 new database-free cases in D02a); spike 22. **Not proven by the spike:** CLI-generated migrations with a model snapshot (the spike migration is hand-written; the CI proposal adds a `dotnet-ef` tooling smoke check only).
+
+## BE-M4-D02b — 2026-11-18 (commit `947d8f8`, live results pending)
+
+Corrections: 1205 statement-level rollback semantics; unconfirmed rollback surfaced; disposal can't mask outcomes; `VerifyFull` required for non-loopback servers and non-Development environments. The CI job `database-compatibility` is implemented (see EV-20261118-34). It proves the CLI migration path on the synthetic `GeneratedSpikeDbContext` (T21) separately from the hand-written migration (T04–T06). **MySQL 8.4 compatibility remains UNVERIFIED until the job's actual results are recorded.** G03 open.
+
+### Live results — 2026-11-18 (run 44292102702, MySQL 8.4.13)
+
+24/26 passed. Verified on the live server: connectivity, TLS 1.2, plaintext refusal, least privilege, scoped wildcard grant, CRUD, FK and unique constraints with safe translation, commit and rollback, optimistic concurrency, single-winner compare-and-set, 1205 semantics, GUID `char(36)`, `decimal(18,4)`, JSON (semantic), the CLI-generated migration path, and index use. **Corrected:** timestamp precision (`datetime(6)` convention). **Provider limitation:** idempotent migration scripts are not MySQL-executable, so deployment uses ranged scripts (T25). MySQL 8.4 compatibility is therefore **largely verified, with one open limitation**; the re-run after the corrections is pending. G03 open (licence).
+
+### Run 44296302240 and STEP 05-E10 (2026-11-18)
+
+25/27. **Second provider finding:** `DateTimeOffset` loses microseconds even in `datetime(6)`, so M4 stores timestamps as UTC `DateTime` through a converter (T19D traces the layers). Deployment: Option B (ranged scripts); idempotent scripts are a pinned provider limitation (T06). Both findings must be reassessed on any provider upgrade and weigh on the G03 provider-acceptance decision.
+
+### Final D02b evidence — run 44301027243 (2026-11-18)
+
+**28/28 passed on MySQL 8.4.13** (EV-20261118-43). **Correction to earlier wording:** the `DateTimeOffset` precision loss in `datetime(6)` is in the provider's **unconverted materialisation (read) path**. Storage, `DateTime`/`DateTimeOffset` parameters and EF writes all keep microseconds (T19D). The earlier phrase "`DateTimeOffset` loses microseconds even in `datetime(6)`" refers to that read path, not to writing. Mitigation: the UTC converter. The **compatibility spike passes** for internal development with two documented provider limitations (idempotent scripts; unconverted `DateTimeOffset` reads). **G03 stays OPEN**: commercial licensing and public-repository acceptance are unresolved, and provider acceptance is the lead's decision.

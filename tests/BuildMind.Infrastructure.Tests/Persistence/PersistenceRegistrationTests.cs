@@ -86,6 +86,41 @@ public sealed class PersistenceRegistrationTests
     }
 
     [Fact]
+    public async Task Production_rejects_unverified_tls_at_startup()
+    {
+        await using var factory = new BuildMindApiFactory(
+            "Production",
+            new Dictionary<string, string?>
+            {
+                ["Database:Enabled"] = "true",
+                ["ConnectionStrings:BuildMind"] = "Server=127.0.0.1;Port=1;Database=buildmind_synthetic;User ID=bm_synthetic;SslMode=Required;Password=" + Secret,
+            });
+
+        var exception = Record.Exception(() => factory.CreateClient());
+
+        var validation = ExceptionChains.RequireStartupOptionsValidationFailure(exception, factory.Logs);
+        Assert.Contains(validation.Failures, f => f.Contains("VerifyFull", StringComparison.Ordinal));
+        Assert.DoesNotContain(Secret, validation.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Development_accepts_encrypted_loopback_connection_without_identity_verification()
+    {
+        await using var factory = new BuildMindApiFactory(
+            "Development",
+            new Dictionary<string, string?>
+            {
+                ["Database:Enabled"] = "true",
+                ["ConnectionStrings:BuildMind"] = "Server=127.0.0.1;Port=1;Database=buildmind_synthetic;User ID=bm_synthetic;SslMode=Required;Password=" + Secret,
+            });
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/health");
+
+        Assert.True(response.IsSuccessStatusCode);
+    }
+
+    [Fact]
     public async Task Enabled_database_builds_a_mysql_context_without_connecting_or_migrating()
     {
         await using var factory = new BuildMindApiFactory(
@@ -104,7 +139,10 @@ public sealed class PersistenceRegistrationTests
         Assert.StartsWith("MySql", context.Database.ProviderName, StringComparison.Ordinal);
         Assert.Equal(45, context.Database.GetCommandTimeout());
         Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
-        Assert.Empty(context.Model.GetEntityTypes());      // no feature mappings in D02a
+        // D03: exactly the approved persistence records (was "no entity types" in D02a).
+        Assert.Equal(
+            new[] { "project_requirement_heads", "projects", "requirement_revisions", "users" },
+            context.Model.GetEntityTypes().Select(e => e.GetTableName()).OrderBy(t => t, StringComparer.Ordinal));
         Assert.Empty(context.Database.GetMigrations());    // no migrations, none applied at start-up
         Assert.All(factory.Logs.Entries, e => Assert.DoesNotContain(Secret, e.AllText, StringComparison.Ordinal));
     }
@@ -119,6 +157,33 @@ public sealed class PersistenceRegistrationTests
         Assert.All(MySqlContextOptions.SuppressedFailureEvents, eventId =>
             Assert.Equal(WarningBehavior.Ignore, core.WarningsConfiguration.GetBehavior(eventId)));
         Assert.False(core.IsSensitiveDataLoggingEnabled);
+    }
+
+    [Fact]
+    public async Task Requirement_revision_repository_is_registered_scoped_and_needs_an_enabled_database()
+    {
+        await using var enabled = new BuildMindApiFactory(
+            "Production",
+            new Dictionary<string, string?>
+            {
+                ["Database:Enabled"] = "true",
+                ["ConnectionStrings:BuildMind"] = DatabaseOptionsTests.ValidConnection,
+            });
+        _ = enabled.Services;
+        using var first = enabled.Services.CreateScope();
+        using var second = enabled.Services.CreateScope();
+
+        var repository = first.ServiceProvider
+            .GetRequiredService<BuildMind.Application.Features.Requirements.Abstractions.IRequirementRevisionRepository>();
+        Assert.IsType<BuildMind.Infrastructure.Persistence.Repositories.Requirements.RequirementRevisionRepository>(repository);
+        Assert.NotSame(repository, second.ServiceProvider
+            .GetRequiredService<BuildMind.Application.Features.Requirements.Abstractions.IRequirementRevisionRepository>());
+
+        await using var disabled = new BuildMindApiFactory("Production");
+        using var scope = disabled.Services.CreateScope();
+        var refused = Record.Exception(() => scope.ServiceProvider
+            .GetRequiredService<BuildMind.Application.Features.Requirements.Abstractions.IRequirementRevisionRepository>());
+        Assert.Equal(PersistenceServiceCollectionExtensions.DisabledMessage, Assert.IsType<InvalidOperationException>(refused).Message);
     }
 
     [Fact]

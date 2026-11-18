@@ -28,8 +28,10 @@ public sealed class DatabaseOptions
     /// <summary>
     /// Returns validation failures for these options and the supplied connection string. Messages name
     /// configuration keys only. The connection string is inspected only when the database is enabled.
+    /// <paramref name="requireServerIdentityVerification"/> (set for every non-Development environment by the
+    /// API) demands <c>SslMode=VerifyFull</c> even for a loopback server.
     /// </summary>
-    public IReadOnlyList<string> Validate(string? connectionString)
+    public IReadOnlyList<string> Validate(string? connectionString, bool requireServerIdentityVerification = false)
     {
         var failures = new List<string>();
 
@@ -41,7 +43,7 @@ public sealed class DatabaseOptions
 
         if (Enabled)
         {
-            failures.AddRange(ValidateConnectionString(connectionString, ConnectionStringKey));
+            failures.AddRange(ValidateConnectionString(connectionString, ConnectionStringKey, requireServerIdentityVerification));
         }
 
         return failures;
@@ -50,8 +52,13 @@ public sealed class DatabaseOptions
     /// <summary>
     /// Validates a MySQL connection string without echoing any part of it. Requires an explicit server,
     /// database, non-root user and TLS; rejects settings that weaken credential or file-system safety.
+    /// The server identity must be verified (<c>SslMode=VerifyFull</c>) whenever the server is not on the
+    /// loopback interface, or when <paramref name="requireServerIdentityVerification"/> is set.
     /// </summary>
-    public static IReadOnlyList<string> ValidateConnectionString(string? connectionString, string key)
+    public static IReadOnlyList<string> ValidateConnectionString(
+        string? connectionString,
+        string key,
+        bool requireServerIdentityVerification = false)
     {
         if (string.IsNullOrWhiteSpace(connectionString))
         {
@@ -96,6 +103,13 @@ public sealed class DatabaseOptions
         {
             failures.Add($"{key} must set SslMode to Required, VerifyCA or VerifyFull.");
         }
+        else if (builder.SslMode != MySqlSslMode.VerifyFull
+            && (requireServerIdentityVerification || !IsLoopbackOnly(builder.Server)))
+        {
+            // Required/VerifyCA encrypt but do not prove the server's identity (host name): a network
+            // attacker could impersonate it. Only a loopback server outside production may skip this.
+            failures.Add($"{key} must set SslMode to VerifyFull outside local development.");
+        }
 
         if (builder.PersistSecurityInfo)
         {
@@ -108,5 +122,18 @@ public sealed class DatabaseOptions
         }
 
         return failures;
+    }
+
+    /// <summary>True when every configured host (comma-separated) is a loopback address or "localhost".</summary>
+    private static bool IsLoopbackOnly(string? server)
+    {
+        if (string.IsNullOrWhiteSpace(server))
+        {
+            return false;
+        }
+
+        return server.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .All(host => string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
+                || (System.Net.IPAddress.TryParse(host.Trim('[', ']'), out var address) && System.Net.IPAddress.IsLoopback(address)));
     }
 }

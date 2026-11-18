@@ -52,8 +52,19 @@ public sealed class SpikeDbContext(DbContextOptions<SpikeDbContext> options) : D
         return new SpikeDbContext(builder.Options);
     }
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder) =>
+        BuildMind.Infrastructure.Persistence.MySqlModelConventions.Apply(configurationBuilder);
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder) => SpikeModel.Configure(modelBuilder);
+}
+
+/// <summary>The synthetic spike model, shared by the hand-written and the CLI-generated migration contexts.</summary>
+public static class SpikeModel
+{
+    public static void Configure(ModelBuilder modelBuilder)
     {
+        ArgumentNullException.ThrowIfNull(modelBuilder);
+
         modelBuilder.Entity<SpikeOwner>(owner =>
         {
             owner.ToTable("spike_owners");
@@ -82,6 +93,38 @@ public sealed class SpikeDbContext(DbContextOptions<SpikeDbContext> options) : D
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }
+}
+
+/// <summary>Diagnostic-only row for T19D (table <c>ts_probe</c> is created by the test itself).</summary>
+public sealed class TimestampProbe
+{
+    public int Id { get; set; }
+
+    public DateTimeOffset Ts { get; set; }
+}
+
+/// <summary>
+/// Diagnostic-only context WITHOUT the M4 timestamp converter, used to record the provider's own
+/// DateTimeOffset mapping behaviour (T19D). Never used for anything else.
+/// </summary>
+public sealed class RawTimestampContext(DbContextOptions<RawTimestampContext> options) : DbContext(options)
+{
+    public DbSet<TimestampProbe> Probes => Set<TimestampProbe>();
+
+    public static RawTimestampContext Create(string connectionString) =>
+        new(new DbContextOptionsBuilder<RawTimestampContext>()
+            .UseMySQL(connectionString)
+            .EnableSensitiveDataLogging(false)
+            .Options);
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<TimestampProbe>(probe =>
+        {
+            probe.ToTable("ts_probe");
+            probe.HasKey(p => p.Id);
+            probe.Property(p => p.Id).HasColumnName("id").ValueGeneratedNever();
+            probe.Property(p => p.Ts).HasColumnName("ts").HasColumnType("datetime(6)");
+        });
 }
 
 /// <summary>Adapts the production transaction helper's seam to the spike context.</summary>

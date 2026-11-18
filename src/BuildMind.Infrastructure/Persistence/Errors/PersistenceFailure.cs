@@ -16,6 +16,7 @@ public enum PersistenceFailureKind
     ConnectionFailure,
     ConcurrencyConflict,
     TransactionOutcomeUnknown,
+    RollbackUnconfirmed,
     Unexpected,
 }
 
@@ -26,17 +27,31 @@ public enum PersistenceFailureKind
 /// key → <c>CONFLICT</c>) and keep feature context, so not every database error maps to one HTTP status.
 /// </summary>
 /// <remarks>
-/// <see cref="IsTransient"/> means only that the server rolled the database work back without committing
-/// (deadlock, lock timeout). It does NOT make the business operation safe to repeat: a retry is allowed only
+/// <see cref="IsTransient"/> means only that the condition (lock contention) may clear later. It does NOT make
+/// the business operation safe to repeat: a retry is allowed only after the whole transaction was rolled back,
 /// for an idempotent operation (idempotency key or compare-and-set) with no external side effects inside the
 /// transaction, using freshly read state, with a bounded number of attempts.
+/// <see cref="ServerRolledBackTransaction"/> is true only for a deadlock (1213), where InnoDB rolls back the
+/// whole transaction. A lock wait timeout (1205) rolls back only the failed statement by default
+/// (<c>innodb_rollback_on_timeout=OFF</c>): the transaction stays open and must still be rolled back, which
+/// <c>TransactionRunner</c> does.
 /// </remarks>
 public sealed record PersistenceFailure(
     PersistenceFailureKind Kind,
     string DefaultCode,
     bool IsTransient,
     int? ProviderErrorNumber,
-    string? ConstraintName);
+    string? ConstraintName)
+{
+    public bool ServerRolledBackTransaction => Kind == PersistenceFailureKind.Deadlock;
+
+    /// <summary>
+    /// Table of a duplicate-key constraint when MySQL reports it (<c>'table.key'</c>). Needed because MySQL names
+    /// every primary key <c>PRIMARY</c>, so the key name alone cannot tell which table's key was violated.
+    /// A schema name only; never a value.
+    /// </summary>
+    public string? ConstraintTable { get; init; }
+}
 
 /// <summary>Classifies EF Core / MySQL exceptions into <see cref="PersistenceFailure"/> (BE-M4-D02a).</summary>
 public static partial class PersistenceErrorClassifier
@@ -54,6 +69,8 @@ public static partial class PersistenceErrorClassifier
             {
                 case TransactionOutcomeUnknownException:
                     return Failure(PersistenceFailureKind.TransactionOutcomeUnknown, null, null);
+                case TransactionRollbackUncertainException:
+                    return Failure(PersistenceFailureKind.RollbackUnconfirmed, null, null);
                 case DbUpdateConcurrencyException:
                     return Failure(PersistenceFailureKind.ConcurrencyConflict, null, null);
                 case MySqlException mySql:
@@ -81,8 +98,11 @@ public static partial class PersistenceErrorClassifier
             PersistenceFailureKind.ForeignKeyViolation => Extract(ForeignKeyName(), providerMessage),
             _ => null,
         };
+        var table = kind == PersistenceFailureKind.DuplicateKey
+            ? Extract(DuplicateKeyName(), providerMessage, "table")
+            : null;
 
-        return Failure(kind, errorNumber, constraint);
+        return Failure(kind, errorNumber, constraint) with { ConstraintTable = table };
     }
 
     public static PersistenceFailureKind KindOf(int errorNumber) => errorNumber switch
@@ -112,13 +132,14 @@ public static partial class PersistenceErrorClassifier
     };
 
     /// <summary>
-    /// True when the server rolled the statement/transaction back without committing, so the whole
-    /// operation may be retried by the caller. Commit-unknown and timeouts are deliberately not transient.
+    /// True for lock contention that may clear (deadlock, lock wait timeout). It says nothing about retry
+    /// safety; see <see cref="PersistenceFailure"/> remarks. Commit-unknown, rollback-unconfirmed and command
+    /// timeouts are deliberately not transient.
     /// </summary>
     private static bool IsTransient(PersistenceFailureKind kind) =>
         kind is PersistenceFailureKind.Deadlock or PersistenceFailureKind.LockTimeout;
 
-    private static string? Extract(Regex pattern, string? message)
+    private static string? Extract(Regex pattern, string? message, string group = "name")
     {
         if (string.IsNullOrEmpty(message))
         {
@@ -126,11 +147,12 @@ public static partial class PersistenceErrorClassifier
         }
 
         var match = pattern.Match(message);
-        return match.Success ? match.Groups["name"].Value : null;
+        return match.Success && match.Groups[group].Success ? match.Groups[group].Value : null;
     }
 
-    // MySQL: "Duplicate entry '<value>' for key '<table>.<key>'" — only the key name is captured.
-    [GeneratedRegex(@"for key '(?:[A-Za-z0-9_]+\.)?(?<name>[A-Za-z0-9_]{1,64})'\s*$", RegexOptions.CultureInvariant, 100)]
+    // MySQL: "Duplicate entry '<value>' for key '<table>.<key>'" — only the table and key names are captured,
+    // anchored at the end of the message so a value can never be mistaken for them.
+    [GeneratedRegex(@"for key '(?:(?<table>[A-Za-z0-9_]{1,64})\.)?(?<name>[A-Za-z0-9_]{1,64})'\s*$", RegexOptions.CultureInvariant, 100)]
     private static partial Regex DuplicateKeyName();
 
     // MySQL: "... a foreign key constraint fails (`db`.`table`, CONSTRAINT `<name>` FOREIGN KEY ...".

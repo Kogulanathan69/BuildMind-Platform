@@ -23,3 +23,5 @@ Start-up failure tests must prove the failure is an `OptionsValidationException`
 - No automatic database creation or migration. Least-privilege accounts are proposed: `bm_runtime` (DML only), `bm_migrator` (DDL on `buildmind_dev`), `bm_test` (`buildmind\_test\_%` only).
 - EF sensitive-data logging and detailed errors are off. EF failure events that quote provider messages (which can contain stored values such as emails) are suppressed. The error classifier keeps only kind, error number and constraint name.
 - A commit failure is reported as an unknown outcome and never retried.
+
+- (STEP 05-C) Database TLS is mandatory: `SslMode` must be Required, VerifyCA or VerifyFull (production: VerifyFull), and the proposed accounts `REQUIRE SSL`. After a rollback or an unknown commit, tracked entities are discarded.

@@ -80,3 +80,9 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Implemented: approved packages, `DatabaseOptions` plus validation, `BuildMindDbContext` (no entities), DI, design-time factory, `TransactionRunner`, `PersistenceErrorClassifier`, log hardening, database-free tests, spike project (22 tests), account SQL proposal, CI job proposal ([19](../14-Current-Backend/19-DATABASE-CI-PROPOSAL.md)).
 - Verified: restore; Release build 0/0; spike project build 0/0; no vulnerable packages; pytest 54 passed. **No C# test executed** (G17 locally; CI not yet run for this branch). **No database touched.**
 - Next (lead): review the diff → approve commit and push → PR CI runs the 189 database-free cases; approve the database CI job and/or run the account SQL; decide on the G03 licence; get M1/M3/M5 agreement on mappings.
+
+## 2026-11-18 — STEP 05-C BE-M4-D02a delivery
+- Backup: `C:\Users\kogul\Documents\BuildMind-Backups\d02a-20261118-150452` (bundle + working files).
+- Review fixed 6 issues (EV-20261118-29). Commit `2ee8324`; merged `develop` `fef5814` → `3ff94e0`; pushed, remote matches.
+- Builds 0/0; no vulnerable packages; pytest 54 passed. **No C# test executed yet; no database touched; spike not run.**
+- Pending (lead): create the draft PR (no CLI here), let the PR CI run and share the log archive or counts; approve the database CI job ([19](../14-Current-Backend/19-DATABASE-CI-PROPOSAL.md)); confirm G03 fits the public repo; G03 licence review; independent review of PR #8/#10/#11 and this PR.

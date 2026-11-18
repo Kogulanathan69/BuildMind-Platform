@@ -35,7 +35,10 @@ public sealed class CapturingLoggerProvider : ILoggerProvider
                 logLevel,
                 formatter(state, exception),
                 exception?.ToString(),
-                properties.ToDictionary(p => p.Key, p => p.Value?.ToString())));
+                properties.ToDictionary(p => p.Key, p => p.Value?.ToString()))
+            {
+                ExceptionObject = exception,
+            });
         }
     }
 }
@@ -47,5 +50,8 @@ public sealed record CapturedLogEntry(
     string? Exception,
     IReadOnlyDictionary<string, string?> Properties)
 {
+    /// <summary>The logged exception instance, kept so tests can inspect its type chain.</summary>
+    public Exception? ExceptionObject { get; init; }
+
     public string AllText => $"{Category} {Message} {Exception} {string.Join(' ', Properties.Values)}";
 }

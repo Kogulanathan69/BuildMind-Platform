@@ -99,8 +99,11 @@ public sealed class LoggingSafetyTests
 
         var exception = Record.Exception(() => factory.CreateClient());
 
-        // Guard against a vacuous pass: start-up must fail because of options validation specifically.
-        ExceptionChains.RequireOptionsValidationException(exception);
+        // Guard against a vacuous pass: start-up must fail because of options validation specifically,
+        // and the host's own start-up failure entry must have been captured by the logs under test.
+        ExceptionChains.RequireStartupOptionsValidationFailure(exception, factory.Logs);
+        var recorded = ExceptionChains.RequireHostStartupFailure(factory.Logs);
+        Assert.Contains(recorded.Failures, f => f.StartsWith("Services:Python:BaseUrl", StringComparison.Ordinal));
         AssertNoSecretInAnyLog(factory.Logs);
     }
 

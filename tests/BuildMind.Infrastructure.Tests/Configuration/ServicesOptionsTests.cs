@@ -110,7 +110,7 @@ public sealed class ServicesOptionsTests
 
         var exception = Record.Exception(() => factory.CreateClient());
 
-        var validation = ExceptionChains.RequireOptionsValidationException(exception);
+        var validation = ExceptionChains.RequireStartupOptionsValidationFailure(exception, factory.Logs);
         Assert.Contains(validation.Failures, f => f.Contains("Services:Python:BaseUrl is required", StringComparison.Ordinal));
     }
 
@@ -127,7 +127,7 @@ public sealed class ServicesOptionsTests
 
         var exception = Record.Exception(() => factory.CreateClient());
 
-        var validation = ExceptionChains.RequireOptionsValidationException(exception);
+        var validation = ExceptionChains.RequireStartupOptionsValidationFailure(exception, factory.Logs);
         Assert.DoesNotContain(SyntheticTestEndpoints.SyntheticSecret, validation.Message, StringComparison.Ordinal);
     }
 }

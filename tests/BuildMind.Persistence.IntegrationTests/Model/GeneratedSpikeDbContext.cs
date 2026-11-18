@@ -27,6 +27,9 @@ public sealed class GeneratedSpikeDbContext(DbContextOptions<GeneratedSpikeDbCon
             .EnableSensitiveDataLogging(false)
             .Options);
 
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder) =>
+        BuildMind.Infrastructure.Persistence.MySqlModelConventions.Apply(configurationBuilder);
+
     protected override void OnModelCreating(ModelBuilder modelBuilder) => SpikeModel.Configure(modelBuilder);
 }
 

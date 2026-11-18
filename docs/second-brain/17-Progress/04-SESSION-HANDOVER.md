@@ -94,3 +94,6 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 
 ## 2026-11-18 — STEP 05-E8 PR #21 CI recovery
 - PR #21 first run: standard jobs passed (C# 210 + 485, M3 246, Python 54); the database job failed before the tests (NETSDK1004 + SDK 11.0.100). Fixed in the database job only (SDK pin, restore, assets check, build, grant preflight). **MySQL tests still not executed**; awaiting the re-run. G03 and independent review open.
+
+## 2026-11-18 — STEP 05-E9 MySQL failure recovery
+- Live run 24/26. T19 fixed (`datetime(6)` convention); T06 = provider limitation, kept failing pending a lead decision (options A/B/C in open decisions); T25 added. MySQL tests 27; infrastructure 214 cases. Re-run pending. G03 open; independent reviews outstanding.

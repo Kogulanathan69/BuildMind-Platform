@@ -25,6 +25,11 @@
    ```
 5. Turn on database access in the API only when it's needed: `Database:Enabled=true`, set through User Secrets or an environment variable.
 
-**Migrations are never applied by the application.** The process: generate an idempotent script (`dotnet tool run dotnet-ef migrations script --idempotent --project src/BuildMind.Infrastructure --startup-project src/BuildMind.API`), review it, then apply it with `bm_migrator`.
+**Migrations are never applied by the application.** Process:
+1. Find the last applied migration (`SELECT MigrationId FROM __EFMigrationsHistory`).
+2. Generate a **ranged** script from it: `dotnet tool run dotnet-ef migrations script <last-applied> <target> --project src/BuildMind.Infrastructure --startup-project src/BuildMind.API`.
+3. Review the script, then apply it once with `bm_migrator`. The history rows it inserts prevent reapplication.
+
+**Don't use `--idempotent`.** With `MySql.EntityFrameworkCore` 10.0.12, idempotent scripts contain SQL Server-style `IF NOT EXISTS(...) BEGIN … END;` blocks that MySQL rejects (CI T06, 2026-11-18). This is an open provider limitation. MySQL DDL also auto-commits, so a failed script can leave a partly applied migration: review it and apply it during a maintenance window.
 
 **Production** is out of scope here. It needs its own identities, TLS with certificate validation (`SslMode=VerifyFull`) and a secret store, and the G03 licence review must be accepted first.

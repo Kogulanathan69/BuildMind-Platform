@@ -301,3 +301,7 @@ G03: **CONDITIONAL INTERNAL DEVELOPMENT AND COMPATIBILITY TESTING AUTHORIZATION 
 ## BE-M4-D02b — 2026-11-18 (commit `947d8f8`, live results pending)
 
 Corrections: 1205 statement-level rollback semantics; unconfirmed rollback surfaced; disposal can't mask outcomes; `VerifyFull` required for non-loopback servers and non-Development environments. The CI job `database-compatibility` is implemented (see EV-20261118-34). It proves the CLI migration path on the synthetic `GeneratedSpikeDbContext` (T21) separately from the hand-written migration (T04–T06). **MySQL 8.4 compatibility remains UNVERIFIED until the job's actual results are recorded.** G03 open.
+
+### Live results — 2026-11-18 (run 44292102702, MySQL 8.4.13)
+
+24/26 passed. Verified on the live server: connectivity, TLS 1.2, plaintext refusal, least privilege, scoped wildcard grant, CRUD, FK and unique constraints with safe translation, commit and rollback, optimistic concurrency, single-winner compare-and-set, 1205 semantics, GUID `char(36)`, `decimal(18,4)`, JSON (semantic), the CLI-generated migration path, and index use. **Corrected:** timestamp precision (`datetime(6)` convention). **Provider limitation:** idempotent migration scripts are not MySQL-executable, so deployment uses ranged scripts (T25). MySQL 8.4 compatibility is therefore **largely verified, with one open limitation**; the re-run after the corrections is pending. G03 open (licence).

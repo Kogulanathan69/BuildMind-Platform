@@ -382,6 +382,8 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
         await context.Database.MigrateAsync();
         Assert.Empty(await context.Database.GetPendingMigrationsAsync());
         Assert.Equal(2L, await SpikeTableCountAsync(database));
+        // The CLI-generated schema must carry the M4 timestamp convention (microsecond precision).
+        Assert.Equal("datetime(6)", await ColumnTypeAsync(database, "spike_owners", "created_at_utc"));
 
         var owner = NewOwner("owner-generated");
         context.Owners.Add(owner);
@@ -471,6 +473,36 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
 
         await using var reader = SpikeDbContext.Create(database.ConnectionString);
         Assert.Equal("owner-first", await reader.Owners.AsNoTracking().Where(o => o.Id == first.Id).Select(o => o.Name).SingleAsync());
+    }
+
+    /// <summary>
+    /// Safe deployment path while the provider's idempotent script is not executable on MySQL (see T06):
+    /// a reviewed, RANGED (non-idempotent) script applied once, with repeat-safety coming from the EF
+    /// migration history rather than from conditional SQL.
+    /// </summary>
+    [Fact]
+    public async Task T25_ranged_migration_script_applies_once_and_history_prevents_reapplication()
+    {
+        await using var database = await DisposableMySqlDatabase.CreateAsync();
+        await using var context = SpikeDbContext.Create(database.ConnectionString);
+        var migrator = context.GetService<IMigrator>();
+
+        var script = migrator.GenerateScript(Migration.InitialDatabase, SpikeInitialMigration.Id);
+        output.WriteLine(script);
+        Assert.DoesNotContain("IF NOT EXISTS(SELECT", script, StringComparison.Ordinal);
+
+        await RunScriptAsync(database.ConnectionString, script);
+
+        Assert.Equal(2L, await SpikeTableCountAsync(database));
+        Assert.Equal(new[] { SpikeInitialMigration.Id }, await context.Database.GetAppliedMigrationsAsync());
+
+        // Nothing is left to deploy: the next ranged script is empty and a history-tracked update is a no-op.
+        var next = migrator.GenerateScript(SpikeInitialMigration.Id, null);
+        Assert.DoesNotContain("CREATE TABLE", next, StringComparison.OrdinalIgnoreCase);
+        await context.Database.MigrateAsync();
+        Assert.Single(await context.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(2L, await SpikeTableCountAsync(database));
+        Assert.Equal("datetime(6)", await ColumnTypeAsync(database, "spike_owners", "created_at_utc"));
     }
 
     [Fact]

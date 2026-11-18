@@ -16,6 +16,9 @@ public sealed class BuildMindDbContext(DbContextOptions<BuildMindDbContext> opti
     /// <summary>Namespace prefix from which entity configurations are discovered.</summary>
     public const string ConfigurationsNamespace = "BuildMind.Infrastructure.Persistence.Configurations";
 
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder) =>
+        MySqlModelConventions.Apply(configurationBuilder);
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);

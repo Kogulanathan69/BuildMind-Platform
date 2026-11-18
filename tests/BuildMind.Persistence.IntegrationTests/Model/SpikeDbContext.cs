@@ -52,6 +52,9 @@ public sealed class SpikeDbContext(DbContextOptions<SpikeDbContext> options) : D
         return new SpikeDbContext(builder.Options);
     }
 
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder) =>
+        BuildMind.Infrastructure.Persistence.MySqlModelConventions.Apply(configurationBuilder);
+
     protected override void OnModelCreating(ModelBuilder modelBuilder) => SpikeModel.Configure(modelBuilder);
 }
 

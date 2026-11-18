@@ -1,6 +1,6 @@
 # BuildMind.Persistence.IntegrationTests — MySQL provider compatibility (BE-M4-D02)
 
-**Status:** 26 tests, all compiling. They run only in the `database-compatibility` CI job (BE-M4-D02b), on a disposable MySQL 8.4 container. They have not been run locally (Smart App Control, G17). G03 covers internal compatibility testing only; the commercial licence review is still pending.
+**Status:** 27 tests. First live run (CI 44292102702, MySQL 8.4.13): 24/26 passed; T06 and T19 failed (see below). T25 was added afterwards. They run only in the `database-compatibility` CI job (BE-M4-D02b), on a disposable MySQL 8.4 container. They have not been run locally (Smart App Control, G17). G03 covers internal compatibility testing only; the commercial licence review is still pending.
 
 This project is **not in `BuildMind.sln`** on purpose: the standard `dotnet-build` job never runs it. Only the dedicated CI job (or an approved disposable local server) runs it.
 
@@ -47,9 +47,12 @@ T21 then checks that the generated snapshot matches the model (`HasPendingModelC
 | T21 | **CLI-generated** migration and snapshot apply and roll back |
 | T22–T23 | Sessions use TLS (`Ssl_version` / `Ssl_cipher`); plaintext login for `bm_test` is refused |
 | T24 | Lock wait timeout (1205) rolls back only the statement; `TransactionRunner` rolls back the whole transaction |
+| T25 | Supported deployment path: a ranged (non-idempotent) script applied once; migration history prevents reapplication |
 | LP | Least privilege of the runtime account |
 | SQL | Owner-scoped query uses `ix_spike_items_owner_id` (checked with `EXPLAIN`) |
 
-**Limitations:**
+**Findings and limitations:**
+- **T19 (fixed):** the provider's default `datetime` dropped microseconds. Timestamps now use `datetime(6)` through `MySqlModelConventions` (shared with `BuildMindDbContext`); T19's exact-microsecond assertion is unchanged.
+- **T06 (open provider limitation):** `MySql.EntityFrameworkCore` 10.0.12 generates idempotent scripts in SQL Server syntax (`IF NOT EXISTS(...) BEGIN … END;`), which MySQL rejects whatever executes them. T06 is **kept unchanged and is expected to fail** until the lead decides whether to change its acceptance criteria. T25 proves the safe alternative.
 - The hand-written spike migration (T04–T06) has no snapshot, so `PendingModelChangesWarning` is suppressed for `SpikeDbContext` only. T21 covers the generated path with that check enabled.
 - If a test process is killed, its `buildmind_test_<guid>` database can be left behind. In CI the container is discarded anyway; locally, remove leftovers by name.

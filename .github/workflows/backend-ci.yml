@@ -157,8 +157,13 @@ jobs:
           dotnet tool run dotnet-ef migrations add CiGeneratedSpike --context GeneratedSpikeDbContext \
             --output-dir GeneratedMigrations --configuration Release \
             --project "$SPIKE_PROJECT" --startup-project "$SPIKE_PROJECT"
+          # Evidence: the provider's idempotent script (known not to execute on MySQL; see T06) and the
+          # ranged script used by the supported deployment path (T25).
           dotnet tool run dotnet-ef migrations script --idempotent --context GeneratedSpikeDbContext \
-            --configuration Release --output TestResults/generated-spike-migration.sql \
+            --configuration Release --output TestResults/generated-spike-migration-idempotent.sql \
+            --project "$SPIKE_PROJECT" --startup-project "$SPIKE_PROJECT"
+          dotnet tool run dotnet-ef migrations script --context GeneratedSpikeDbContext \
+            --configuration Release --output TestResults/generated-spike-migration-ranged.sql \
             --project "$SPIKE_PROJECT" --startup-project "$SPIKE_PROJECT"
       - name: Run MySQL compatibility tests
         env:
@@ -197,7 +202,7 @@ jobs:
           name: mysql-compatibility-results
           path: |
             TestResults/*.trx
-            TestResults/generated-spike-migration.sql
+            TestResults/generated-spike-migration-*.sql
           retention-days: 14
           if-no-files-found: warn
       - name: Remove disposable MySQL container

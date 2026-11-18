@@ -106,3 +106,5 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
 - 2026-11-18 (STEP 08-A, D05): PR #24 merged (0 reviews; G19). D05 shared client implemented without feature routes. Still open: **G11** (internal transport/authentication, hosting), `/internal/v1` (C1 internal convention), M2/M3/M6 Python route and DTO contracts, M2 private storage contract, RAG service contract, safe-retry idempotency contract (no retries until then). Unchanged: C6, C7, A1, A2, G03, G12, G17, G20, D03 M1 dependencies.
 
 - 2026-11-18 (STEP 08-B): approval needed for the **Linux CI C#-to-Python smoke test** ([23](../14-Current-Backend/23-M4-D05-INTERNAL-INTEGRATION.md)). New finding for M6/G11: disable FastAPI `/docs` and `/openapi.json` outside development. G11 remains OPEN.
+
+- 2026-11-18 (STEP 08-C): **lead approved** (explicit in-session answer) the live C#-to-Python CI smoke test and the TRX/JUnit result artifacts; implemented. G11 (internal authentication, transport, hosting) remains **OPEN**; the smoke test uses loopback only and proves no authentication model. FastAPI `/docs`/`/openapi.json` exposure finding for M6 still open.

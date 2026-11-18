@@ -60,6 +60,7 @@ public static class ApiServiceCollectionExtensions
                 "rag", HealthStatus.Degraded, [Readiness.Tag], Readiness.RegistrationTimeout, "rag");
 
         // BE-M4-D05: hardened typed client for the private Python service (only confirmed routes; G11 auth open).
+        services.AddSingleton<InternalServiceBulkhead>(); // STEP 08-C: bounded in-flight + queued calls per dependency
         services.AddHttpClient<PythonServiceClient>()
             .ConfigureHttpClient(client => client.Timeout = Timeout.InfiniteTimeSpan) // the client enforces TimeoutSeconds itself
             .ConfigurePrimaryHttpMessageHandler(CreateInternalServiceHandler)

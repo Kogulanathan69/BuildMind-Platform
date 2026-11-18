@@ -137,3 +137,6 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 
 ## 2026-11-18 — STEP 08-B D05 audit + delivery
 - 5 integration defects fixed (encoded-path SSRF guard, proxy, connection bound, Python readiness deadline/single-flight, base-URL defence). Live FastAPI `/health` verified on loopback; C# live smoke proposed (CI). Infrastructure 385 cases (compiled; not executed locally), MySQL 45. Committed and pushed; draft PR to be created by the lead.
+
+## 2026-11-18 — STEP 08-C live C#-to-Python smoke test
+- Lead approved (in session) the CI smoke-test workflow change and the result artifacts. Implemented: real FastAPI on loopback in the database job, 7 live tests, TRX/JUnit artifacts. Fixed: unbounded queued requests (bulkhead) and a readiness gate leak. Infrastructure 388, MySQL 52, Python 54; compiled only. Next: draft PR → first CI run → download `dotnet-test-results`, `python-test-results`, `mysql-compatibility-results` to verify the counts.

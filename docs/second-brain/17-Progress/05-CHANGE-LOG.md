@@ -49,3 +49,5 @@
 2026-11-18 — STEP 08-A (uncommitted): BE-M4-D05 internal service client, dependency-failure Problem Details, Python readiness; docs. Evidence EV-20261118-57..58.
 
 2026-11-18 — STEP 08-B: D05 security audit fixes and regression tests; live Python contract probe; D05 integration document (23) with CI smoke proposal. Evidence EV-20261118-59.
+
+2026-11-18 — STEP 08-C: live C#-to-Python CI smoke test and machine-readable test-result artifacts (lead-approved); `InternalServiceBulkhead`; readiness gate release fix. Evidence EV-20261118-60.

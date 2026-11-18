@@ -9,8 +9,8 @@ namespace BuildMind.Infrastructure.Integration;
 /// validation, plan editor) are owned by M2/M3/M6 and are added here only once their contracts exist; nothing is
 /// invented.
 /// </summary>
-public sealed class PythonServiceClient(HttpClient http, IOptions<ServicesOptions> options)
-    : InternalServiceClient(http, options.Value.Python, DependencyName)
+public sealed class PythonServiceClient(HttpClient http, IOptions<ServicesOptions> options, InternalServiceBulkhead bulkhead)
+    : InternalServiceClient(http, options.Value.Python, DependencyName, DefaultMaxResponseBytes, bulkhead)
 {
     public const string DependencyName = "python";
 

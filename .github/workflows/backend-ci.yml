@@ -23,9 +23,21 @@ jobs:
       - name: Build solution
         run: dotnet build BuildMind.sln --configuration Release --no-restore
       - name: Run C# tests
-        run: dotnet test BuildMind.sln --configuration Release --no-build --verbosity normal
+        # STEP 08-C (lead-approved): also writes one TRX per test project so counts can be verified from the artifact.
+        run: dotnet test BuildMind.sln --configuration Release --no-build --verbosity normal --logger trx --results-directory TestResults/dotnet
       - name: Run M3 plan editor contract checks
-        run: dotnet run --project tests/BuildMind.Application.ContractTests/BuildMind.Application.ContractTests.csproj --configuration Release --no-build --no-restore
+        run: |
+          set -o pipefail
+          mkdir -p TestResults/dotnet
+          dotnet run --project tests/BuildMind.Application.ContractTests/BuildMind.Application.ContractTests.csproj --configuration Release --no-build --no-restore | tee TestResults/dotnet/m3-contract-checks.txt
+      - name: Upload C# test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-test-results
+          path: TestResults/dotnet/
+          retention-days: 14
+          if-no-files-found: warn
   python-tests:
     runs-on: ubuntu-latest
     steps:
@@ -34,7 +46,16 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m pip install -r python-services/requirements-dev.txt
-      - run: cd python-services && python -m pytest -q
+      # STEP 08-C (lead-approved): JUnit XML so the Python count can be verified from the artifact.
+      - run: cd python-services && python -m pytest -q --junitxml=../TestResults/python/pytest-junit.xml
+      - name: Upload Python test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-test-results
+          path: TestResults/python/
+          retention-days: 14
+          if-no-files-found: warn
   database-compatibility:
     # BE-M4-D02b: MySQL provider compatibility on a disposable MySQL 8.4 container.
     # G03: internal compatibility testing only (commercial licence review pending); no binaries are published.
@@ -187,10 +208,37 @@ jobs:
           ef migrations list --no-connect
           ef migrations script 0 --output TestResults/buildmind-migration/buildmind-ranged-from-0.sql
           cp "$migrations"/*.cs TestResults/buildmind-migration/
+      # STEP 08-C (lead-approved 2026-11-18): the REAL FastAPI app, loopback only, for the live C#-to-Python smoke tests.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Start the Python service (loopback only, bounded readiness)
+        run: |
+          python -m pip install --disable-pip-version-check -r python-services/requirements.txt
+          cd python-services
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8099 --log-level warning \
+            > "$RUNNER_TEMP/python-service.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/python-service.pid"
+          for attempt in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://127.0.0.1:8099/health > /dev/null; then
+              echo "Python service ready on 127.0.0.1:8099"
+              exit 0
+            fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/python-service.pid")" 2>/dev/null; then
+              echo "Python service exited during startup" >&2
+              tail -n 50 "$RUNNER_TEMP/python-service.log" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "Python service did not become ready within 30 s" >&2
+          tail -n 50 "$RUNNER_TEMP/python-service.log" >&2
+          exit 1
       - name: Run MySQL compatibility tests
         env:
           BUILDMIND_TEST_MYSQL: Server=127.0.0.1;Port=3306;User ID=bm_test;SslMode=Required;Password=${{ env.BM_TEST_PASSWORD }}
           BUILDMIND_TEST_MYSQL_RUNTIME: Server=127.0.0.1;Port=3306;Database=buildmind_dev;User ID=bm_runtime;SslMode=Required;Password=${{ env.BM_RUNTIME_PASSWORD }}
+          BUILDMIND_TEST_PYTHON_URL: http://127.0.0.1:8099
         run: >-
           dotnet test "$SPIKE_PROJECT"
           --configuration Release
@@ -228,6 +276,14 @@ jobs:
             TestResults/buildmind-migration/
           retention-days: 14
           if-no-files-found: warn
+      - name: Stop the Python service
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/python-service.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/python-service.pid")" 2>/dev/null || true
+            sleep 1
+            kill -9 "$(cat "$RUNNER_TEMP/python-service.pid")" 2>/dev/null || true
+          fi
       - name: Remove disposable MySQL container
         if: always()
         run: docker rm -f -v buildmind-mysql || true

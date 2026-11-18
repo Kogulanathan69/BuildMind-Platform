@@ -150,8 +150,7 @@ public sealed class MySqlReadinessCheck : IHealthCheck
         }
         catch (Exception)
         {
-            await scope.DisposeAsync().ConfigureAwait(false);
-            gate.Semaphore.Release();
+            await ReleaseAsync(scope, gate.Semaphore).ConfigureAwait(false);
             return Readiness.Result(HealthStatus.Unhealthy, Readiness.Reasons.Unreachable);
         }
 
@@ -160,8 +159,7 @@ public sealed class MySqlReadinessCheck : IHealthCheck
             async finished =>
             {
                 _ = finished.Exception; // observe; the message is never logged or returned
-                await scope.DisposeAsync().ConfigureAwait(false);
-                gate.Semaphore.Release();
+                await ReleaseAsync(scope, gate.Semaphore).ConfigureAwait(false);
             },
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
@@ -186,6 +184,27 @@ public sealed class MySqlReadinessCheck : IHealthCheck
         {
             // The exception (host, user, provider text) is deliberately dropped.
             return Readiness.Result(HealthStatus.Unhealthy, Readiness.Reasons.Unreachable);
+        }
+    }
+
+    /// <summary>
+    /// STEP 08-C: the gate is ALWAYS released, even if disposing the probe scope throws (a failing Dispose of any
+    /// scoped service previously left the single-flight gate held forever, so every later probe reported
+    /// "check_in_progress"). A disposal failure is swallowed: readiness has nothing safe to report about it.
+    /// </summary>
+    private static async Task ReleaseAsync(AsyncServiceScope scope, SemaphoreSlim semaphore)
+    {
+        try
+        {
+            await scope.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Intentionally ignored; the gate release below must still happen.
+        }
+        finally
+        {
+            semaphore.Release();
         }
     }
 

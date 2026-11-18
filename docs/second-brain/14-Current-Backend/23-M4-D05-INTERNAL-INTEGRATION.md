@@ -41,7 +41,9 @@ The real FastAPI app ran under `uvicorn` on `127.0.0.1:18918` (disposable proces
 
 **Finding for M6 / G11 (not changed by M4):** the FastAPI app serves `/docs` and `/openapi.json` (200) by default. For a private service, disable them outside development (`FastAPI(docs_url=None, redoc_url=None, openapi_url=None)` behind configuration).
 
-## Proposed Linux CI smoke test (needs lead approval; workflow NOT changed)
+## Linux CI smoke test — IMPLEMENTED (STEP 08-C; lead-approved 2026-11-18 in session, recorded below)
+
+_Original proposal kept for history:_
 In the existing `database-compatibility` job (or a new job), before the integration tests:
 ```yaml
       - name: Start the Python service (loopback only)
@@ -54,3 +56,20 @@ Then add `BUILDMIND_TEST_PYTHON_URL: http://127.0.0.1:8099` to the test step env
 
 ## Still blocked
 Feature routes and DTOs (M2/M3/M6), internal authentication and transport (G11), `/internal/v1`, the M2 private storage adapter, the RAG contract, and a safe-retry idempotency contract.
+
+## STEP 08-C — approvals, implementation and further audit (2026-11-18)
+
+**Approvals (lead, explicit answer in the development session on 2026-11-18; no other approval is claimed):** (1) the live C#-to-Python smoke-test change to `.github/workflows/backend-ci.yml`; (2) uploading machine-readable test results from the `dotnet-build` (TRX) and `python-tests` (JUnit XML) jobs.
+
+**Workflow changes:**
+- `dotnet-build`: `dotnet test … --logger trx --results-directory TestResults/dotnet`; M3 contract-check output captured with `tee` (`pipefail` keeps failures failing); `always()` upload `dotnet-test-results` (14 days).
+- `python-tests`: `pytest -q --junitxml=../TestResults/python/pytest-junit.xml`; `always()` upload `python-test-results`.
+- `database-compatibility`: `setup-python` 3.13, `pip install -r python-services/requirements.txt` (existing dependencies), **real FastAPI app** via uvicorn on **127.0.0.1:8099** only, bounded readiness (30 × 1 s; hard failure with the log tail if the process exits or never becomes ready), `BUILDMIND_TEST_PYTHON_URL` for the tests, `always()` stop (TERM then KILL). The service log stays in `$RUNNER_TEMP` and is not uploaded.
+
+**Live tests `PythonLiveSmokeTests` (7, production `PythonServiceClient` + production `SocketsHttpHandler`, real loopback sockets):** PY01 real `/health` (identity and status validated); PY02 live validation rejects a wrong identity; PY03 readiness Healthy against the live service; PY04 closed port → `Unavailable`; PY05 silent server → `Timeout` within the bound; PY06 caller cancellation is not a dependency failure; PY07 on-the-wire request carries `traceparent` and no `Authorization`/`Cookie`/`Proxy-*`. Missing variable or non-loopback URL → hard failure. *Dependency failure after stopping the real service* is covered by PY04 (a closed real port) rather than stopping uvicorn mid-run.
+
+**Further defects fixed:**
+1. **Unbounded request queue:** `MaxConnectionsPerServer = 32` bounds connections, but `SocketsHttpHandler` queues extra requests without limit (each bounded only in time by the client deadline). → `InternalServiceBulkhead` (singleton): ≤64 in-flight + queued calls per dependency; saturation fails fast as 503 `DEPENDENCY_UNAVAILABLE` without network I/O; slots released on success, failure, timeout and cancellation.
+2. **MySQL readiness gate could be held forever:** if disposing the probe scope threw, `Release()` never ran, so every later probe reported `check_in_progress`. → release in `finally` (also on the synchronous probe-failure path).
+
+Tests added: infrastructure +3 (bulkhead saturation/recovery, slot release after timeout and cancellation, gate release when disposal throws) → **388**; MySQL project +7 live smoke → **52**. All compiled; none executed locally (G17).

@@ -81,7 +81,8 @@ public sealed class InternalServiceSecurityAuditTests
     {
         var python = new PythonServiceClient(
             new HttpClient(StubHttpHandler.Json(body)) { Timeout = Timeout.InfiniteTimeSpan },
-            Options.Create(new ServicesOptions { Python = new InternalServiceOptions { Enabled = true, BaseUrl = Base, TimeoutSeconds = 5 } }));
+            Options.Create(new ServicesOptions { Python = new InternalServiceOptions { Enabled = true, BaseUrl = Base, TimeoutSeconds = 5 } }),
+            new InternalServiceBulkhead());
 
         var failure = await Assert.ThrowsAsync<DependencyFailureException>(() => python.CheckHealthAsync(CancellationToken.None));
 
@@ -192,6 +193,92 @@ public sealed class InternalServiceSecurityAuditTests
         Assert.Equal(1, startedWhileBlocked);
         Assert.Equal((HealthStatus.Healthy, "reachable"), (after.Status, (string)after.Data["reason"]));
         Assert.Equal(1, gate.Semaphore.CurrentCount); // the MySQL gate is independent
+    }
+
+    // ---- STEP 08-C: bounded queue and gate release ----
+
+    [Fact]
+    public async Task Saturated_dependency_fails_fast_without_network_and_recovers_when_slots_free()
+    {
+        var bulkhead = new InternalServiceBulkhead(maxConcurrentCallsPerDependency: 2);
+        var release = new TaskCompletionSource();
+        var handler = new StubHttpHandler(async (_, token) =>
+        {
+            await release.Task.WaitAsync(token);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"service\":\"s\",\"status\":\"ok\"}", Encoding.UTF8, "application/json"),
+            };
+        });
+        var client = new InternalServiceClient(new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan },
+            new InternalServiceOptions { Enabled = true, BaseUrl = Base, TimeoutSeconds = 5 }, "python", 1024, bulkhead);
+
+        var first = client.GetJsonAsync<Health>("health", null, CancellationToken.None);
+        var second = client.GetJsonAsync<Health>("health", null, CancellationToken.None);
+        var rejected = await Assert.ThrowsAsync<DependencyFailureException>(() => client.GetJsonAsync<Health>("health", null, CancellationToken.None));
+
+        Assert.Equal(DependencyFailureKind.Unavailable, rejected.Kind);
+        Assert.Null(rejected.StatusCode);
+        Assert.Equal(0, bulkhead.Available("python"));
+
+        release.SetResult();
+        await Task.WhenAll(first, second);
+
+        Assert.Equal(2, bulkhead.Available("python"));
+        Assert.Equal("ok", (await client.GetJsonAsync<Health>("health", null, CancellationToken.None)).Status);
+        Assert.Equal(3, handler.Calls); // the rejected call never reached the transport
+    }
+
+    [Fact]
+    public async Task Bulkhead_slots_are_released_after_timeout_and_cancellation()
+    {
+        var bulkhead = new InternalServiceBulkhead(maxConcurrentCallsPerDependency: 1);
+        var client = new InternalServiceClient(new HttpClient(StubHttpHandler.Hangs()) { Timeout = Timeout.InfiniteTimeSpan },
+            new InternalServiceOptions { Enabled = true, BaseUrl = Base, TimeoutSeconds = 1 }, "python", 1024, bulkhead);
+
+        await Assert.ThrowsAsync<DependencyFailureException>(() => client.GetJsonAsync<Health>("health", null, CancellationToken.None));
+        Assert.Equal(1, bulkhead.Available("python"));
+
+        using var cancelled = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetJsonAsync<Health>("health", null, cancelled.Token));
+        Assert.Equal(1, bulkhead.Available("python"));
+    }
+
+    [Fact]
+    public async Task Mysql_readiness_gate_is_released_even_when_scope_disposal_throws()
+    {
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddScoped<ThrowingOnDispose>(services);
+        using var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services);
+        var gate = new ReadinessProbeGate();
+        var check = new MySqlReadinessCheck(
+            Options.Create(new DatabaseOptions { Enabled = true }),
+            Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(provider),
+            gate,
+            (sp, token) =>
+            {
+                Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<ThrowingOnDispose>(sp);
+                return Task.FromResult(!token.IsCancellationRequested);
+            },
+            TimeSpan.FromSeconds(2));
+
+        var first = await check.CheckHealthAsync(new HealthCheckContext());
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        while (gate.Semaphore.CurrentCount == 0 && watch.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            await Task.Delay(20);
+        }
+
+        var second = await check.CheckHealthAsync(new HealthCheckContext());
+
+        Assert.Equal(HealthStatus.Healthy, first.Status);
+        Assert.Equal(1, gate.Semaphore.CurrentCount);
+        Assert.Equal("reachable", (string)second.Data["reason"]); // not "check_in_progress": the gate was released
+    }
+
+    private sealed class ThrowingOnDispose : IDisposable
+    {
+        public void Dispose() => throw new InvalidOperationException("synthetic dispose failure");
     }
 
     private sealed class TrackingContent(string body) : StringContent(body, Encoding.UTF8, "application/json")

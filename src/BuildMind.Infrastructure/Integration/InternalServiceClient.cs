@@ -37,9 +37,16 @@ public class InternalServiceClient
 
     private readonly HttpClient http;
     private readonly InternalServiceOptions options;
+    private readonly InternalServiceBulkhead bulkhead;
     private readonly Uri? baseUri;
 
-    public InternalServiceClient(HttpClient http, InternalServiceOptions options, string dependency, int maxResponseBytes = DefaultMaxResponseBytes)
+    /// <param name="bulkhead">Shared per-host limiter (DI singleton). When omitted, the client gets its own.</param>
+    public InternalServiceClient(
+        HttpClient http,
+        InternalServiceOptions options,
+        string dependency,
+        int maxResponseBytes = DefaultMaxResponseBytes,
+        InternalServiceBulkhead? bulkhead = null)
     {
         this.http = http ?? throw new ArgumentNullException(nameof(http));
         this.options = options ?? throw new ArgumentNullException(nameof(options));
@@ -47,6 +54,7 @@ public class InternalServiceClient
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxResponseBytes);
         Dependency = dependency;
         MaxResponseBytes = maxResponseBytes;
+        this.bulkhead = bulkhead ?? new InternalServiceBulkhead();
 
         // Defence in depth: start-up validation (C8) already enforces this, but the client never trusts a base URL
         // that is not plain http/https without credentials, query or fragment; such a client stays disabled.
@@ -133,6 +141,9 @@ public class InternalServiceClient
         HttpMethod method, string relativePath, HttpContent? content, Func<T, bool>? isValid, CancellationToken cancellationToken)
     {
         var target = Resolve(relativePath);
+
+        // STEP 08-C: bounded in-flight + queued calls per dependency; saturation fails fast without network I/O.
+        using var slot = bulkhead.TryEnter(Dependency) ?? throw Failure(DependencyFailureKind.Unavailable);
 
         using var request = new HttpRequestMessage(method, target) { Content = content };
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));

@@ -4,13 +4,13 @@ using Microsoft.AspNetCore.Mvc.Testing;
 namespace BuildMind.Infrastructure.Tests.Api;
 
 /// <summary>
-/// Readiness must be truthful. Dependency checks (MySQL, Python, RAG) are not implemented yet
-/// (planned BE-M4-D04), so the API must not report itself ready.
+/// Readiness must be truthful. With the shipped configuration the mandatory database is not configured, so the
+/// API must not report itself ready.
 /// </summary>
 /// <remarks>
-/// This deliberately asserts "not successful" rather than a specific status such as 404, so it does not
-/// freeze the current absence of the endpoint as a contract. When BE-M4-D04 implements readiness, replace
-/// this test with dependency-driven cases (ready only when dependencies are healthy; 503 when unavailable).
+/// BE-M4-D04 implemented readiness (<c>/health/ready</c>, design C11b). These original assertions still hold
+/// (not successful while the database is not configured; liveness independent). The dependency-driven cases
+/// (statuses, reasons, 503, no connection details) live in <c>SecurityInfrastructureTests</c>.
 /// </remarks>
 public sealed class ReadinessTests : IClassFixture<WebApplicationFactory<Program>>
 {

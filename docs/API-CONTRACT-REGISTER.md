@@ -53,3 +53,5 @@ Out of scope for this register: 3D and construction cost endpoints (excluded by 
 | Confirm revision | M5 | M3 | ASP.NET | Proposed |
 
 **Status note (2026-11-18):** the shared conventions approved in [17 §20](second-brain/14-Current-Backend/17-SHARED-CONVENTIONS-PROPOSAL.md) (C1, C3, C4, C5, C8, C9, C10) are implemented on `develop` (`0a4d70a`, PR #11): `/api/v1` route group, RFC 9457 Problem Details with `code`/`traceId`, shared error codes. `/health` unchanged. CORS, OpenAPI, JWT and readiness remain unimplemented and pending decisions.
+
+**Readiness (BE-M4-D04, uncommitted):** `GET /health/ready`, anonymous, outside `/api/v1`. 200 when Healthy/Degraded, 503 when Unhealthy. Body `{"status":"Healthy|Degraded|Unhealthy","checks":[{"name":"mysql|python|rag","status":"…","reason":"reachable|not_configured|unreachable|unverified|unavailable"}]}`. Not for frontend business logic. `/health` liveness unchanged.

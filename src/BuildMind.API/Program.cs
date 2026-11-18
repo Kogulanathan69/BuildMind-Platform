@@ -1,5 +1,8 @@
 using BuildMind.API;
+using BuildMind.API.Health;
 using BuildMind.API.Routing;
+using BuildMind.API.Security;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using BuildMind.Application;
 using BuildMind.Infrastructure;
 
@@ -13,13 +16,24 @@ builder.Services
 
 var app = builder.Build();
 
+// D04: safe response headers first, so they are also applied to error responses.
+app.UseMiddleware<SecurityHeadersMiddleware>();
+
 // C3: safe RFC 9457 responses for unhandled exceptions and for empty 4xx/5xx responses (e.g. unknown routes).
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
 // Liveness only: reports that the API process is running. It does not check MySQL, Python or RAG.
-// Dependency readiness (GET /health/ready) is planned for BE-M4-D04 and is deliberately not mapped yet.
 app.MapGet("/health", () => Results.Ok(new { service = "buildmind-api", status = "ok" }));
+
+// D04 readiness (C11b): MySQL mandatory (503 when not configured/unreachable); Python/RAG Degraded until D05.
+app.MapHealthChecks(Readiness.Path, new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains(Readiness.Tag),
+    ResponseWriter = Readiness.WriteResponseAsync,
+    ResultStatusCodes = new Dictionary<Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus, int>(Readiness.StatusCodes),
+    AllowCachingResponses = false,
+});
 
 // C1: public product API under /api/v1; feature modules register IApiEndpointModule implementations.
 app.MapBuildMindApiV1();

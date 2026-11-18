@@ -31,3 +31,12 @@ Start-up failure tests must prove the failure is an `OptionsValidationException`
 - (D02b) Timestamps are stored as unambiguous UTC (`datetime(6)`); non-UTC `DateTime` values are rejected. Migrations: single authorized executor, history check, backup before DDL, no automatic or production migrations.
 
 - (D03) Repositories filter every query by project; ports are not authorization guards, so callers must establish ownership first. Constraint violations are translated without values (for example a duplicate email); stored customer content is never echoed in errors. FKs use RESTRICT (no cascading deletes).
+
+### Implemented controls — BE-M4-D04 (2026-11-18, uncommitted)
+
+- **Readiness** `GET /health/ready` (C11b): MySQL mandatory (503 when not configured or unreachable); Python/RAG Degraded and never Healthy until real checks exist (D05). Response = names, statuses and fixed reason codes; no hosts, users, exception text or connection details. `/health` liveness unchanged and dependency-free.
+- **Response headers** on every response (including errors): `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`; `/api` responses default to `Cache-Control: no-store`. Kestrel `Server` header disabled.
+- **Log hygiene regression:** bearer tokens, cookies, API keys and query-string tokens never appear in logs (tested in Production and Development). Precondition: `Microsoft.AspNetCore` stays at `Warning` (request-start logs include the query string), and **tokens must never be sent in query strings**.
+- **Not yet in place (blocked):** CORS allowlist (C6), authentication/JWT and shared authorization policies (A1/A2, M1), request body limits (M2; Kestrel's 30 MB default applies), OpenAPI (C7, Development only). Until authentication exists, `ICurrentUser` is always anonymous and no endpoint may rely on it for ownership.
+
+- (STEP 07-B) EF Core `ConnectionError` events are suppressed (they logged the server host and database name). MySQL readiness enforces its own 3 s deadline and runs at most one probe at a time per host; abandoned probes dispose their scope when they finish. The Kestrel `Server` header setting does not control headers added by a reverse proxy or load balancer.

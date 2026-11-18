@@ -127,6 +127,28 @@ public sealed class LayerDependencyTests
         Assert.Contains("BuildMind.Infrastructure.Tests.csproj", solution, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(Domain)]
+    [InlineData(Application)]
+    public void Inner_layers_do_not_reference_aspnetcore(string project)
+    {
+        var aspNetReferences = Assemblies[project]
+            .GetReferencedAssemblies()
+            .Select(a => a.Name!)
+            .Where(name => name.StartsWith("Microsoft.AspNetCore", StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.True(aspNetReferences.Length == 0, $"{project} must not reference: {string.Join(", ", aspNetReferences)}");
+
+        var frameworkReferences = XDocument.Load(RepositoryPaths.ProjectFile(project))
+            .Descendants()
+            .Where(e => e.Name.LocalName == "FrameworkReference")
+            .Select(e => (string?)e.Attribute("Include"))
+            .ToArray();
+
+        Assert.DoesNotContain("Microsoft.AspNetCore.App", frameworkReferences);
+    }
+
     private static string[] DeclaredProjectReferences(string project)
     {
         var document = XDocument.Load(RepositoryPaths.ProjectFile(project));

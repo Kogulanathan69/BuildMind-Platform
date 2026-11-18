@@ -4,6 +4,8 @@
 
 Do not consider an endpoint implemented until code, integration tests and PR evidence are linked.
 
+Cross-cutting conventions — `/api/v1` prefix, response/status rules, RFC 9457 Problem Details, validation errors, error codes, trace IDs, CORS, OpenAPI exposure, configuration keys — are **PROPOSED** in [17-SHARED-CONVENTIONS-PROPOSAL](second-brain/14-Current-Backend/17-SHARED-CONVENTIONS-PROPOSAL.md) (BE-M4-D01b). Not approved; G04 remains open. Decision states as of 2026-11-18 (§15 there): C1, C3, C4, C5, C6–C10 PENDING LEAD APPROVAL; C2, C5b, C12 details PENDING CONSUMER APPROVAL; C11 liveness VERIFIED, readiness PROPOSED, C11b PENDING LEAD APPROVAL. The lead provisionally accepted the C1–C12 direction for detailed review on 2026-11-17. **Lead decision 2026-11-18:** C1, C3, C4, C5, C8, C9, C10 **APPROVED** and C11b **APPROVED AS ARCHITECTURAL DESIGN**, with boundaries in [§20](second-brain/14-Current-Backend/17-SHARED-CONVENTIONS-PROPOSAL.md#20-lead-decision-record--2026-11-18); `/internal/v1`, C2, C5b, C6, C7, C12 and feature diagnostics remain pending. Approved conventions are **not yet implemented** (BE-M4-D01c / D04).
+
 ## Areas, owners and status
 
 | Area | Contract owner (V3) | Service | Contract status | Implementation status |
@@ -15,10 +17,12 @@ Do not consider an endpoint implemented until code, integration tests and PR evi
 | Plan editor, edit validation, AI edit proposals, versions, confirmation | M3 (M6 authoritative validation) | ASP.NET → Python (internal) | Proposed; M3 draft geometry contract in [`docs/proposals/m3-plan-editor`](proposals/m3-plan-editor/GEOMETRY-CONTRACT-PROPOSAL.md) (canonical approval pending, G07) | Provisional Application contracts/services and Python `plan_editor` engine merged (`b03430e`); **no public or internal HTTP route yet** |
 | Preliminary report, architect requests | M5 | ASP.NET | Proposed | Not started |
 | Regulatory evidence retrieval / citations | M7 (M4: shared C# client infrastructure) | ASP.NET → RAG (internal) | Candidate route `POST /regulations/retrieve`; assistant route TBD | Not started. Existing RAG engine exposes a Python function, **no HTTP route** (see [08-RAG](second-brain/14-Current-Backend/08-RAG.md)) |
-| Health: liveness `GET /health` | M4 | ASP.NET | Proposed (current body shape below) | **Implemented and verified 2026-11-17** |
+| Health: liveness `GET /health` | M4 | ASP.NET | Proposed (current body shape below) | **Implemented; CI-tested on develop `183ecf9`** (run 44074803430, part of 22/22 xUnit cases) |
 | Health: readiness `GET /health/ready` | M4 | ASP.NET | Proposed | Not implemented (returns 404, verified 2026-11-17) |
-| Python internal `GET /health` | M6 bootstrap custodian | FastAPI (internal) | Starter | **Implemented; pytest 1 passed 2026-11-17** |
+| Python internal `GET /health` | M6 bootstrap custodian | FastAPI (internal) | Starter | **Implemented; covered by Python CI** (42 passed on develop `183ecf9`, incl. M3 tests) |
 | Admin / staff / proposal routes | Unassigned (G09) | ASP.NET | Not defined | Not started |
+| Shared error responses (RFC 9457, codes, traceId) — all API routes | M4 | ASP.NET | **APPROVED** (C3/C4/C5, 2026-11-18) | Implemented on `feature/m4-shared-infrastructure` — build verified; tests pending Linux CI; not merged |
+| `/api/v1` route group (product API root) | M4 | ASP.NET | **APPROVED** (C1) | Implemented (no product endpoints yet) — build verified; tests pending CI; not merged |
 
 Frontend consumers are tracked by the frontend repository; this register does not assign them.
 

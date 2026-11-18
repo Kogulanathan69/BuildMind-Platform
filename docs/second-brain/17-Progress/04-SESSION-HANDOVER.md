@@ -37,3 +37,34 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Status: BE-M4-D01a **CI VERIFIED — INDEPENDENT CODE REVIEW PENDING**; BE-M4-D01 stays IN PROGRESS. Third docs commit `c37029e` reviewed and accepted by the lead.
 - Open: G17 (local Windows execution blocked by Smart App Control), G18 (M3 console contract runner not in solution/CI and not part of these counts), G13 (default branch intentionally `develop`; former `main` accidentally renamed to `main-→-develop`; production branch name and protection to be corrected).
 - These Second Brain updates are committed as docs only ("docs: record verified M4 foundation CI test results") on `feature/m4-infrastructure`, with lead approval. No source change or merge. BE-M4-D02 not started; D01b proposed, awaiting approval.
+
+## 2026-11-17 — Post-merge state and BE-M4-D01b (proposals)
+- PR #8 squash-merged into `develop` as `183ecf9` by the repo owner at 11:31:36 UTC with **no recorded review** (ruleset requires one) — retrospective independent review arranged as an open item (G19); no approval or waiver recorded.
+- Post-merge CI run [44074803430](https://github.com/Kogulanathan69/BuildMind-Platform/actions/runs/44074803430): C# [job 134009955104](https://github.com/Kogulanathan69/BuildMind-Platform/actions/runs/44074803430/job/134009955104) 22/22 passed; Python [job 134009955341](https://github.com/Kogulanathan69/BuildMind-Platform/actions/runs/44074803430/job/134009955341) 42 passed (lead-retrieved logs). Local develop fast-forwarded `ef9cbf3` → `183ecf9`; Release build clean, no vulnerable packages, pytest 42 passed; M3 unchanged.
+- New branch `feature/m4-shared-contracts` from `183ecf9`; old `feature/m4-infrastructure` preserved.
+- D01b deliverables (uncommitted, docs only): [17-SHARED-CONVENTIONS-PROPOSAL](../14-Current-Backend/17-SHARED-CONVENTIONS-PROPOSAL.md) (C1–C12 conventions, I1–I9 interfaces, M3 runner §14, decision checklist) and [18-MYSQL-PROVIDER-STUDY](../14-Current-Backend/18-MYSQL-PROVIDER-STUDY.md); API register, 05-API-CONTRACTS pointer, open decisions (G19, G20 added), task/evidence registers, change log, indexes.
+- Key findings: only stable EF Core 10 MySQL provider is Oracle's (licence review + D02 spike needed); Pomelo has no EF Core 10 release and EF Core 9 is out of support; M3 runner fixture default path broken (static), fixed on unmerged M3 branch.
+- Not done: no source/dependency/DB/CI/settings change, no external RAG change, nothing committed or pushed; BE-M4-D02 not started.
+- Next action (lead): review proposals and decision checklist; approve/adjust C1–C12, I1–I9, G03 option, G18 option; arrange the G19 review.
+
+## 2026-11-18 — BE-M4-D01b STEP 03-A…F (documentation only)
+- Branch `feature/m4-shared-contracts` @ `183ecf9`; remote develop `183ecf9`; PR #9 open (`01278d7`, unreviewed); M1 branch `e0d2fa8` without PR. Pre-existing 11 uncommitted D01b docs preserved; no source, configuration, dependency, database, CI or RAG change; nothing staged, committed or pushed.
+- Added to [17-SHARED-CONVENTIONS-PROPOSAL.md](../14-Current-Backend/17-SHARED-CONVENTIONS-PROPOSAL.md): §15 C1–C12 decision matrix with states and assessments; §16 health/readiness contracts and failure matrix (C11b pending); §17 interface inventory, ownership and transaction rules; §18 M3 runner revalidation and proposed CI step (not applied); §19 BE-M4-D01c plan.
+- Added to [18-MYSQL-PROVIDER-STUDY](../14-Current-Backend/18-MYSQL-PROVIDER-STUDY.md): 2026-11-18 re-verification, conditional recommendation, exact version proposal, database identities, 20-test spike plan, risk assessment, D02 acceptance criteria.
+- New facts: EF Core 11.0.0 released (`net11.0` only); no NuGet advisories for candidate provider packages; frontend repo has no Angular project yet (CORS origin unverified).
+- No decision approved; G01, G03, G04, G09, G10, G11, G13, G17, G18, G19, G20 and C11b remain open; G14 deferred.
+- Next action (lead): approve/adjust decision states; approve D01c independent part; licence review + spike authorization for G03; M3 agreement on G18; arrange G19 review; review/merge PR #9.
+
+## 2026-11-18 — STEP 03-G lead decisions, commit, push, PR
+- Lead decisions recorded in [17-SHARED-CONVENTIONS-PROPOSAL.md §20](../14-Current-Backend/17-SHARED-CONVENTIONS-PROPOSAL.md#20-lead-decision-record--2026-11-18): C1, C3, C4, C5, C8, C9, C10 APPROVED; C11b APPROVED AS ARCHITECTURAL DESIGN (no readiness implementation); G03 CONDITIONAL TESTING APPROVAL (G03 open); G18 Option B preferred (open); G20 recommendations only (open). C2, C5b, C6, C7, C12, A1, A2, `/internal/v1`, feature diagnostics pending; G01, G09, G10, G11, G13, G17, G19 open; G14 deferred.
+- BE-M4-D01b: documentation finalized, pending PR review and merge. BE-M4-D01c: implementation proposed, authorizing decisions recorded, pending separate execution approval. BE-M4-D01 work package **not complete**.
+- Commit/push/PR evidence (commit SHA, remote HEAD, PR number, CI run) is reported in the STEP 03-G execution report and will be added to the evidence register in the next documentation update (a commit cannot record its own SHA).
+- No source, dependency, database, CI or RAG change; no merge; D01c and D02 not started.
+
+## 2026-11-18 — BE-M4-D01c shared infrastructure (STEP 04-A…I)
+- develop fast-forwarded to `3f8f439` (PR #10, squash, merged with no recorded review, 2 s after CI). New branch `feature/m4-shared-infrastructure`; earlier M4 branches preserved.
+- Implemented (uncommitted): shared error codes, RFC 9457 Problem Details + global exception handler + status-code pages, validation helpers, `/api/v1` route group with DI-registered endpoint modules, typed `Services` options with start-up validation, `TimeProvider.System`, `ICurrentUser` + claims adapter, User Secrets ID, logging safety, launch settings (proposed port). Details: [17 §21](../14-Current-Backend/17-SHARED-CONVENTIONS-PROPOSAL.md).
+- Tests: 117 C# cases (65 methods) in 11 classes; local execution **BLOCKED** (Smart App Control; EV-20261118-12); Python 42 passed. Builds 0 warnings/0 errors; no new packages; no vulnerable packages.
+- Not implemented (pending decisions): CORS, OpenAPI, JWT/A1/A2, readiness, database, internal service calls, `/internal/v1`, M3 runner wiring.
+- No source outside M4 scope, no CI/DB/RAG change; nothing staged, committed or pushed.
+- Next action (lead): approve STEP 04-J (commit, push, PR, Linux CI); arrange independent review (PR #8, PR #10, this slice).

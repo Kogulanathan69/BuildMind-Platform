@@ -20,6 +20,8 @@ jobs:
         run: dotnet build BuildMind.sln --configuration Release --no-restore
       - name: Run C# tests
         run: dotnet test BuildMind.sln --configuration Release --no-build --verbosity normal
+      - name: Run M3 plan editor contract checks
+        run: dotnet run --project tests/BuildMind.Application.ContractTests/BuildMind.Application.ContractTests.csproj --configuration Release --no-build --no-restore
   python-tests:
     runs-on: ubuntu-latest
     steps:

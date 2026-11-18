@@ -1,4 +1,5 @@
 using BuildMind.Domain.Entities;
+using BuildMind.Reports.Tests.Fixtures;
 using static BuildMind.Reports.Tests.Fixtures.SyntheticReportFixtures;
 
 namespace BuildMind.Reports.Tests.Domain;
@@ -15,5 +16,5 @@ public class ReportTests
     [Fact] public void Stale_version_rejected() { var p = Pending(); Assert.Throws<InvalidOperationException>(() => p.Complete(2, Artifact(), Time.AddMinutes(4))); }
     [Fact] public void Terminal_transition_rejected() { var r = Pending().Fail(1, "TEST_ERROR", Time.AddMinutes(4)); Assert.Throws<InvalidOperationException>(() => r.Complete(2, Artifact(), Time.AddMinutes(5))); }
     [Fact] public void Chronology_rejected() { var p = Pending(); Assert.ThrowsAny<ArgumentException>(() => p.Fail(1, "TEST_ERROR", Time)); Assert.ThrowsAny<ArgumentException>(() => p.Complete(1, Artifact(), Time.AddMinutes(2))); }
-    [Fact] public void Wrong_project_rejected() => Assert.ThrowsAny<ArgumentException>(() => Report.CreatePending(ReportId, Id(99), User, Time.AddMinutes(2), Snapshot()));
+    [Fact] public void Wrong_project_rejected() => Assert.ThrowsAny<ArgumentException>(() => Report.CreatePending(ReportId, Id(99), SyntheticReportFixtures.User, Time.AddMinutes(2), Snapshot()));
 }

@@ -47,7 +47,7 @@ In the existing `database-compatibility` job (or a new job), before the integrat
       - name: Start the Python service (loopback only)
         run: |
           python -m pip install -r python-services/requirements.txt
-          (cd python-services && python -m uvicorn app.main:app --host 127.0.0.1 --port 8099 --log-level warning &) 
+          (cd python-services && python -m uvicorn app.main:app --host 127.0.0.1 --port 8099 --log-level warning &)
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8099/health && exit 0; sleep 1; done; exit 1
 ```
 Then add `BUILDMIND_TEST_PYTHON_URL: http://127.0.0.1:8099` to the test step env, plus a test class (`PythonLiveSmokeTests`) that calls `PythonServiceClient.CheckHealthAsync` (expects success), then stops the process (or uses a closed port) and expects `DependencyFailureException(Unavailable)`. The test **fails** when the variable is missing (no skips), so it is added only together with the approved workflow change.

@@ -117,3 +117,8 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 ## 2026-11-18 — STEP 06-E3 initial migration
 - PR #22 merged (`95b1e8a`), PR #21 closed superseded; post-merge CI green; MySQL 43/43.
 - Branch `feature/m4-initial-database-migration`: committed `20261118133137_InitialFeatureSchema` (byte-identical), tests switched to the committed migration, deployment safety docs. Next: draft PR → CI must show the verify-only path and 43/43; independent review; collation and head-number decisions.
+
+## 2026-11-18 — STEP 06-F remaining repositories
+- PR #23 merged (`8221523`, 0 reviews); post-merge CI green; MySQL 43/43 (artifact re-read).
+- Reassessment: nothing unblocked (no upstream contract changes). No code written. Proposed M1 rehydration factories and decisions recorded in 22.
+- Next: M1 decision; then M4 implements `UserRepository`/`ProjectRepository` with tests.

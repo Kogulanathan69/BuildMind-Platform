@@ -31,3 +31,5 @@ Start-up failure tests must prove the failure is an `OptionsValidationException`
 - (D02b) Timestamps are stored as unambiguous UTC (`datetime(6)`); non-UTC `DateTime` values are rejected. Migrations: single authorized executor, history check, backup before DDL, no automatic or production migrations.
 
 - (D03) Repositories filter every query by project; ports are not authorization guards, so callers must establish ownership first. Constraint violations are translated without values (for example a duplicate email); stored customer content is never echoed in errors. FKs use RESTRICT (no cascading deletes).
+
+- (STEP 06-F) Risk noted for M1: `IUserRepository.UpdateAsync` has no concurrency check, so concurrent profile/password/activation updates would be last-writer-wins. Decide before the user repository is implemented. Password hashes are stored only as provided (`password_hash` varchar(512)); hashing (A1/A2) is not implemented by M4.

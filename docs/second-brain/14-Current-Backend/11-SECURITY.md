@@ -52,3 +52,7 @@ Start-up failure tests must prove the failure is an `OptionsValidationException`
 - (STEP 09-A) Escaped database failures are logged as EventId 1006 with the failure kind, provider error number and schema constraint name only; never the provider message, SQL, values or connection string. Problem bodies carry fixed text. An architecture test forbids HTTP or internal-service dependencies in persistence types (no external calls inside transactions).
 
 - (STEP 09-B) Database failures are never logged with the exception object, **including in Development** (EventId 1006 warning, 1007 error), because provider messages can contain SQL and values. Commit or rollback uncertainty anywhere in an exception chain is always 500 and never a conflict or outage. Cancellation is never classified as a database failure. The persistence architecture test is structural only and cannot detect indirect calls.
+
+- (STEP 10-A) Readiness probes abandoned at their deadline are now always cancelled, so a hung dependency cannot pin the single-flight gate. Open security findings S1–S8 (no authn/authz, no CORS, `AllowedHosts: *`, no HTTPS/HSTS, no request size or rate limits, Actions not SHA-pinned, FastAPI docs exposed, G11, 0 reviews) are recorded in [25](25-M4-FINAL-QA-REPORT.md). None is simulated.
+
+- (STEP 10-B) Abandoned readiness probes are cancelled with `CancelAsync()`: cancellation callbacks never run on the readiness thread, so a blocking callback cannot delay `/health/ready`. Callback failures are dropped, never logged.

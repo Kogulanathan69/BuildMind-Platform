@@ -150,3 +150,17 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Mapping lead-approved. 4 audit defects fixed (see doc 24).
 - Infrastructure 412, MySQL 56, Python 54.
 - Next: draft PR → CI → download the 3 artifacts and verify 1,253 → independent human review (G19). Do not merge automatically.
+
+## 2026-11-19 — STEP 10-A BE-M4-D07 final QA
+- Run #52 verified by digest (1,253 passed). Branch `feature/m4-infrastructure-final-qa` created from `1ab1f98`.
+- Final QA report: doc 25. One M4 defect fixed (readiness abandoned probe), +2 tests (Infrastructure 414 compiled). **Uncommitted, awaiting source review.**
+- PR #28 (M5) is open and touches no M4 file; it needs independent review.
+- M7 not started.
+- Next: review → commit → draft PR → CI (expect 1,255).
+
+## 2026-11-19 — STEP 10-B BE-M4-D07 final audit and handover
+- Readiness correction audited; defect R2 fixed (`ProbeDeadline`), +3 deterministic tests.
+- **Final M4 handover: [26-M4-FINAL-HANDOVER.md](../14-Current-Backend/26-M4-FINAL-HANDOVER.md)**, with the exact outstanding work in §5.
+- Inventory: 417 / 56 / 54 → 1,258 compiled (1,253 executed in run #52).
+- Next: CI on the draft PR → verify 1,258 → independent QA review.
+- M4 is not complete and not production-ready. M7/RAG not started.

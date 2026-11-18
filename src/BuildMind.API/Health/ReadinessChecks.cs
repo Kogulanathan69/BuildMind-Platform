@@ -140,7 +140,8 @@ public sealed class MySqlReadinessCheck : IHealthCheck
         }
 
         var scope = scopes.CreateAsyncScope();
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        // Not `using`: if the probe is abandoned, the source must outlive this method (see ProbeDeadline.Settle).
+        var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(probeTimeout);
 
         Task<bool> probing;
@@ -150,6 +151,7 @@ public sealed class MySqlReadinessCheck : IHealthCheck
         }
         catch (Exception)
         {
+            deadline.Dispose();
             await ReleaseAsync(scope, gate.Semaphore).ConfigureAwait(false);
             return Readiness.Result(HealthStatus.Unhealthy, Readiness.Reasons.Unreachable);
         }
@@ -184,6 +186,10 @@ public sealed class MySqlReadinessCheck : IHealthCheck
         {
             // The exception (host, user, provider text) is deliberately dropped.
             return Readiness.Result(HealthStatus.Unhealthy, Readiness.Reasons.Unreachable);
+        }
+        finally
+        {
+            ProbeDeadline.Settle(probing, deadline);
         }
     }
 
@@ -258,7 +264,8 @@ public sealed class PythonReadinessCheck : IHealthCheck
             return Readiness.Result(HealthStatus.Degraded, Readiness.Reasons.Busy);
         }
 
-        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        // Not `using`: if the probe is abandoned, the source must outlive this method (see ProbeDeadline.Settle).
+        var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         bounded.CancelAfter(deadline);
 
         Task probing;
@@ -268,6 +275,7 @@ public sealed class PythonReadinessCheck : IHealthCheck
         }
         catch (Exception)
         {
+            bounded.Dispose();
             semaphore.Release();
             return Readiness.Result(HealthStatus.Degraded, Readiness.Reasons.Unreachable);
         }
@@ -308,6 +316,10 @@ public sealed class PythonReadinessCheck : IHealthCheck
         {
             return Readiness.Result(HealthStatus.Degraded, Readiness.Reasons.Unreachable);
         }
+        finally
+        {
+            ProbeDeadline.Settle(probing, bounded);
+        }
     }
 }
 
@@ -328,5 +340,57 @@ public sealed class InternalServiceReadinessCheck(string service, IOptions<Servi
 
         var reason = configured.Enabled ? Readiness.Reasons.Unverified : Readiness.Reasons.NotConfigured;
         return Task.FromResult(Readiness.Result(HealthStatus.Degraded, reason));
+    }
+}
+
+/// <summary>
+/// Owns the probe's deadline source once a readiness check has returned (STEP 10-A/10-B).
+/// </summary>
+/// <remarks>
+/// <para>A probe still running when the check returns (timeout or caller cancellation) is ABANDONED. Its token must be
+/// cancelled, otherwise a probe that relies on the token runs until the provider's own timeout and keeps the
+/// single-flight gate (<c>check_in_progress</c>; 503 for MySQL). <c>WaitAsync(timeout)</c> and
+/// <c>CancelAfter(timeout)</c> race, so the timer alone is not enough.</para>
+/// <para>Cancellation is requested with <see cref="CancellationTokenSource.CancelAsync"/>, so registered callbacks do
+/// NOT run on the readiness thread: a slow or blocking callback (a provider may open a second connection to kill a
+/// query) cannot delay the readiness result past its deadline. Callback failures are observed and dropped (never
+/// logged or returned). The source is disposed only after BOTH the probe and its callbacks have finished, never
+/// while they can still use it. The gate itself is released by the probe's own continuation when the probe really
+/// finishes, so a non-cooperative probe can hold at most one gate slot and probes never accumulate.</para>
+/// </remarks>
+internal static class ProbeDeadline
+{
+    internal static void Settle(Task probing, CancellationTokenSource source)
+    {
+        ArgumentNullException.ThrowIfNull(probing);
+        ArgumentNullException.ThrowIfNull(source);
+
+        if (probing.IsCompleted)
+        {
+            source.Dispose();
+            return;
+        }
+
+        Task cancelling;
+        try
+        {
+            cancelling = source.CancelAsync();
+        }
+        catch (Exception)
+        {
+            // Not expected (this method is the only owner that disposes the source); never fatal for readiness.
+            cancelling = Task.CompletedTask;
+        }
+
+        _ = Task.WhenAll(probing, cancelling).ContinueWith(
+            static (finished, state) =>
+            {
+                _ = finished.Exception; // observe probe and callback failures; never logged or returned
+                ((CancellationTokenSource)state!).Dispose();
+            },
+            source,
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 }

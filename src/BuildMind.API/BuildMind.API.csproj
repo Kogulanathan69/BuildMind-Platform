@@ -1,1 +1,16 @@
-<Project Sdk="Microsoft.NET.Sdk.Web"><PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup><ItemGroup><ProjectReference Include="../BuildMind.Application/BuildMind.Application.csproj" /><ProjectReference Include="../BuildMind.Infrastructure/BuildMind.Infrastructure.csproj" /></ItemGroup></Project>
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- C9: local development secrets live in the .NET User Secrets store, never in the repository. -->
+    <UserSecretsId>buildmind-api-13f8d930-0a34-4aa5-8757-cc3ebbea73de</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../BuildMind.Application/BuildMind.Application.csproj" />
+    <ProjectReference Include="../BuildMind.Infrastructure/BuildMind.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

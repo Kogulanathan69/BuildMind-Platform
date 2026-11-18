@@ -26,3 +26,10 @@ Existing starter layout historically observed: `src/BuildMind.API`, `src/BuildMi
 - `Program.cs` is the only composition root: `AddApplication().AddInfrastructure(configuration)`, `GET /health` (liveness only), `public partial class Program` for test hosting. Readiness is not mapped (BE-M4-D04).
 - Packages added: Application → `Microsoft.Extensions.DependencyInjection.Abstractions` 10.0.12; Infrastructure → that plus `Microsoft.Extensions.Configuration.Abstractions` 10.0.12. Domain has no packages or project references.
 - Dependency rules are enforced by `LayerDependencyTests` (declared and compiled references, no cycles, only API references Infrastructure). Local execution currently blocked (G17).
+
+## Implemented composition — BE-M4-D01c (2026-11-18, uncommitted, test execution pending)
+- `Program.cs`: `AddApplication().AddInfrastructure(configuration).AddBuildMindApiInfrastructure(configuration)`; middleware `UseExceptionHandler()` → `UseStatusCodePages()`; `GET /health` unchanged; `MapBuildMindApiV1()` maps DI-registered `IApiEndpointModule` implementations under `/api/v1`.
+- Application: `Abstractions/ICurrentUser.cs`, `Abstractions/Errors/SharedErrorCodes.cs`, `Abstractions/Errors/UnauthenticatedAccessException.cs` (no ASP.NET Core reference — enforced by `LayerDependencyTests.Inner_layers_do_not_reference_aspnetcore`).
+- Infrastructure: `TimeProvider.System` registration; `Configuration/ServicesOptions.cs`, `InternalServiceOptions.cs` (types + validation rules only).
+- API: `Errors/` (Problem Details, exception handler, validation helpers, trace IDs), `Routing/`, `Security/HttpContextCurrentUser.cs`, `Configuration/ServicesOptionsValidation.cs`, `ApiServiceCollectionExtensions.cs`.
+- Details and decision mapping: [17-SHARED-CONVENTIONS-PROPOSAL §21](17-SHARED-CONVENTIONS-PROPOSAL.md).

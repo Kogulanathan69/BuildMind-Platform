@@ -2,7 +2,7 @@
 
 C# tests are in the solution `BuildMind.sln` (added BE-M4-D01a, 2026-11-17):
 
-- `BuildMind.Infrastructure.Tests` (M4): API liveness contract, truthful readiness, Clean Architecture layer-direction rules (csproj and compiled references), DI container validation. xUnit v2 + `Microsoft.AspNetCore.Mvc.Testing` (in-memory test host; no MySQL, Python or network required).
+- `BuildMind.Infrastructure.Tests` (M4): API liveness contract, truthful readiness, Clean Architecture layer-direction rules (csproj and compiled references), DI container validation; since BE-M4-D01c also shared error codes, RFC 9457 Problem Details (Development and Production), `/api/v1` versioning, typed configuration and start-up validation, `TimeProvider`, current-user safety and logging safety. xUnit v2 + `Microsoft.AspNetCore.Mvc.Testing` (in-memory test host; no MySQL, Python or network required). Test-only synthetic endpoints live in `Support/SyntheticTestEndpoints.cs` and are registered only by the test factory.
 
 Also present (M3, merged `b03430e`): `BuildMind.Application.ContractTests` — a console contract-check runner (`OutputType Exe`, not xUnit), not in `BuildMind.sln` and not run by CI; adding it to the solution/CI needs M3 agreement (G18).
 

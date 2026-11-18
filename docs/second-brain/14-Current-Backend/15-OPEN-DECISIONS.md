@@ -72,3 +72,10 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
   - G17: local C# runs blocked different assemblies across rebuilds (Infrastructure, Domain, then the test assembly). **Open**; Smart App Control remains enabled.
   - C8 dependency note: Infrastructure-level options binding would require `Microsoft.Extensions.Options.ConfigurationExtensions` 10.0.12 — not installed; binding kept in the API composition root.
   - G01, G03, G04 (C2, C5b, C6, C7, C12, `/internal/v1`, feature diagnostics, A1, A2), G09, G10, G11, G13, G18, G19, G20: **open**. G14 deferred.
+
+- 2026-11-18 (STEP 04-K / 05-A, nothing resolved):
+  - G19 theme: PR #11 (BE-M4-D01c) merged as `0a4d70a` with **0 recorded reviews**; the same is true for PR #9 (M3), #13 (M1) and #14 (M5) per GitHub API. Independent review of PR #8, #10, #11 outstanding; no approval or waiver recorded.
+  - G13: no required status checks; CI nevertheless passed on all recent `develop` pushes (EV-20261118-21). Exact test counts require admin log access.
+  - G03: provider revalidated (EV-20261118-24): no change from the study; **licence acceptance for commercial use is the blocking decision**, then the disposable-database spike. G03 open.
+  - G17: still open (Smart App Control enabled); C# execution stays on Linux CI.
+  - New dependency for D02 (proposal only): domain entities `Report`, `ArchitectRequest`, `RequirementRevision` are immutable without parameterless constructors and with nested value objects; persistence mapping strategy (separate persistence models vs. EF mapping of domain types) must be agreed with M1/M3/M5 before feature schemas are frozen.

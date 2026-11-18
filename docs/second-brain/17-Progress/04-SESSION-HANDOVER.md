@@ -68,3 +68,9 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Not implemented (pending decisions): CORS, OpenAPI, JWT/A1/A2, readiness, database, internal service calls, `/internal/v1`, M3 runner wiring.
 - No source outside M4 scope, no CI/DB/RAG change; nothing staged, committed or pushed.
 - Next action (lead): approve STEP 04-J (commit, push, PR, Linux CI); arrange independent review (PR #8, PR #10, this slice).
+
+## 2026-11-18 — STEP 04-K post-merge + STEP 05-A D02 preparation
+- PR #11 squash-merged as `0a4d70a` (0 reviews). `develop` fast-forwarded to `08ec48a` (also includes PR #9 M3, #13 M1, #14 M5). New branch `feature/m4-database-infrastructure` from `08ec48a`; all earlier branches preserved.
+- CI: final PR run 44251191661 and post-merge run 44251341941 success; exact counts not retrieved (403). History: 124/126 → 125/126 → corrected (`27d320d`, `2d2a474`).
+- D02: environment and provider revalidated read-only; implementation readiness plan added to [18](../14-Current-Backend/18-MYSQL-PROVIDER-STUDY.md). **Stopped at G03 provider/licence approval gate.** No package, database, migration or production code change.
+- Next action (lead): (1) licence decision on Oracle provider for commercial use; (2) approve exact package set; (3) create disposable database + least-privilege accounts outside the repo; (4) authorize the spike; (5) arrange independent review of PR #8/#10/#11.

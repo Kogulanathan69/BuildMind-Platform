@@ -51,3 +51,5 @@ Out of scope for this register: 3D and construction cost endpoints (excluded by 
 | Room editing/validation | M5 + M6 | M3 | ASP.NET → Python | Proposed |
 | Regulation citations | M7 + M6 | M2/M3 via main API | ASP.NET → Python/RAG | Proposed |
 | Confirm revision | M5 | M3 | ASP.NET | Proposed |
+
+**Status note (2026-11-18):** the shared conventions approved in [17 §20](second-brain/14-Current-Backend/17-SHARED-CONVENTIONS-PROPOSAL.md) (C1, C3, C4, C5, C8, C9, C10) are implemented on `develop` (`0a4d70a`, PR #11): `/api/v1` route group, RFC 9457 Problem Details with `code`/`traceId`, shared error codes. `/health` unchanged. CORS, OpenAPI, JWT and readiness remain unimplemented and pending decisions.

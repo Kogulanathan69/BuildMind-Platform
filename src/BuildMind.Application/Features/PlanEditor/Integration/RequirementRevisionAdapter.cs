@@ -30,7 +30,7 @@ public sealed class RequirementRevisionAdapter(IRequirementRevisionRepository re
         if (revision.ProjectId != projectId ||
             revision.Id != revisionId ||
             string.IsNullOrWhiteSpace(revision.SchemaVersion))
-            throw new InvalidDataException(
+            throw new InvalidDependencyResponseException(
                 "The requirement dependency returned a contradictory revision reference.");
 
         return new RequirementRevisionReference(
@@ -39,3 +39,9 @@ public sealed class RequirementRevisionAdapter(IRequirementRevisionRepository re
             revision.SchemaVersion);
     }
 }
+
+/// <summary>
+/// Identifies a response that was received from an M3 dependency but violated that dependency's
+/// response contract. Keeping this type internal prevents it from becoming a shared public contract.
+/// </summary>
+internal sealed class InvalidDependencyResponseException(string message) : Exception(message);

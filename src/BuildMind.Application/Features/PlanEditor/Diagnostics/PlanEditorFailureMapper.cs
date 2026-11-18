@@ -1,6 +1,7 @@
 using System.Text.Json;
 using BuildMind.Application.Features.PlanEditor.Confirmation;
 using BuildMind.Application.Features.PlanEditor.Editing;
+using BuildMind.Application.Features.PlanEditor.Integration;
 using BuildMind.Application.Features.PlanEditor.Versioning;
 
 namespace BuildMind.Application.Features.PlanEditor.Diagnostics;
@@ -208,7 +209,7 @@ public static class PlanEditorFailureMapper
         if (exception is HttpRequestException)
             return Retryable(PlanEditorErrorCodes.DependencyUnavailable,
                 "A required service is temporarily unavailable.", correlationId);
-        if (exception is JsonException or InvalidDataException or FormatException)
+        if (exception is JsonException or InvalidDependencyResponseException or FormatException)
             return Failure(PlanEditorErrorCodes.InvalidDependencyResponse,
                 "A required service returned an invalid response.", PlanEditorDiagnosticSeverity.Critical, correlationId);
 

@@ -364,7 +364,7 @@ public sealed class RequirementsEndpointTests
             builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
             builder.Services.AddSingleton<IProjectRepository>(flow!.Projects);
             builder.Services.AddSingleton<IRequirementRevisionRepository>(flow.Store);
-            builder.Services.AddSingleton<IRequirementCatalogueProvider>(new FlowCatalogue());
+            builder.Services.AddSingleton<IRequirementCatalogueProvider>(flow.Catalogue);
             builder.Services.AddSingleton(TimeProvider.System);
             builder.Services.AddIsolatedRequirementsFeature(builder.Environment);
         }
@@ -401,11 +401,15 @@ public sealed class RequirementsEndpointTests
         }
     }
     private sealed class SyntheticUnknownOutcome(string message) : Exception(message);
-    private sealed class FlowDependencies
+    internal static Task<WebApplication> CreateSectionTestHost(FlowDependencies flow) => Host(null, flow);
+    internal static HttpClient SectionAuthenticatedClient(WebApplication app) => AuthenticatedClient(app);
+
+    internal sealed class FlowDependencies
     {
         public Project Project { get; } = new() { OwnerId = Guid.Parse("70000000-0000-0000-0000-000000000007"), Name = "Synthetic private project" };
         public FlowProjects Projects { get; }
         public FlowStore Store { get; } = new();
+        public IRequirementCatalogueProvider Catalogue { get; init; } = new FlowCatalogue();
         public FlowDependencies() => Projects = new(Project);
     }
     private sealed class FlowCatalogue : IRequirementCatalogueProvider
@@ -414,7 +418,7 @@ public sealed class RequirementsEndpointTests
             Task.FromResult<RequirementCatalogue?>(new("synthetic-policy", "synthetic-schema", new(1, 1),
                 [new("ROOM_A", new(0, 3), true)], [new("SYNTHETIC_SPACE", false, null)], [], [], false));
     }
-    private sealed class FlowProjects(Project project) : IProjectRepository
+    internal sealed class FlowProjects(Project project) : IProjectRepository
     {
         public Task<Project?> GetByIdAndOwnerAsync(Guid id, Guid ownerId, CancellationToken cancellationToken) =>
             Task.FromResult(id == project.Id && ownerId == project.OwnerId ? project : null);
@@ -423,23 +427,33 @@ public sealed class RequirementsEndpointTests
         public Task AddAsync(Project value, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> UpdateAsync(Project value, Guid ownerId, long expectedRevision, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
-    private sealed class FlowStore : IRequirementRevisionRepository
+    internal sealed class FlowStore : IRequirementRevisionRepository
     {
+        private readonly object _gate = new();
         public RequirementRevision? Current { get; private set; }
         public Dictionary<Guid, RequirementRevision> History { get; } = [];
         public int Reads { get; private set; }
         public Task<RequirementRevision?> GetCurrentAsync(Guid projectId, CancellationToken cancellationToken)
         {
-            Reads++;
-            return Task.FromResult(Current?.ProjectId == projectId ? Current : null);
+            lock (_gate)
+            {
+                Reads++;
+                return Task.FromResult(Current?.ProjectId == projectId ? Current : null);
+            }
         }
-        public Task<RequirementRevision?> GetAsync(Guid projectId, Guid revisionId, CancellationToken cancellationToken) =>
-            Task.FromResult(History.TryGetValue(revisionId, out var value) && value.ProjectId == projectId ? value : null);
+        public Task<RequirementRevision?> GetAsync(Guid projectId, Guid revisionId, CancellationToken cancellationToken)
+        {
+            lock (_gate)
+                return Task.FromResult(History.TryGetValue(revisionId, out var value) && value.ProjectId == projectId ? value : null);
+        }
         public Task<RequirementSaveResult> TrySaveAtomicallyAsync(Guid? expectedRevisionId, RequirementRevision proposedRevision, CancellationToken cancellationToken)
         {
-            if (Current?.Id != expectedRevisionId) return Task.FromResult(new RequirementSaveResult(RequirementSaveStatus.RevisionConflict));
-            Current = proposedRevision; History.Add(Current.Id, Current);
-            return Task.FromResult(new RequirementSaveResult(RequirementSaveStatus.Saved, Current));
+            lock (_gate)
+            {
+                if (Current?.Id != expectedRevisionId) return Task.FromResult(new RequirementSaveResult(RequirementSaveStatus.RevisionConflict));
+                Current = proposedRevision; History.Add(Current.Id, Current);
+                return Task.FromResult(new RequirementSaveResult(RequirementSaveStatus.Saved, Current));
+            }
         }
     }
     private sealed class TestEnvironment(string name) : IHostEnvironment

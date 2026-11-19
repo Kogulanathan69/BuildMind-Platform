@@ -83,3 +83,5 @@
 2026-11-19 — Final integration 02: run #72 step-level evidence (full-stack smoke, live RAG); final M4/M7 delivery status (doc 28 §7). Evidence EV-20261119-17.
 
 2026-11-19 — M6-review corrections: human-reviewed constraint provider (contract v0, synthetic), strict raw-JSON validation (C# + Python), token transport enforcement, constraint C# port/client. Evidence EV-20261119-19.
+
+2026-11-19 — Post-merge verification of PR #35 (CI #77/#78, live 12/12, fabrication guard); revised M6 evidence (doc 29 §10). Evidence EV-20261119-20.

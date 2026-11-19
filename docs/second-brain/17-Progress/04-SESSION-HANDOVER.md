@@ -241,3 +241,9 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Constraint provider (v0, synthetic), strict JSON and auth/transport hardening on `feature/m7-regulatory-constraints`.
 - Revised M6 submission: doc 29 §9.
 - Approvals needed: see open decisions.
+
+## 2026-11-19 — Post-merge regulatory verification (PR #35)
+- CI #77/#78 green.
+- Local regression and live 12/12 hardening checks pass; the fabrication guard has been verified live.
+- M6 evidence pack: doc 29 §9–§10.
+- Still waiting: M6 (no branch yet), the domain reviewer (G06), independent reviews (G19), R-1/R-3.

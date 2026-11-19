@@ -118,3 +118,22 @@
 2. **Condition fields** (`building_height_m`, `plot_area_m2`, `floors`, `road_width_m`): where M6 gets their actual values (M2 land / M5 requirements).
 3. **Real values:** who is the domain reviewer (G06), and where does the reviewed table live? **No real regulatory values are in the repository.**
 4. **Gazette vs council precedence:** currently exact-jurisdiction only; overlapping scopes are not merged.
+
+## 10. Revised technical evidence for M6 approval (post-merge, 2026-11-19)
+**Merged:** PR #35 → `develop` `bf72343` (squash; tree byte-identical to the reviewed head `c84e0da`; **0 independent reviews**, G19).
+
+| Evidence | Result |
+|---|---|
+| PR CI run #77 (`c84e0da`) | All jobs success, including the full-stack smoke and live C#→RAG steps (step metadata; artifacts not read) |
+| Post-merge CI run #78 (`bf72343`) | All jobs success, same steps (step metadata) |
+| Local regression on `develop` | Build 0 warnings; no vulnerable packages; python-services 54/54; rag-service 139/139; real corpus 7/7; engine copy byte-stable (0 CR) |
+| **Live loopback service (real corpus, random token): 12/12** | Valid search 200 `EVIDENCE_FOUND`; no token 401; repeated token header 401; duplicate key 400; NaN 400; `text/plain` 415; unknown field 422; chunked 41 KB 413; constraints without table 503 `CONSTRAINTS_UNAVAILABLE`; missing binding 422; revision 0 422; token absent from server log |
+| **Fabrication guard (live)** | Starting the service with the synthetic table against the real corpus is **refused** ("does not reconstruct"): no constraint can load unless its citation exists verbatim in an approved, hash-verified source |
+
+**Not claimed:**
+- no real regulatory values exist (G06; human review required);
+- contract v0 is not approved by M6;
+- legal currency is unverified;
+- no M6 consumer exists (no M6 branch or code on the remote as of this check).
+
+**Requested from M6:** review §9 and §10 and answer the four open questions in §9 (kinds/units, condition-field sources, domain reviewer/table location, Gazette/council precedence).

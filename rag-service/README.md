@@ -1,27 +1,68 @@
-# RAG service — M7 ownership
+# RAG service (M7): private regulation evidence retrieval
 
-This directory is deliberately **documentation-only**. It must not contain legal/reference PDFs, personal data, raw surveys, OCR caches, extracted text, indexes, embeddings, evaluation datasets or API keys — this repository is public.
+**MVP status (2026-11-19, `feature/m7-rag-retrieval-service`): implemented for development and CI.** Not production-approved.
 
-> Reconciled 2026-11-17 (BE-M7-D01). Earlier text pointed to `docs/second-brain/13-Implementation-Blueprint/` (now historical V2) and described embeddings as part of the service; embeddings are **not implemented**.
+**Internal authentication (G11 MVP):** every endpoint except `/health` requires `X-BuildMind-Internal-Token`, configured with `BUILDMIND_RAG_INTERNAL_TOKENS` (1–2 values of 32+ characters; fail closed). The development-only opt-out is `BUILDMIND_RAG_AUTH=disabled`. See `docs/second-brain/14-Current-Backend/31-INTERNAL-SERVICE-AUTH.md`. Transport and hosting are still open, so keep the service on loopback or a private network.
 
-## Where the engine is
+## What it does
+- **Endpoint:** `POST /internal/v1/regulations/search`, evidence contract **v1** (lead-approved 2026-11-19).
+- **Input:** a query, plus optionally an exact jurisdiction label and approved document IDs.
+- **Output:** ranked source passages with **citations** (document, PDF page, character offsets, excerpt) and an explicit **evidence status**:
 
-The existing retrieval engine is **not in this repository and not under version control**. Candidate canonical implementation (pending lead confirmation, G10): `C:\BuildMind-PDF-Processor\regulation_retrieval` on the lead's workstation. Older staging/backup copies exist elsewhere and are not canonical. Do not copy the extraction workspace (≈12 GB, includes source PDFs) into this repo. Proposed version-control and integration approach: [16-RAG-SOURCE-STRATEGY-PROPOSAL](../docs/second-brain/14-Current-Backend/16-RAG-SOURCE-STRATEGY-PROPOSAL.md) (proposal, not approved).
+| Status | Meaning |
+|---|---|
+| `EVIDENCE_FOUND` | At least one passage meets the evidence checks |
+| `AMBIGUOUS_EVIDENCE` | Passages exist but need review; they are returned, flagged |
+| `NO_MATCHING_EVIDENCE` | Nothing supports the query, or requested sources are only partly covered |
+| `INSUFFICIENT_JURISDICTION_EVIDENCE` | The jurisdiction isn't supported by an approved source |
+| `INSUFFICIENT_SOURCE_EVIDENCE` | The requested source isn't in the approved corpus |
 
-## Verified vs planned (as of 2026-11-17, static inspection only)
+- **What it never does:** generate answers, claim legal currency or applicability, or approve compliance. `legal_status_verified` and `answer_generated` are always `false`.
+- **Location filtering:** exact approved jurisdiction labels only. No alias or locality inference; an unknown location is reported, never guessed. `GET /internal/v1/regulations/sources` lists the labels.
+- **Liveness:** `GET /health` returns `{"service":"buildmind-rag","status":"ok","contract_version":"1","corpus_loaded":bool}`.
+- **Hardening:**
+  - `/docs`, `/redoc` and `/openapi.json` are disabled;
+  - request bodies are limited to 16 KB;
+  - validation errors never echo input;
+  - unexpected errors are a generic 500;
+  - with no corpus configured, search and sources return `503 CORPUS_UNAVAILABLE`.
 
-| Item | State |
-| --- | --- |
-| PDF extraction corpus | Exists as pipeline output (746 master records, 543 unique PDFs, 44,855 processed pages per its own summary). Not independently re-verified. Not the retrieval corpus. |
-| Indexed retrieval corpus | **1 document** (UDA Gazette 2235/54). Legal currency unverified. |
-| Retrieval method | **BM25 lexical ranking, Python standard library only**. Python API `RegulationRetrievalService(index_path).search(query, k, filters)` returning page-located passages. |
-| HTTP route | **None.** No FastAPI/internal service exists for retrieval. |
-| Embeddings / vector store | **Planned only.** A separate embedding smoke script exists; no approved model, store or integration. |
-| Tests | Historical: 93 unit tests reported OK in a log dated 2026-11-13. **Not re-run** in the 2026-11-17 audit. |
-| Generated answers / LLM | None. |
+## Engine (reused, not rebuilt)
+`regulation_retrieval/` is a **verbatim code-only copy** of the existing engine's runtime modules: STEP 4 BM25 retrieval with jurisdiction filtering, and the STEP 6 evidence assessor and grouping. The source and the SHA-256 of every file are in `regulation_retrieval/PROVENANCE.json`, and a test enforces that the copy stays byte-identical. The original workspace is unchanged.
 
-Details and evidence: [08-RAG](../docs/second-brain/14-Current-Backend/08-RAG.md), [audit](../docs/second-brain/17-Progress/07-AUDIT-2026-11-17.md).
+**This repository is public. It must never contain:**
+- PDFs, extracted text, indexes or embeddings;
+- evaluation datasets or personal data;
+- keys.
 
-## Responsibilities
+The corpus is located at runtime and verified by the reused loaders (original-PDF and record SHA-256 checks against the approved allowlist):
 
-M7: source provenance, corpus manifest, document metadata, chunking, retrieval, citations, jurisdiction/applicability status, evaluation evidence. M4: shared C# service-client infrastructure (timeouts, auth, correlation, safe errors). M6: consumes source-linked evidence; deterministic validation remains authoritative. Relevance scores are not legal confidence; retrieved text is untrusted data, never instructions.
+| Variable | Points to |
+|---|---|
+| `BUILDMIND_RAG_CORPUS_ROOT` | Corpus root containing `input_pdfs/` and `output/documents/` |
+| `BUILDMIND_RAG_MANIFEST` | The approved STEP 4 manifest (`approved_corpus_manifest.json`) |
+| `BUILDMIND_RAG_INDEX` | The prebuilt STEP 4 index (`multi_document_index.json`) |
+
+## Run locally (loopback only)
+```powershell
+cd rag-service
+python -m pip install -r requirements-dev.txt
+$env:BUILDMIND_RAG_CORPUS_ROOT='C:\BuildMind-PDF-Processor'
+$env:BUILDMIND_RAG_MANIFEST='C:\BuildMind-PDF-Processor\output\regulation_retrieval_step4\approved_corpus_manifest.json'
+$env:BUILDMIND_RAG_INDEX='C:\BuildMind-PDF-Processor\output\regulation_retrieval_step4\multi_document_index.json'
+python -B -m uvicorn app.main:app --host 127.0.0.1 --port 8100
+```
+C# configuration: `Services__Rag__Enabled=true`, `Services__Rag__BaseUrl=http://127.0.0.1:8100/`. The Application port is `IRegulationEvidenceSource`, implemented by `RagServiceClient`.
+
+## Tests
+- **CI (no corpus):** `python -B -m pytest -q`.
+  - It runs the **real copied** retrieval, assessment and grouping code over a clearly **synthetic** two-council corpus.
+  - It covers API hygiene and the shared contract example (`contract/search_response.v1.example.json`, also checked by the C# tests).
+- **Local real corpus (read-only):** `python -B -m pytest -p no:cacheprovider tests_local` with the three variables set. It fails, never skips, if they're missing.
+
+## Known limitations
+- Lexical BM25 only. There are no embeddings; lexical false positives and negatives are possible.
+- Evidence statuses are heuristic and are not semantic entailment.
+- The corpus has **three** approved documents (UDA Gazette 2235/54, the Colombo and Maharagama development plans). Their legal currency and amendments are unverified.
+- Maharagama naming ambiguity makes its passages `AMBIGUOUS_EVIDENCE` by design.
+- Parcel-level applicability is never decided.

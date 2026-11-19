@@ -59,3 +59,15 @@ A database failure that escapes a feature returns:
 - foreign key, unknown commit outcome, unconfirmed rollback or unexpected → 500 `INTERNAL_ERROR`.
 
 Non-database exceptions are unaffected. Feature adapters keep precedence. No idempotency contract is implied (C2/C5b open). See [24-M4-D06-PERSISTENCE-CONCURRENCY.md](24-M4-D06-PERSISTENCE-CONCURRENCY.md).
+
+## Regulation evidence contract v1 (M7; lead-approved 2026-11-19)
+- **Endpoint:** `POST /internal/v1/regulations/search` on the private `rag-service`.
+- **Request:** `{query (1–500), jurisdiction? (exact label), document_ids? (1–3 × 64-hex), k (1–10, strict int)}`. Unknown fields are rejected.
+- **Response:** `{status, passages[], warnings[], legal_status_verified:false, answer_generated:false}`.
+  - Status is one of `EVIDENCE_FOUND`, `NO_MATCHING_EVIDENCE`, `INSUFFICIENT_JURISDICTION_EVIDENCE`, `INSUFFICIENT_SOURCE_EVIDENCE`, `AMBIGUOUS_EVIDENCE`.
+  - Each passage: `{passage_id, document_id, source_title, jurisdiction, page (one-based PDF position), start_char, end_char, excerpt, score (BM25 relevance, not legal confidence), evidence_status (EVIDENCE_CANDIDATE | AMBIGUOUS_EVIDENCE), warnings[]}`.
+  - Passages appear only for `EVIDENCE_FOUND` and `AMBIGUOUS_EVIDENCE`.
+- **Errors:** `422 VALIDATION_FAILED` (no input echo), `413 PAYLOAD_TOO_LARGE`, `503 CORPUS_UNAVAILABLE`, `500 INTERNAL_ERROR`.
+- **Additive:** `GET /internal/v1/regulations/sources` (approved source labels) and `GET /health`.
+- **C#:** `IRegulationEvidenceSource.SearchAsync` → `RegulationEvidence`. A contract violation becomes `MalformedResponse`, and unavailability becomes 503/504 via `DependencyFailureException`.
+- **Shared example:** `rag-service/contract/search_response.v1.example.json`.

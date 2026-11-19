@@ -228,37 +228,99 @@ public sealed class PythonReadinessCheck : IHealthCheck
 {
     internal static readonly TimeSpan DefaultDeadline = TimeSpan.FromSeconds(3);
 
-    private readonly Func<CancellationToken, Task> probe;
-    private readonly bool enabled;
-    private readonly ReadinessProbeGate gate;
-    private readonly TimeSpan deadline;
+    private readonly BoundedServiceProbe probe;
 
     public PythonReadinessCheck(BuildMind.Infrastructure.Integration.PythonServiceClient client, ReadinessProbeGate gate)
         : this((client ?? throw new ArgumentNullException(nameof(client))).CheckHealthAsync, client.IsEnabled, gate, DefaultDeadline)
     {
     }
 
-    internal PythonReadinessCheck(Func<CancellationToken, Task> probe, bool enabled, ReadinessProbeGate gate, TimeSpan deadline)
+    internal PythonReadinessCheck(Func<CancellationToken, Task> probe, bool enabled, ReadinessProbeGate gate, TimeSpan deadline) =>
+        this.probe = new BoundedServiceProbe("python", probe, enabled, gate, deadline);
+
+    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default) =>
+        probe.RunAsync(cancellationToken);
+}
+
+/// <summary>
+/// RAG readiness (M7, evidence contract v1) against the rag-service <c>GET /health</c>. RAG is instance-optional
+/// (C11b): it is never Unhealthy (never makes <c>/health/ready</c> 503).
+/// <list type="bullet">
+/// <item>Healthy (<c>reachable</c>) only when the service identity is <c>buildmind-rag</c>, the contract version is
+/// <c>1</c> AND the regulation corpus is loaded.</item>
+/// <item>Degraded <c>unavailable</c>: the service is up but has no verified corpus (search would return 503).</item>
+/// <item>Degraded <c>unverified</c>: wrong identity or contract version.</item>
+/// <item>Degraded <c>not_configured</c>, <c>timeout</c>, <c>unreachable</c> or <c>check_in_progress</c> as for
+/// Python.</item>
+/// </list>
+/// Bounded deadline (3 s, enforced even if the transport ignores cancellation) and its own single-flight gate.
+/// No URL, exception text or response body is ever reported.
+/// </summary>
+public sealed class RagReadinessCheck : IHealthCheck
+{
+    private readonly BoundedServiceProbe probe;
+
+    public RagReadinessCheck(BuildMind.Infrastructure.Integration.RagServiceClient client, ReadinessProbeGate gate)
+        : this(client, gate, PythonReadinessCheck.DefaultDeadline)
     {
-        this.probe = probe ?? throw new ArgumentNullException(nameof(probe));
-        this.enabled = enabled;
-        this.gate = gate ?? throw new ArgumentNullException(nameof(gate));
-        this.deadline = deadline;
     }
 
-    /// <remarks>
-    /// Same protections as the MySQL check (STEP 08-B): a hard deadline via <see cref="Task.WaitAsync(TimeSpan, CancellationToken)"/>
-    /// that holds even if a transport ignores cancellation, and a single-flight gate so readiness polling can never
-    /// accumulate outstanding Python probes. An abandoned probe releases the gate only when it really finishes.
-    /// </remarks>
-    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+    internal RagReadinessCheck(BuildMind.Infrastructure.Integration.RagServiceClient client, ReadinessProbeGate gate, TimeSpan deadline)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        probe = new BoundedServiceProbe("rag", token => ProbeAsync(client, token), client.IsEnabled, gate, deadline);
+    }
+
+    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default) =>
+        probe.RunAsync(cancellationToken);
+
+    private static async Task ProbeAsync(BuildMind.Infrastructure.Integration.RagServiceClient client, CancellationToken cancellationToken)
+    {
+        BuildMind.Infrastructure.Integration.RagServiceClient.RagHealthResponse health;
+        try
+        {
+            health = await client.CheckHealthAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (BuildMind.Application.Abstractions.Errors.DependencyFailureException failure)
+            when (failure.Kind == BuildMind.Application.Abstractions.Errors.DependencyFailureKind.MalformedResponse)
+        {
+            throw new ReadinessDegradedException(Readiness.Reasons.Unverified);
+        }
+
+        if (!health.CorpusLoaded)
+        {
+            throw new ReadinessDegradedException(Readiness.Reasons.Unavailable);
+        }
+    }
+}
+
+/// <summary>A probe outcome that is a specific Degraded reason rather than a transport failure.</summary>
+internal sealed class ReadinessDegradedException(string reason) : Exception
+{
+    public string Reason { get; } = reason;
+}
+
+/// <summary>
+/// Bounded, single-flight readiness probe for one private internal service (shared by Python and RAG). Same
+/// protections as the MySQL check (STEP 08-B / 10-A / 10-B): a hard deadline via
+/// <see cref="Task.WaitAsync(TimeSpan, CancellationToken)"/> that holds even if a transport ignores cancellation, a
+/// per-service single-flight gate so polling can never accumulate outstanding probes, and abandoned probes cancelled
+/// through <see cref="ProbeDeadline"/>. Never returns Unhealthy.
+/// </summary>
+internal sealed class BoundedServiceProbe(
+    string gateKey, Func<CancellationToken, Task> probe, bool enabled, ReadinessProbeGate gate, TimeSpan deadline)
+{
+    private readonly Func<CancellationToken, Task> probe = probe ?? throw new ArgumentNullException(nameof(probe));
+    private readonly ReadinessProbeGate gate = gate ?? throw new ArgumentNullException(nameof(gate));
+
+    internal async Task<HealthCheckResult> RunAsync(CancellationToken cancellationToken)
     {
         if (!enabled)
         {
             return Readiness.Result(HealthStatus.Degraded, Readiness.Reasons.NotConfigured);
         }
 
-        var semaphore = gate.For("python");
+        var semaphore = gate.For(gateKey);
         if (!await semaphore.WaitAsync(TimeSpan.Zero, cancellationToken).ConfigureAwait(false))
         {
             return Readiness.Result(HealthStatus.Degraded, Readiness.Reasons.Busy);
@@ -303,6 +365,10 @@ public sealed class PythonReadinessCheck : IHealthCheck
         {
             return Readiness.Result(HealthStatus.Degraded, Readiness.Reasons.Timeout);
         }
+        catch (ReadinessDegradedException degraded)
+        {
+            return Readiness.Result(HealthStatus.Degraded, degraded.Reason);
+        }
         catch (BuildMind.Application.Abstractions.Errors.DependencyFailureException failure)
         {
             return Readiness.Result(HealthStatus.Degraded, failure.Kind switch
@@ -320,26 +386,6 @@ public sealed class PythonReadinessCheck : IHealthCheck
         {
             ProbeDeadline.Settle(probing, bounded);
         }
-    }
-}
-
-/// <summary>
-/// RAG readiness. No RAG HTTP service or contract exists in the repository, so a configured RAG is
-/// "unverified" and an unconfigured one "not_configured": both Degraded, never Healthy.
-/// </summary>
-public sealed class InternalServiceReadinessCheck(string service, IOptions<ServicesOptions> options) : IHealthCheck
-{
-    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
-    {
-        var configured = service switch
-        {
-            "python" => options.Value.Python,
-            "rag" => options.Value.Rag,
-            _ => throw new InvalidOperationException("Unknown internal service readiness check."),
-        };
-
-        var reason = configured.Enabled ? Readiness.Reasons.Unverified : Readiness.Reasons.NotConfigured;
-        return Task.FromResult(Readiness.Result(HealthStatus.Degraded, reason));
     }
 }
 

@@ -122,3 +122,21 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
 - 2026-11-19 (STEP 10-H): **lead decision "Stop; revisit design"**: the open-gate semantics are NOT changed (strict hold until the provider open ends). **OPEN, blocking production readiness: R-3.** MySql.Data doesn't bound or cancel its handshake after TCP connect, so one stalled handshake holds the process-wide gate and every other open fails with 503 after `ConnectionTimeout`. Options for the decision: (a) bounded lease (release after the connect timeout; residual rare provider race R-2), (b) strict hold, (c) another design. Stress workflow, ungated reproduction and upstream report remain deferred.
 
 - 2026-11-19 (STEP 10-I): the lead authorized the 10-H/10-I corrections for **development and CI only** (explicit instruction); **production NOT approved**; no bounded lease; R-1/R-3 unresolved. **New decision pending:** doc 27 (provider spike MySqlConnector + Pomelo, stall detection + recovery, circuit breaker, upstream report).
+
+- 2026-11-19 (M7 MVP): **lead approved** (explicit in-session answers):
+  - G10: code-only copy into `rag-service/`; the canonical engine is confirmed as the source of the copy, and its workspace stays the corpus location;
+  - G11 (RAG hosting only): a separate private FastAPI service;
+  - BE-M7-D03: evidence contract v1 frozen;
+  - a read-only baseline run.
+
+  **Still open:** G11 internal authentication and transport; CI workflow integration of the rag-service tests; a real RAG readiness probe; the M6 evidence consumer (D05); legal currency of the 3 sources (G06).
+
+- 2026-11-19 (M7 phase 02): **M7-D05 blocked**. No M6 code or contract exists on any branch; M6's plan requires "M7 sourced rules/constraints". A structured regulatory-constraint contract (reviewed constraints with provenance, consumed by M6's deterministic validator) needs **M6 + M7 + lead approval**; it was not invented. Consolidated dependency list: [28](28-MVP-STATUS-AND-DEPENDENCIES.md).
+
+- 2026-11-19 (phase 03): **record:** PR #30 merged to `develop` (`d5db6f8`) with 0 reviews and **without** the approved 5-consecutive-verified-run evidence (only public-metadata green runs). R-1/R-3 open on `develop` (G19 applies). **New proposal for decision:** M6–M7 regulatory constraint contract, doc 29 (needs M6 + M7 + lead).
+
+- 2026-11-19 (phase 04): **G11 partially decided (lead, explicit in-session answer):** a per-service shared-secret token (`X-BuildMind-Internal-Token`), implemented for rag-service and the C# client; fail closed; default-deny (doc 31). **Still open:** python-services adoption (M6 custodian), transport encryption and hosting, mTLS/JWT as future options.
+
+- 2026-11-19 (phase 05): **coordination pending, M6 bootstrap custodian:** adopt the rag-service internal-token pattern in python-services (doc 33 §C). It needs the custodian's agreement plus lead approval for the CI token change. The C# side already supports `Services:Python:AuthToken`.
+
+- 2026-11-19 (final integration 01): **lead approved** (explicit in-session answer) the CI full-stack smoke: rag-service started live in `database-compatibility` (loopback, random per-run token, no corpus), live C#→RAG tests, and a built API + MySQL + Python + RAG `/health/ready` smoke (`tools/smoke/full-stack-smoke.sh`). R-1/R-3 re-evaluated (doc 27 §6): Pomelo has no EF Core 10 release, so D isn't viable now; the recommendation is A + operational F.

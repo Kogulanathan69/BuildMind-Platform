@@ -29,15 +29,24 @@ public sealed class StubHttpHandler(Func<HttpRequestMessage, CancellationToken, 
         return new HttpResponseMessage(HttpStatusCode.OK);
     });
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    /// <summary>
+    /// Request bodies captured while the request is in flight (null when there was no content). The client disposes
+    /// its request content once the call completes (correct production behaviour), so tests must read these captured
+    /// copies rather than <c>Requests[i].Content</c>, which is already disposed by then.
+    /// </summary>
+    public List<string?> RequestBodies { get; } = [];
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref calls);
+        var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         lock (Requests)
         {
             Requests.Add(request);
+            RequestBodies.Add(body);
         }
 
-        return respond(request, cancellationToken);
+        return await respond(request, cancellationToken).ConfigureAwait(false);
     }
 }
 
@@ -51,4 +60,10 @@ public static class StubHttpHandlerHostExtensions
         this BuildMindApiFactory factory, StubHttpHandler handler) =>
         factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
             services.AddHttpClient<PythonServiceClient>().ConfigurePrimaryHttpMessageHandler(() => handler)));
+
+    /// <summary>Replaces the RAG client's primary transport in the API test host (M7).</summary>
+    public static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> WithRagTransport(
+        this Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> factory, StubHttpHandler handler) =>
+        factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            services.AddHttpClient<RagServiceClient>().ConfigurePrimaryHttpMessageHandler(() => handler)));
 }

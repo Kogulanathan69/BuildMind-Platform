@@ -185,3 +185,54 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Operation-scoped gate ownership; SSL03 cleanup guaranteed; ADR proposal doc 27.
 - Committed to PR #30; the 5-run count restarts at 0.
 - Production not approved; R-1/R-3 open. M7 not started.
+
+## 2026-11-19 — Accelerated MVP: M7 retrieval service
+- **M4:** run #59 green by metadata only; artifacts need an authenticated download → 5-run count 0/5 verified. PR #30 preserved; R-1/R-3 open.
+- **M7:** `feature/m7-rag-retrieval-service` from `develop` `2ad74d1`. rag-service (contract v1) with the reused engine; C# port and client; tests 44 CI + 6 real-corpus; real E2E. **Uncommitted.**
+- **Next:**
+  - lead approval of CI workflow integration + commit;
+  - RAG readiness probe;
+  - M6 evidence consumer (D05).
+
+## 2026-11-19 â€” Accelerated MVP phase 02
+- RAG readiness implemented (real probe).
+- M6 evidence integration blocked (no M6 code or contract).
+- Consolidated M4/M7 status and dependencies: doc 28.
+- **Uncommitted, on `feature/m7-rag-retrieval-service`.** PR #30 and the M4 branches untouched. M7 PR still to be opened by the lead.
+
+## 2026-11-19 — Fast-track phase 03 (final MVP handover)
+- **PR #32:** CI fixed (run #64 green), `develop` merged in, mergeable.
+- **PR #30:** merged by the lead (0 reviews; R-1/R-3 now on `develop`).
+- **Docs:** 29 (M6–M7 contract proposal), 30 (runbook), 28 §5 (final status).
+- **Local stack:** Python and RAG healthy; C# API blocked by Smart App Control.
+- **Next:**
+  - lead downloads the run #64 artifacts (count verification);
+  - independent review of PR #32;
+  - M6 coordination on doc 29.
+
+## 2026-11-19 — Fast-track phase 04
+- G11 MVP token auth (rag-service + C# client) implemented and verified locally (doc 31).
+- Acceptance matrix: doc 32.
+- M6 coordination message: doc 29 §8 (lead to send).
+- **Next:**
+  - CI on PR #32 for the new C# auth tests;
+  - lead artifact download for count verification;
+  - python-services auth after M6 agreement.
+
+## 2026-11-19 — Fast-track phase 05
+- PR #32 run #69 green (metadata).
+- No member integration conflicts.
+- Integration checklist and M6 auth coordination: doc 33.
+- All local suites green.
+- Remaining work is blocked on reviews, decisions and other members (doc 33 §E).
+
+## 2026-11-19 — Final integration step 01
+- CI full-stack smoke (API + MySQL + Python + RAG) and live C#→RAG tests added (lead-approved).
+- R-1/R-3 re-evaluated: Pomelo isn't on EF Core 10, so keep the gate and adopt readiness-based recovery when hosting is chosen.
+- PR #32 is clean and mergeable; awaiting independent QA.
+
+## 2026-11-19 — Final integration step 02
+- Run #72 green, including the full-stack smoke and live RAG steps (step-level evidence).
+- Final M4/M7 delivery status: doc 28 §7.
+- PR #32 ready for independent review.
+- Remaining work needs decisions or other members.

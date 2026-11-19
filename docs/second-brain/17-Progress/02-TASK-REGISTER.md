@@ -50,9 +50,9 @@ Initial planning register; reconcile actual current code before marking status. 
 | BE-M6-D06 | M6 | 6 | Comparison, selection and editor validation support Enable safe alternative selection and authoritative validation for edited candidates. | NOT STARTED | — |
 | BE-M6-D07 | M6 | 7 | Generation and validation regression Verify supported planning flow and report realistic limitations. | NOT STARTED | — |
 | BE-M7-D01 | M7 | 1 | Audit repos/RAG and approve contracts | REVIEW — audit done; docs reconciliation applied 2026-11-17, awaiting lead review; contracts not approved | EV-20261117-01..06, [audit](07-AUDIT-2026-11-17.md) |
-| BE-M7-D02 | M7 | 2 | Corpus and retrieval evidence verification | NOT STARTED — historical 93-test log only; not re-run | EV-20261117-05 |
-| BE-M7-D03 | M7 | 3 | Evidence schema and jurisdiction handling | NOT STARTED | — |
-| BE-M7-D04 | M7 | 4 | Existing RAG service integration | BLOCKED — RAG source not version-controlled, no HTTP route; G10/G11 open | [audit](07-AUDIT-2026-11-17.md) |
-| BE-M7-D05 | M7 | 5 | M6 evidence integration | NOT STARTED | — |
-| BE-M7-D06 | M7 | 6 | Cross-service QA and review | NOT STARTED | — |
-| BE-M7-D07 | M7 | 7 | E2E and delivery gate | NOT STARTED | — |
+| BE-M7-D02 | M7 | 2 | Corpus and retrieval evidence verification | **DONE (evidence) — 2026-11-19.** Existing suite 93/93 run read-only in place (workspace unchanged); real corpus 3 docs / 2,629 chunks; real-corpus suite 6/6. Historical 93-test log now superseded by a fresh run | EV-20261119-11 |
+| BE-M7-D03 | M7 | 3 | Evidence schema and jurisdiction handling | **DONE — evidence contract v1 lead-approved (2026-11-19) and implemented**; no-hit, unknown-jurisdiction, unknown-source, partial-coverage and ambiguous cases tested | EV-20261119-11 |
+| BE-M7-D04 | M7 | 4 | Existing RAG service integration | **IMPLEMENTED — `feature/m7-rag-retrieval-service`** (`43f779b` + phase 02 uncommitted): rag-service FastAPI (contract v1, reused engine), C# `IRegulationEvidenceSource`/`RagServiceClient`, **real RAG readiness**; CI step approved. G10 and G11 (hosting) decided. Open: first CI run (PR not opened), G11 auth, independent review | EV-20261119-11..12 |
+| BE-M7-D05 | M7 | 5 | M6 evidence integration | **BLOCKED — no M6 code or contract on any branch (2026-11-19 audit).** Needs a joint M6+M7 regulatory-constraint contract (lead approval). Deterministic validation stays authoritative; passages are advisory only | EV-20261119-12 |
+| BE-M7-D06 | M7 | 6 | Cross-service QA and review | PARTIAL — per-service suites and a shared C#/Python contract example; PR #32 CI fixed and green (run #64, metadata); local python-services and rag-service verified; C# API run blocked locally (G17); no M6 end-to-end (blocked); M6–M7 contract proposal (doc 29) | EV-20261119-12..13 |
+| BE-M7-D07 | M7 | 7 | E2E and delivery gate | NOT DONE — no-go for production; retrieval demo-capable only (doc 28) | — |

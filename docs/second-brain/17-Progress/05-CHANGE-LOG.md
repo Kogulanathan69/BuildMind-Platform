@@ -67,3 +67,17 @@
 2026-11-19 — STEP 10-H: PR #30 CI failure analysed (stalled handshake held the open gate); per-connection gate ownership; SSL03 isolated; SSL04 added; R-3 recorded as an open lead decision. Evidence EV-20261119-07..08.
 
 2026-11-19 — STEP 10-I: gate ownership per open operation; SSL03 bounded cleanup; ADR proposal for MySQL connection reliability (doc 27). Evidence EV-20261119-09.
+
+2026-11-19 — M7 MVP: rag-service FastAPI (evidence contract v1) reusing the verified STEP 4/6 engine (code-only copy); C# `IRegulationEvidenceSource`/`RagServiceClient`; shared contract example; real-corpus and E2E evidence. Evidence EV-20261119-10..11.
+
+2026-11-19 â€” M7 phase 02: real RAG readiness (`RagReadinessCheck`, shared `BoundedServiceProbe`); M6 integration audit (blocked); consolidated MVP status/dependencies (doc 28). Evidence EV-20261119-12.
+
+2026-11-19 — Phase 03: PR #32 CI fix verified green, `develop` merged into the M7 branch; M6–M7 regulatory constraint contract proposal (doc 29); local runbook (doc 30); final MVP status (doc 28 §5). Evidence EV-20261119-13.
+
+2026-11-19 — Phase 04: G11 MVP internal token authentication (rag-service + C# client, fail closed, default-deny); MVP acceptance evidence (doc 32); M6 coordination message. Evidence EV-20261119-14.
+
+2026-11-19 — Phase 05: integration audit (no conflicts), backend integration checklist with M6 shared-auth plan (doc 33), full local regression. Evidence EV-20261119-15.
+
+2026-11-19 — Final integration 01: CI full-stack smoke + live C#→RAG tests; R-1/R-3 fact-based re-evaluation (doc 27 §6). Evidence EV-20261119-16.
+
+2026-11-19 — Final integration 02: run #72 step-level evidence (full-stack smoke, live RAG); final M4/M7 delivery status (doc 28 §7). Evidence EV-20261119-17.

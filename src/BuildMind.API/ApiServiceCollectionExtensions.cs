@@ -56,8 +56,8 @@ public static class ApiServiceCollectionExtensions
                 "mysql", HealthStatus.Unhealthy, [Readiness.Tag], Readiness.RegistrationTimeout)
             .AddCheck<PythonReadinessCheck>(
                 "python", HealthStatus.Degraded, [Readiness.Tag], Readiness.RegistrationTimeout)
-            .AddTypeActivatedCheck<InternalServiceReadinessCheck>(
-                "rag", HealthStatus.Degraded, [Readiness.Tag], Readiness.RegistrationTimeout, "rag");
+            .AddCheck<RagReadinessCheck>(
+                "rag", HealthStatus.Degraded, [Readiness.Tag], Readiness.RegistrationTimeout);
 
         // BE-M4-D05: hardened typed client for the private Python service (only confirmed routes; G11 auth open).
         services.AddSingleton<InternalServiceBulkhead>(); // STEP 08-C: bounded in-flight + queued calls per dependency
@@ -65,6 +65,15 @@ public static class ApiServiceCollectionExtensions
             .ConfigureHttpClient(client => client.Timeout = Timeout.InfiniteTimeSpan) // the client enforces TimeoutSeconds itself
             .ConfigurePrimaryHttpMessageHandler(CreateInternalServiceHandler)
             .RemoveAllLoggers(); // framework request logs would record internal URLs
+
+        // BE-M7 (evidence contract v1, lead-approved 2026-11-19): private regulation retrieval service, same hardened
+        // transport and bulkhead. Exposed to the Application layer only through IRegulationEvidenceSource.
+        services.AddHttpClient<RagServiceClient>()
+            .ConfigureHttpClient(client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(CreateInternalServiceHandler)
+            .RemoveAllLoggers();
+        services.AddTransient<BuildMind.Application.Abstractions.Regulations.IRegulationEvidenceSource>(
+            provider => provider.GetRequiredService<RagServiceClient>());
 
         // BE-M4-D04: do not advertise the server implementation. This only affects Kestrel; a reverse proxy
         // or load balancer in front of the API may add its own headers and must be configured separately.

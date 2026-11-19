@@ -18,3 +18,46 @@ Static inspection only; no RAG code executed, no external file modified. Full ev
 | Embeddings / vector store | **Not implemented** (separate bge-small smoke script only) |
 | Historical tests | 93 tests OK in a log dated 2026-11-13 — historical |
 | Newly verified tests | None (not run in this audit) |
+
+## MVP implementation — 2026-11-19 (BE-M7-D02..D04, `feature/m7-rag-retrieval-service`)
+
+**Lead decisions (explicit in-session answers, 2026-11-19):**
+- **G10:** code-only copy of the runtime engine into `rag-service/`.
+- **G11 (RAG part):** a separate private FastAPI service in `rag-service`.
+- **D03:** evidence contract v1 frozen.
+- A read-only baseline run of the existing engine was authorized.
+
+**Newly verified evidence (replaces "historical only"):**
+
+| Check | Result |
+|---|---|
+| Existing engine suite, run in place, read-only (`python -B -m regulation_retrieval.cli test`) | **93/93 OK**; workspace package and STEP 4 output byte-for-byte unchanged |
+| Real approved corpus | 3 documents, 2,629 chunks: Gazette 2235/54 (Sri Lanka, conditional broad scope), Colombo MC plan, Maharagama UC plan (naming ambiguity) |
+| Real-corpus suite via the new service, real hash-verifying constructor (`rag-service/tests_local`) | **6/6 passed**; workspace unchanged |
+| Real end-to-end HTTP (uvicorn on 127.0.0.1) | Colombo "plot coverage" → `EVIDENCE_FOUND`, pages 357–359 with offsets; Maharagama "rear space" → `AMBIGUOUS_EVIDENCE` (naming ambiguity); Kandy → `INSUFFICIENT_JURISDICTION_EVIDENCE`; nonsense → `NO_MATCHING_EVIDENCE`; `/openapi.json` 404; process stopped and unreachable afterwards |
+| CI suite (synthetic corpus, real copied code) | **44/44 locally** |
+
+**Implemented:**
+- the `rag-service` FastAPI app (contract v1, `/health`, `/internal/v1/regulations/search` and `/sources`);
+- the verbatim engine copy with SHA-256 provenance and a test enforcing it;
+- the C# Application port `IRegulationEvidenceSource` and the Infrastructure `RagServiceClient` on the hardened M4 transport, with contract validation on receipt;
+- a shared contract example validated by both Python and C#.
+
+**Not done / open:**
+- RAG readiness is still "unverified": a real `/health` probe is a follow-up;
+- no C# feature route consumes the port yet (M6 generation and feasibility, BE-M7-D05);
+- CI workflow integration of the rag-service tests (needs lead approval);
+- G11 auth/transport;
+- legal currency and amendment verification;
+- embeddings (not planned for the MVP);
+- independent review.
+
+### Phase 02 (2026-11-19): RAG readiness
+The `rag` readiness check now really probes rag-service `/health` (`RagReadinessCheck`, sharing the bounded single-flight probe with Python):
+- **Healthy:** only when the identity is `buildmind-rag`, the contract version is `1` and the corpus is loaded.
+- **Degraded `unavailable`:** no verified corpus.
+- **Degraded `unverified`:** wrong identity or contract.
+- **Degraded `unreachable`/`timeout`/`not_configured`/`check_in_progress`:** otherwise.
+- **Never Unhealthy:** RAG is instance-optional (C11b).
+
+This replaces the placeholder "unverified" check. M6 evidence integration is **blocked**: no M6 code or contract exists. See [28](28-MVP-STATUS-AND-DEPENDENCIES.md).

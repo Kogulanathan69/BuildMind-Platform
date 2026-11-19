@@ -29,7 +29,7 @@ Every acceptance test from the original task plans is checked against **actual**
 | D06 | Stale token → agreed conflict | MET | CC01 → 409 `REVISION_CONFLICT` (CI) |
 | D06 | Migration test passes | MET | CI |
 | D06 | Least-privilege config verified | MET (CI accounts) | LP test; production policy open |
-| D07 | Clean setup works | PARTIAL | CI clean setup ✅; local Python + RAG ✅; **local C# API blocked by Smart App Control** (G17); runbook doc 30 |
+| D07 | Clean setup works | PARTIAL → CI full-stack smoke added | CI clean setup ✅; local Python + RAG ✅; **local C# API blocked by Smart App Control** (G17). New: CI starts the **built API + MySQL + Python + RAG** and checks `/health` and `/health/ready` (`tools/smoke/full-stack-smoke.sh`); first execution pending CI |
 | D07 | Critical security/DB failures resolved | **NOT MET** | R-1/R-3 open on `develop` (doc 27) |
 | D07 | No untested feature marked ready | MET | This matrix |
 | D07 | Independent QA approval | **NOT MET** | 0 reviews on merged PRs (G19) |
@@ -41,7 +41,7 @@ Every acceptance test from the original task plans is checked against **actual**
 | D02 | Real source IDs / page trace | MET | 93/93 existing suite (read-only); real-corpus 6/6; citations reconstruct exact page text |
 | D02 | OCR gaps | **PARTIAL** | Extraction warnings carried per passage; no systematic OCR-gap audit |
 | D03 | Contract examples; no-hit/conflict tests | MET | Contract v1 + shared example (Python + C#); no-hit, unknown jurisdiction/source, partial coverage, ambiguous/naming-conflict tests |
-| D04 | Auth, timeout, provenance contract tests | MET (Python) / COMPILED (C# new) | rag-service 68/68 local + CI step; real E2E with auth; C# client, readiness and auth tests (readiness and client CI-green in run #64; auth tests pending CI) |
+| D04 | Auth, timeout, provenance contract tests (+ live C#→RAG: identity, token accepted/rejected, truthful 503, readiness) | MET (Python) / COMPILED (C# new, live `RagLiveSmokeTests` RG01–RG04) | rag-service 68/68 local + CI step; real E2E with auth; C# client, readiness and auth tests (readiness and client CI-green in run #64; auth tests pending CI) |
 | D05 | Known/unknown evidence distinct; no invented constraints | **BLOCKED** | No M6 code; proposal doc 29 |
 | D06 | Actual integrated test evidence | PARTIAL | Per-service and contract tests; no M6 end-to-end |
 | D07 | Explicit go/no-go; CI logs; PRs; no self-certification | **GO for retrieval demo / NO-GO for production** | Docs 28 and 32 |

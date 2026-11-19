@@ -77,3 +77,5 @@
 2026-11-19 — Phase 04: G11 MVP internal token authentication (rag-service + C# client, fail closed, default-deny); MVP acceptance evidence (doc 32); M6 coordination message. Evidence EV-20261119-14.
 
 2026-11-19 — Phase 05: integration audit (no conflicts), backend integration checklist with M6 shared-auth plan (doc 33), full local regression. Evidence EV-20261119-15.
+
+2026-11-19 — Final integration 01: CI full-stack smoke + live C#→RAG tests; R-1/R-3 fact-based re-evaluation (doc 27 §6). Evidence EV-20261119-16.

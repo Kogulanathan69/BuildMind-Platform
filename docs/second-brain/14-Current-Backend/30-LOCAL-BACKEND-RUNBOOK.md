@@ -83,6 +83,7 @@ dotnet run --project src/BuildMind.API -c Release
 | MySQL + live Python integration | `dotnet test tests/BuildMind.Persistence.IntegrationTests` with `BUILDMIND_TEST_MYSQL`, `BUILDMIND_TEST_MYSQL_RUNTIME`, `BUILDMIND_TEST_PYTHON_URL` | CI `database-compatibility` |
 | python-services | `cd python-services; python -m pytest -q` | Local + CI |
 | rag-service (synthetic corpus) | `cd rag-service; python -B -m pytest -q -p no:cacheprovider` | Local + CI |
+| Full-stack smoke (built API + MySQL + Python + RAG) | `bash tools/smoke/full-stack-smoke.sh` with the API environment variables plus `SMOKE_EXPECT_MYSQL/_PYTHON/_RAG` (`<Status>:<reason>` or `skip`) | CI `database-compatibility`; any machine without Smart App Control |
 | rag-service against the real corpus | `cd rag-service; python -B -m pytest -p no:cacheprovider tests_local` (the 3 corpus variables set) | Local only (corpus never in CI) |
 
 ## 7. Ports used in this runbook

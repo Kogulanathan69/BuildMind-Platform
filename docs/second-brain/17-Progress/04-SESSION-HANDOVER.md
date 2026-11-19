@@ -225,3 +225,8 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Integration checklist and M6 auth coordination: doc 33.
 - All local suites green.
 - Remaining work is blocked on reviews, decisions and other members (doc 33 §E).
+
+## 2026-11-19 — Final integration step 01
+- CI full-stack smoke (API + MySQL + Python + RAG) and live C#→RAG tests added (lead-approved).
+- R-1/R-3 re-evaluated: Pomelo isn't on EF Core 10, so keep the gate and adopt readiness-based recovery when hosting is chosen.
+- PR #32 is clean and mergeable; awaiting independent QA.

@@ -45,6 +45,14 @@ public sealed class RequirementsSectionApplicationService : IRequirementsSection
             revision.AdditionalSpaces, request.Relationships, revision.DesignMethod), cancellationToken);
     }
 
+    public Task<RequirementsOperationResult> SaveDesignMethodAsync(Guid projectId, SaveDesignMethodRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return ReplaceAsync(projectId, request.ExpectedRevisionId, revision => new SaveRequirementsRequest(
+            request.ExpectedRevisionId, request.CatalogueVersion, revision.FloorCount, revision.GroundFloorRooms,
+            revision.AdditionalSpaces, revision.Relationships, request.DesignMethod), cancellationToken);
+    }
+
     private async Task<RequirementsOperationResult> ReplaceAsync(Guid projectId, Guid expectedRevisionId,
         Func<RequirementRevisionDto, SaveRequirementsRequest> compose, CancellationToken token)
     {

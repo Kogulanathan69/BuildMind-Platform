@@ -248,8 +248,174 @@ internal static class CandidatePreviewContractScenarios
             var missingRequirements = new Scenario { RequirementsAvailable = false };
             Check(missingLand.Preview().Status == CandidatePreviewResultStatus.DependencyUnavailable,
                 "Missing land dependency produced a candidate.");
-            Check(missingRequirements.Preview().Status == CandidatePreviewResultStatus.DependencyUnavailable,
-                "Missing requirement dependency produced a candidate.");
+            Check(missingRequirements.Preview().Status == CandidatePreviewResultStatus.InvalidDependencyResponse,
+                "Missing referenced requirement revision was not treated as an integrity failure.");
+        });
+
+        run("candidate preview uses exact authorization-aware requirement identities", () =>
+        {
+            var scenario = new Scenario();
+            var result = scenario.Preview();
+
+            Check(result.Status == CandidatePreviewResultStatus.Created,
+                "Authorized exact requirement access did not create a candidate.");
+            Check(scenario.RequirementCalls == 1 &&
+                  scenario.LastRequirementProjectId == scenario.ProjectId &&
+                  scenario.LastRequirementRevisionId == scenario.CurrentRequirementsRevisionId &&
+                  scenario.LastRequirementActorId == scenario.OwnerId,
+                "Requirement access did not receive the exact trusted identities.");
+        });
+
+        run("candidate preview distinguishes requirement denial and authorized absence", () =>
+        {
+            var denied = new Scenario { RequirementAccessStatus = RequirementRevisionAccessStatus.Unauthorized };
+            var absent = new Scenario { RequirementsAvailable = false };
+            var deniedResult = denied.Preview();
+            var absentResult = absent.Preview();
+            var deniedDiagnostic = PlanEditorFailureMapper.FromCandidatePreview(deniedResult.Status);
+            var absentDiagnostic = PlanEditorFailureMapper.FromCandidatePreview(absentResult.Status);
+
+            Check(deniedResult.Status == CandidatePreviewResultStatus.Unauthorized,
+                "Requirement authorization denial was not preserved.");
+            Check(absentResult.Status == CandidatePreviewResultStatus.InvalidDependencyResponse,
+                "Authorized requirement absence was not treated as an integrity failure.");
+            Check(absentDiagnostic is
+                    {
+                        Code: PlanEditorErrorCodes.InvalidDependencyResponse,
+                        RetrySafety: PlanEditorRetrySafety.Never
+                    },
+                "Authorized requirement absence was incorrectly classified as retryable.");
+            Check(!deniedDiagnostic.SafeMessage.Contains(denied.ProjectId.ToString(), StringComparison.Ordinal) &&
+                  !absentDiagnostic.SafeMessage.Contains(absent.ProjectId.ToString(), StringComparison.Ordinal) &&
+                  !absentDiagnostic.SafeMessage.Contains(
+                      absent.CurrentRequirementsRevisionId.ToString(), StringComparison.Ordinal),
+                "Requirement access diagnostics disclosed protected identifiers.");
+            Check(NoRequirementDownstreamEffects(denied) && NoRequirementDownstreamEffects(absent),
+                "Denied or absent requirement access reached a downstream operation.");
+        });
+
+        run("candidate preview rejects a null authorization-aware dependency result", () =>
+        {
+            var scenario = new Scenario { ReturnNullRequirementAccessResult = true };
+
+            Check(scenario.Preview().Status == CandidatePreviewResultStatus.InvalidDependencyResponse,
+                "A null authorization-aware result was not rejected.");
+            Check(NoRequirementDownstreamEffects(scenario),
+                "A null authorization-aware result reached a downstream operation.");
+        });
+
+        run("candidate preview rejects mismatched authorization on authorized absence", () =>
+        {
+            foreach (var mode in new[] { "actor", "project" })
+            {
+                var scenario = new Scenario
+                {
+                    RequirementAccessStatus = RequirementRevisionAccessStatus.NotFound
+                };
+                if (mode == "actor") scenario.RequirementAuthorizationActorId = Guid.NewGuid();
+                if (mode == "project") scenario.RequirementAuthorizationProjectId = Guid.NewGuid();
+
+                Check(scenario.Preview().Status == CandidatePreviewResultStatus.InvalidDependencyResponse,
+                    $"Authorized absence with a contradictory {mode} binding was accepted.");
+                Check(NoRequirementDownstreamEffects(scenario),
+                    "Contradictory authorized absence reached a downstream operation.");
+            }
+        });
+
+        run("candidate preview contains representable malformed authorization evidence", () =>
+        {
+            var scenario = new Scenario
+            {
+                RequirementAccessStatus = RequirementRevisionAccessStatus.InvalidDependencyResponse,
+                IncludePriorAuthorizationOnInvalidResponse = true,
+                RequirementAuthorizationActorId = Guid.NewGuid()
+            };
+
+            Check(scenario.Preview().Status == CandidatePreviewResultStatus.InvalidDependencyResponse,
+                "Explicitly invalid dependency evidence was accepted.");
+            Check(NoRequirementDownstreamEffects(scenario),
+                "Explicitly invalid dependency evidence reached a downstream operation.");
+        });
+
+        run("candidate preview rejects contradictory authorization and requirement bindings", () =>
+        {
+            foreach (var mode in new[] { "actor", "project", "revision", "dependency" })
+            {
+                var scenario = new Scenario();
+                if (mode == "actor") scenario.RequirementAuthorizationActorId = Guid.NewGuid();
+                if (mode == "project") scenario.RequirementAuthorizationProjectId = Guid.NewGuid();
+                if (mode == "revision") scenario.RequirementRevisionId = Guid.NewGuid();
+                if (mode == "dependency")
+                    scenario.RequirementAccessStatus = RequirementRevisionAccessStatus.InvalidDependencyResponse;
+
+                Check(scenario.Preview().Status == CandidatePreviewResultStatus.InvalidDependencyResponse,
+                    $"Contradictory requirement {mode} binding was accepted.");
+                Check(NoRequirementDownstreamEffects(scenario),
+                    "A contradictory authorization-aware response reached a downstream operation.");
+            }
+        });
+
+        run("candidate preview preserves requirement dependency failure distinctions", () =>
+        {
+            foreach (var item in new (Exception Error, CandidatePreviewResultStatus Status)[]
+                     {
+                         (new TimeoutException("private timeout"), CandidatePreviewResultStatus.DependencyTimeout),
+                         (new HttpRequestException("private transport"), CandidatePreviewResultStatus.DependencyUnavailable),
+                         (new InvalidOperationException("private defect"),
+                             CandidatePreviewResultStatus.UnexpectedInternalFailure)
+                     })
+            {
+                var scenario = new Scenario { RequirementException = item.Error };
+                Check(scenario.Preview().Status == item.Status,
+                    $"Requirement {item.Error.GetType().Name} was misclassified.");
+                Check(NoRequirementDownstreamEffects(scenario),
+                    "Requirement failure reached a downstream operation.");
+            }
+        });
+
+        run("candidate preview requirement failures preserve approved retry classifications", () =>
+        {
+            foreach (var item in new[]
+                     {
+                         (Status: CandidatePreviewResultStatus.DependencyUnavailable,
+                             Code: PlanEditorErrorCodes.DependencyUnavailable,
+                             Retry: PlanEditorRetrySafety.Safe),
+                         (Status: CandidatePreviewResultStatus.DependencyTimeout,
+                             Code: PlanEditorErrorCodes.DependencyTimeout,
+                             Retry: PlanEditorRetrySafety.Safe),
+                         (Status: CandidatePreviewResultStatus.InvalidDependencyResponse,
+                             Code: PlanEditorErrorCodes.InvalidDependencyResponse,
+                             Retry: PlanEditorRetrySafety.Never)
+                     })
+            {
+                var diagnostic = PlanEditorFailureMapper.FromCandidatePreview(item.Status);
+                Check(diagnostic.Code == item.Code && diagnostic.RetrySafety == item.Retry,
+                    $"{item.Status} did not preserve its approved retry classification.");
+                Check(!diagnostic.SafeMessage.Contains("requirement", StringComparison.OrdinalIgnoreCase) &&
+                      !diagnostic.SafeMessage.Contains("revision", StringComparison.OrdinalIgnoreCase),
+                    $"{item.Status} disclosed protected requirement details.");
+            }
+        });
+
+        run("candidate preview propagates cancellation during authorized requirement access", () =>
+        {
+            using var source = new CancellationTokenSource();
+            var scenario = new Scenario { DuringRequirementAccess = source.Cancel };
+
+            CheckThrows<OperationCanceledException>(() => scenario.PreviewWithCancellation(source.Token));
+            Check(scenario.RequirementCalls == 1 && NoRequirementDownstreamEffects(scenario),
+                "Requirement cancellation did not stop the preview at the secure boundary.");
+        });
+
+        run("candidate preview has no legacy actorless requirement fallback", () =>
+        {
+            var parameterTypes = typeof(CandidatePreviewService).GetConstructors().Single()
+                .GetParameters().Select(parameter => parameter.ParameterType).ToArray();
+
+            Check(parameterTypes.Contains(typeof(IAuthorizedRequirementRevisionPort)),
+                "Candidate preview lost its authorization-aware requirement dependency.");
+            Check(!parameterTypes.Contains(typeof(IRequirementRevisionPort)),
+                "Candidate preview retained a legacy actorless requirement fallback.");
         });
 
         run("candidate preview rejects invalid command", () =>
@@ -2064,6 +2230,13 @@ internal static class CandidatePreviewContractScenarios
         if (!condition) throw new Exception(message);
     }
 
+    private static bool NoRequirementDownstreamEffects(Scenario scenario) =>
+        scenario.ComputeCalls == 0 &&
+        scenario.EvidenceRetrievalCalls == 0 &&
+        scenario.EvidenceVerificationCalls == 0 &&
+        scenario.Persistence.CreateCalls == 0 &&
+        scenario.Persistence.CandidateCount == 0;
+
     private static void CheckThrows<T>(Action action) where T : Exception
     {
         try { action(); }
@@ -2088,6 +2261,19 @@ internal static class CandidatePreviewContractScenarios
         public bool HasWarnings { get; set; }
         public bool LandAvailable { get; set; } = true;
         public bool RequirementsAvailable { get; set; } = true;
+        public RequirementRevisionAccessStatus RequirementAccessStatus { get; set; }
+            = RequirementRevisionAccessStatus.Found;
+        public Guid? RequirementAuthorizationActorId { get; set; }
+        public Guid? RequirementAuthorizationProjectId { get; set; }
+        public Guid? RequirementRevisionId { get; set; }
+        public Exception? RequirementException { get; set; }
+        public Action? DuringRequirementAccess { get; set; }
+        public bool ReturnNullRequirementAccessResult { get; set; }
+        public bool IncludePriorAuthorizationOnInvalidResponse { get; set; }
+        public int RequirementCalls { get; private set; }
+        public Guid? LastRequirementProjectId { get; private set; }
+        public Guid? LastRequirementRevisionId { get; private set; }
+        public Guid? LastRequirementActorId { get; private set; }
         public bool Owned { get; set; } = true;
         public Exception? OwnershipException { get; set; }
         public int? OwnershipExceptionOnCall { get; set; }
@@ -2099,6 +2285,8 @@ internal static class CandidatePreviewContractScenarios
         public Exception? LandException { get; set; }
         public bool ReturnInvalidInputs { get; set; }
         public int ComputeCalls { get; private set; }
+        public int EvidenceRetrievalCalls { get; private set; }
+        public int EvidenceVerificationCalls { get; private set; }
         public Action? DuringCompute { get; set; }
         public Func<PlanEditResultDto, PlanEditResultDto?>? ComputeResponseTransform { get; set; }
         public bool ReturnEmptyEvidenceId { get; set; }
@@ -2146,8 +2334,52 @@ internal static class CandidatePreviewContractScenarios
                 new TestConfirmedLandRevisionPort((project, revision, _) => LandException is null
                     ? Task.FromResult<ConfirmedLandRevision?>(LandAvailable ? Land(project, revision) : null)
                     : Task.FromException<ConfirmedLandRevision?>(LandException)),
-                new TestRequirementRevisionPort((project, revision, _) => Task.FromResult<RequirementRevisionReference?>(
-                    RequirementsAvailable ? new(project, revision, "test-only/1") : null)),
+                new TestAuthorizedRequirementRevisionPort((project, revision, actor, token) =>
+                {
+                    RequirementCalls++;
+                    LastRequirementProjectId = project;
+                    LastRequirementRevisionId = revision;
+                    LastRequirementActorId = actor;
+                    DuringRequirementAccess?.Invoke();
+                    token.ThrowIfCancellationRequested();
+                    if (ReturnNullRequirementAccessResult)
+                        return Task.FromResult<RequirementRevisionAccessResult>(null!);
+                    if (RequirementException is not null)
+                        return Task.FromException<RequirementRevisionAccessResult>(RequirementException);
+                    if (RequirementAccessStatus == RequirementRevisionAccessStatus.Unauthorized)
+                        return Task.FromResult(new RequirementRevisionAccessResult(
+                            RequirementRevisionAccessStatus.Unauthorized));
+                    if (RequirementAccessStatus == RequirementRevisionAccessStatus.InvalidDependencyResponse)
+                    {
+                        var priorAuthorization = IncludePriorAuthorizationOnInvalidResponse
+                            ? new ProjectAuthorizationSnapshot(
+                                RequirementAuthorizationProjectId ?? project,
+                                RequirementAuthorizationActorId ?? actor,
+                                new AuthorizationVersion(1))
+                            : null;
+                        return Task.FromResult(new RequirementRevisionAccessResult(
+                            RequirementRevisionAccessStatus.InvalidDependencyResponse,
+                            authorization: priorAuthorization));
+                    }
+
+                    var authorizationProject = RequirementAuthorizationProjectId ?? project;
+                    var authorization = new ProjectAuthorizationSnapshot(
+                        authorizationProject,
+                        RequirementAuthorizationActorId ?? actor,
+                        new AuthorizationVersion(1));
+                    if (!RequirementsAvailable || RequirementAccessStatus == RequirementRevisionAccessStatus.NotFound)
+                        return Task.FromResult(new RequirementRevisionAccessResult(
+                            RequirementRevisionAccessStatus.NotFound,
+                            authorization: authorization));
+
+                    return Task.FromResult(new RequirementRevisionAccessResult(
+                        RequirementRevisionAccessStatus.Found,
+                        new RequirementRevisionReference(
+                            authorizationProject,
+                            RequirementRevisionId ?? revision,
+                            "test-only/1"),
+                        authorization));
+                }),
                 new TestPlanEditorComputeClient((request, _) =>
                 {
                     ComputeCalls++;
@@ -2168,6 +2400,7 @@ internal static class CandidatePreviewContractScenarios
                 }),
                 new CandidateValidationEvidenceSourceTestDouble((_, _, hash, _) =>
                 {
+                    EvidenceRetrievalCalls++;
                     DuringEvidenceRetrieval?.Invoke();
                     var evidence = Evidence(
                         ReturnMismatchedEvidenceHash ? "sha256:mismatch" : hash);
@@ -2178,6 +2411,7 @@ internal static class CandidatePreviewContractScenarios
                 }),
                 new TestPlanValidationEvidenceVerifier((_, _, _, _, _) =>
                 {
+                    EvidenceVerificationCalls++;
                     DuringEvidenceVerification?.Invoke();
                     return Task.FromResult(ValidationStatus);
                 }),
@@ -2189,6 +2423,12 @@ internal static class CandidatePreviewContractScenarios
             Service.PreviewAsync(new(
                 ProjectId, PlanId, baseRevisionId ?? Persistence.CurrentRevision.RevisionId,
                 command ?? ValidCommand(), "candidate-contract-test"), actor ?? OwnerId).Result;
+
+        public CandidatePreviewResult PreviewWithCancellation(CancellationToken cancellationToken) =>
+            Service.PreviewAsync(new(
+                ProjectId, PlanId, Persistence.CurrentRevision.RevisionId,
+                ValidCommand(), "candidate-contract-test"), OwnerId, cancellationToken)
+            .GetAwaiter().GetResult();
 
         public CandidateActionResult Apply(
             CandidatePreviewSnapshot candidate, Guid? actor = null, bool acknowledgeWarnings = true) =>

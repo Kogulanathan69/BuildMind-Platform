@@ -543,8 +543,11 @@ internal static class AiEditOrchestrationContractScenarios
                 inputs,
                 new TestConfirmedLandRevisionPort((project, revision, _) =>
                     Task.FromResult<ConfirmedLandRevision?>(Land(project, revision))),
-                new TestRequirementRevisionPort((project, revision, _) =>
-                    Task.FromResult<RequirementRevisionReference?>(new(project, revision, "test-only/1"))),
+                new TestAuthorizedRequirementRevisionPort((project, revision, actor, _) =>
+                    Task.FromResult(new RequirementRevisionAccessResult(
+                        RequirementRevisionAccessStatus.Found,
+                        new RequirementRevisionReference(project, revision, "test-only/1"),
+                        new ProjectAuthorizationSnapshot(project, actor, new AuthorizationVersion(1))))),
                 compute,
                 new AiValidationEvidenceSource((_, _, exactHash, _) =>
                     Task.FromResult<PlanValidationReferenceDto?>(Validation(exactHash))),

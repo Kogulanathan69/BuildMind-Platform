@@ -155,9 +155,13 @@ internal static class ProductionAdapterContractScenarios
                 var dependencies = new ComposedPreviewDependencies(project.Id, expectedRequirementId, calls);
                 var ownership = new ProjectOwnershipGate(new ProjectRepositoryDouble((_, _, _) =>
                     Task.FromResult<Project?>(project)));
-                var requirements = new RequirementRevisionAdapter(
-                    new RequirementRepositoryDouble((_, _, _) =>
-                        Task.FromResult<RequirementRevision?>(contradictory)));
+                var requirements = new TestAuthorizedRequirementRevisionPort((_, _, actor, _) =>
+                    Task.FromResult(new RequirementRevisionAccessResult(
+                        RequirementRevisionAccessStatus.Found,
+                        new RequirementRevisionReference(
+                            contradictory.ProjectId, contradictory.Id, contradictory.SchemaVersion),
+                        new ProjectAuthorizationSnapshot(
+                            contradictory.ProjectId, actor, new AuthorizationVersion(1)))));
 
                 var result = PreviewService(ownership, requirements, dependencies).PreviewAsync(
                     Command(project.Id, dependencies.PlanId, Guid.NewGuid()), ownerId).Result;
@@ -199,7 +203,7 @@ internal static class ProductionAdapterContractScenarios
             }
         });
 
-        run("Composed production adapters authorize before exact requirement retrieval", () =>
+        run("Candidate preview uses authorization-aware exact requirement retrieval", () =>
         {
             var calls = new List<string>();
             var ownerId = Guid.NewGuid();
@@ -212,14 +216,16 @@ internal static class ProductionAdapterContractScenarios
                 calls.Add("M1 ownership");
                 return Task.FromResult<Project?>(projectId == project.Id && actorId == ownerId ? project : null);
             }));
-            var requirements = new RequirementRevisionAdapter(new RequirementRepositoryDouble(
-                (projectId, revisionId, token) =>
+            var requirements = new TestAuthorizedRequirementRevisionPort(
+                (projectId, revisionId, actorId, token) =>
                 {
                     token.ThrowIfCancellationRequested();
-                    calls.Add("M5 requirement");
-                    return Task.FromResult<RequirementRevision?>(
-                        projectId == requirement.ProjectId && revisionId == requirement.Id ? requirement : null);
-                }));
+                    calls.Add("authorized requirement");
+                    return Task.FromResult(new RequirementRevisionAccessResult(
+                        RequirementRevisionAccessStatus.Found,
+                        new RequirementRevisionReference(projectId, revisionId, requirement.SchemaVersion),
+                        new ProjectAuthorizationSnapshot(projectId, actorId, new AuthorizationVersion(1))));
+                });
             var service = PreviewService(ownership, requirements, dependencies);
 
             var result = service.PreviewAsync(
@@ -229,8 +235,8 @@ internal static class ProductionAdapterContractScenarios
                 "The composed flow did not reach the safe stale-base milestone after exact dependency reads.");
             Check(calls.SequenceEqual(new[]
                 {
-                    "M1 ownership", "revision", "inputs", "land", "M5 requirement"
-                }), "The composed adapters executed outside the required authorization order.");
+                    "M1 ownership", "revision", "inputs", "land", "authorized requirement"
+                }), "The consumer executed outside the required authorization order.");
             Check(dependencies.UnexpectedAccesses == 0,
                 "The composed contract test reached validation or persistence unexpectedly.");
         });
@@ -245,11 +251,12 @@ internal static class ProductionAdapterContractScenarios
                 var returned = contradictory ? Project(ownerId) : null;
                 var ownership = new ProjectOwnershipGate(new ProjectRepositoryDouble((_, _, _) =>
                     Task.FromResult(returned)));
-                var requirements = new RequirementRevisionAdapter(new RequirementRepositoryDouble((_, _, _) =>
+                var requirements = new TestAuthorizedRequirementRevisionPort((_, _, _, _) =>
                 {
                     requirementReads++;
-                    return Task.FromResult<RequirementRevision?>(null);
-                }));
+                    return Task.FromResult(new RequirementRevisionAccessResult(
+                        RequirementRevisionAccessStatus.Unauthorized));
+                });
                 var service = PreviewService(ownership, requirements);
 
                 var result = service.PreviewAsync(
@@ -271,11 +278,12 @@ internal static class ProductionAdapterContractScenarios
                 var requirementReads = 0;
                 var ownership = new ProjectOwnershipGate(new ProjectRepositoryDouble((_, _, _) =>
                     Task.FromException<Project?>(scenario.Error)));
-                var requirements = new RequirementRevisionAdapter(new RequirementRepositoryDouble((_, _, _) =>
+                var requirements = new TestAuthorizedRequirementRevisionPort((_, _, _, _) =>
                 {
                     requirementReads++;
-                    return Task.FromResult<RequirementRevision?>(null);
-                }));
+                    return Task.FromResult(new RequirementRevisionAccessResult(
+                        RequirementRevisionAccessStatus.Unauthorized));
+                });
                 var result = PreviewService(ownership, requirements)
                     .PreviewAsync(Command(), Guid.NewGuid()).Result;
                 Check(result.Status == scenario.Status && requirementReads == 0,
@@ -293,11 +301,12 @@ internal static class ProductionAdapterContractScenarios
                 token.ThrowIfCancellationRequested();
                 return Task.FromResult<Project?>(null);
             }));
-            var requirements = new RequirementRevisionAdapter(new RequirementRepositoryDouble((_, _, _) =>
+            var requirements = new TestAuthorizedRequirementRevisionPort((_, _, _, _) =>
             {
                 requirementReads++;
-                return Task.FromResult<RequirementRevision?>(null);
-            }));
+                return Task.FromResult(new RequirementRevisionAccessResult(
+                    RequirementRevisionAccessStatus.Unauthorized));
+            });
 
             CheckThrows<OperationCanceledException>(() => PreviewService(ownership, requirements)
                 .PreviewAsync(Command(), Guid.NewGuid(), source.Token).GetAwaiter().GetResult());
@@ -370,7 +379,7 @@ internal static class ProductionAdapterContractScenarios
 
     private static CandidatePreviewService PreviewService(
         IProjectOwnershipGate ownership,
-        IRequirementRevisionPort requirements,
+        IAuthorizedRequirementRevisionPort requirements,
         PreviewDependencySentinel? dependencies = null)
     {
         dependencies ??= new PreviewDependencySentinel();
@@ -389,8 +398,8 @@ internal static class ProductionAdapterContractScenarios
             TimeSpan.FromMinutes(5));
     }
 
-    private static IRequirementRevisionPort RequirementPort(Action read) =>
-        new TestRequirementRevisionPort((_, _, _) =>
+    private static IAuthorizedRequirementRevisionPort RequirementPort(Action read) =>
+        new TestAuthorizedRequirementRevisionPort((_, _, _, _) =>
         {
             read();
             throw new Exception("Requirement access was not expected in this authorization scenario.");

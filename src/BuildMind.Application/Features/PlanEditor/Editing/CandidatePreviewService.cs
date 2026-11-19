@@ -11,7 +11,7 @@ public sealed class CandidatePreviewService(
     IPlanRevisionStore revisions,
     IApplicableInputRevisionSource currentInputs,
     IConfirmedLandRevisionPort landRevisions,
-    IRequirementRevisionPort requirementRevisions,
+    IAuthorizedRequirementRevisionPort requirementRevisions,
     IPlanEditorComputeClient computeClient,
     ICandidateValidationEvidenceSource validationEvidenceSource,
     IPlanValidationEvidenceVerifier validationVerifier,
@@ -43,7 +43,7 @@ public sealed class CandidatePreviewService(
         PlanRevisionSnapshot? current;
         ApplicableInputRevisions? applicable;
         ConfirmedLandRevision? land;
-        RequirementRevisionReference? requirements;
+        RequirementRevisionAccessResult? requirementAccess;
         try
         {
             current = await revisions.GetCurrentAsync(command.ProjectId, command.PlanId, cancellationToken);
@@ -53,8 +53,8 @@ public sealed class CandidatePreviewService(
                 applicable.RequirementsRevisionId == Guid.Empty)
                 return new(CandidatePreviewResultStatus.InvalidDependencyResponse);
             land = await landRevisions.GetAsync(command.ProjectId, applicable.LandRevisionId, cancellationToken);
-            requirements = await requirementRevisions.GetAsync(
-                command.ProjectId, applicable.RequirementsRevisionId, cancellationToken);
+            requirementAccess = await requirementRevisions.GetAsync(
+                command.ProjectId, applicable.RequirementsRevisionId, authenticatedOwnerId, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception exception) when (exception is TimeoutException or OperationCanceledException)
@@ -63,6 +63,24 @@ public sealed class CandidatePreviewService(
         catch (InvalidDependencyResponseException)
         { return new(CandidatePreviewResultStatus.InvalidDependencyResponse); }
         catch (Exception) { return new(CandidatePreviewResultStatus.UnexpectedInternalFailure); }
+
+        if (requirementAccess is null)
+            return new(CandidatePreviewResultStatus.InvalidDependencyResponse);
+        if (requirementAccess.Status == RequirementRevisionAccessStatus.Unauthorized)
+            return new(CandidatePreviewResultStatus.Unauthorized);
+        if (requirementAccess.Status == RequirementRevisionAccessStatus.InvalidDependencyResponse)
+            return new(CandidatePreviewResultStatus.InvalidDependencyResponse);
+        if (!AuthorizationMatches(
+                requirementAccess.Authorization, command.ProjectId, authenticatedOwnerId))
+            return new(CandidatePreviewResultStatus.InvalidDependencyResponse);
+        if (requirementAccess.Status == RequirementRevisionAccessStatus.NotFound)
+            return new(CandidatePreviewResultStatus.InvalidDependencyResponse);
+        if (requirementAccess.Status != RequirementRevisionAccessStatus.Found ||
+            requirementAccess.Revision is not { } requirements ||
+            requirements.ProjectId != command.ProjectId ||
+            requirements.RevisionId != applicable.RequirementsRevisionId)
+            return new(CandidatePreviewResultStatus.InvalidDependencyResponse);
+
         if (current is null) return new(CandidatePreviewResultStatus.RevisionNotFound);
         if (current.ProjectId != command.ProjectId || current.PlanId != command.PlanId)
             return new(CandidatePreviewResultStatus.InvalidDependencyResponse);
@@ -74,7 +92,7 @@ public sealed class CandidatePreviewService(
         if (current.LandRevisionId != applicable.LandRevisionId ||
             current.RequirementsRevisionId != applicable.RequirementsRevisionId)
             return new(CandidatePreviewResultStatus.StaleInputs);
-        if (land is null || requirements is null)
+        if (land is null)
             return new(CandidatePreviewResultStatus.DependencyUnavailable);
         if (land.ProjectId != command.ProjectId || requirements.ProjectId != command.ProjectId ||
             land.RevisionId != applicable.LandRevisionId || requirements.RevisionId != applicable.RequirementsRevisionId)
@@ -739,6 +757,15 @@ public sealed class CandidatePreviewService(
             return false;
         }
     }
+
+    private static bool AuthorizationMatches(
+        ProjectAuthorizationSnapshot? authorization,
+        Guid projectId,
+        Guid authenticatedActorId) =>
+        authorization is not null &&
+        authorization.ProjectId == projectId &&
+        authorization.ActorId == authenticatedActorId &&
+        authorization.Version.IsValid;
 
     private static bool RevisionSnapshotsMatch(
         PlanRevisionSnapshot actual,

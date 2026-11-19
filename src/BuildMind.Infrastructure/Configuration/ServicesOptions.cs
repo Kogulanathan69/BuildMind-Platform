@@ -15,11 +15,27 @@ public sealed class ServicesOptions
     /// Returns validation failures. Messages name configuration keys only and never echo configured
     /// values, which could contain credentials.
     /// </summary>
-    public IReadOnlyList<string> Validate()
+    /// <param name="requireRagAuthToken">
+    /// G11 (MVP): true outside Development, so an enabled RAG service must have an internal auth token (fail closed).
+    /// </param>
+    /// <param name="enforceSecureTransport">True outside Development: a token must not travel over plaintext http to a
+    /// non-loopback host unless <see cref="InternalServiceOptions.AllowPlaintextPrivateNetwork"/> is set.</param>
+    public IReadOnlyList<string> Validate(bool requireRagAuthToken = false, bool enforceSecureTransport = false)
     {
         var failures = new List<string>();
         ValidateService(Python, $"{SectionName}:Python", failures);
         ValidateService(Rag, $"{SectionName}:Rag", failures);
+        if (enforceSecureTransport)
+        {
+            ValidateTransport(Python, $"{SectionName}:Python", failures);
+            ValidateTransport(Rag, $"{SectionName}:Rag", failures);
+        }
+
+        if (requireRagAuthToken && Rag is { Enabled: true } && string.IsNullOrEmpty(Rag.AuthToken))
+        {
+            failures.Add($"{SectionName}:Rag:AuthToken is required outside Development when {SectionName}:Rag:Enabled is true.");
+        }
+
         return failures;
     }
 
@@ -44,12 +60,37 @@ public sealed class ServicesOptions
                 $"{key}:BaseUrl must be an absolute http or https URL without credentials, query or fragment.");
         }
 
+        if (service.AuthToken is not null && !IsAcceptableAuthToken(service.AuthToken))
+        {
+            failures.Add(
+                $"{key}:AuthToken must be {InternalServiceOptions.MinAuthTokenLength} to {InternalServiceOptions.MaxAuthTokenLength} printable ASCII characters without spaces.");
+        }
+
         if (service.TimeoutSeconds is < InternalServiceOptions.MinTimeoutSeconds or > InternalServiceOptions.MaxTimeoutSeconds)
         {
             failures.Add(
                 $"{key}:TimeoutSeconds must be between {InternalServiceOptions.MinTimeoutSeconds} and {InternalServiceOptions.MaxTimeoutSeconds}.");
         }
     }
+
+    private static void ValidateTransport(InternalServiceOptions? service, string key, List<string> failures)
+    {
+        if (service is not { Enabled: true } || string.IsNullOrEmpty(service.AuthToken) || service.AllowPlaintextPrivateNetwork
+            || !Uri.TryCreate(service.BaseUrl?.Trim(), UriKind.Absolute, out var uri))
+        {
+            return;
+        }
+
+        if (uri.Scheme == Uri.UriSchemeHttp && !uri.IsLoopback)
+        {
+            failures.Add($"{key}:BaseUrl must use https (or a loopback address) when {key}:AuthToken is set, unless {key}:AllowPlaintextPrivateNetwork is explicitly true.");
+        }
+    }
+
+    /// <summary>Header-safe: printable ASCII without whitespace (no CR/LF injection), bounded length.</summary>
+    internal static bool IsAcceptableAuthToken(string token) =>
+        token.Length is >= InternalServiceOptions.MinAuthTokenLength and <= InternalServiceOptions.MaxAuthTokenLength
+        && token.All(c => c is > ' ' and < (char)127);
 
     private static bool IsAcceptableBaseUrl(string value)
     {

@@ -24,6 +24,9 @@ public static class ApiServiceCollectionExtensions
 
         // C3/C5: RFC 9457 Problem Details with BuildMind code, type and traceId conventions.
         services.AddProblemDetails(options => options.CustomizeProblemDetails = ProblemDetailsDefaults.Apply);
+
+        // M6-review correction: a JSON body with duplicate properties is malformed (400), never "last one wins".
+        services.ConfigureHttpJsonOptions(options => options.SerializerOptions.AllowDuplicateProperties = false);
         services.AddExceptionHandler<GlobalExceptionHandler>();
 
         // C10: the framework middleware's own exception diagnostics (which include the full exception) are
@@ -56,8 +59,8 @@ public static class ApiServiceCollectionExtensions
                 "mysql", HealthStatus.Unhealthy, [Readiness.Tag], Readiness.RegistrationTimeout)
             .AddCheck<PythonReadinessCheck>(
                 "python", HealthStatus.Degraded, [Readiness.Tag], Readiness.RegistrationTimeout)
-            .AddTypeActivatedCheck<InternalServiceReadinessCheck>(
-                "rag", HealthStatus.Degraded, [Readiness.Tag], Readiness.RegistrationTimeout, "rag");
+            .AddCheck<RagReadinessCheck>(
+                "rag", HealthStatus.Degraded, [Readiness.Tag], Readiness.RegistrationTimeout);
 
         // BE-M4-D05: hardened typed client for the private Python service (only confirmed routes; G11 auth open).
         services.AddSingleton<InternalServiceBulkhead>(); // STEP 08-C: bounded in-flight + queued calls per dependency
@@ -65,6 +68,17 @@ public static class ApiServiceCollectionExtensions
             .ConfigureHttpClient(client => client.Timeout = Timeout.InfiniteTimeSpan) // the client enforces TimeoutSeconds itself
             .ConfigurePrimaryHttpMessageHandler(CreateInternalServiceHandler)
             .RemoveAllLoggers(); // framework request logs would record internal URLs
+
+        // BE-M7 (evidence contract v1, lead-approved 2026-11-19): private regulation retrieval service, same hardened
+        // transport and bulkhead. Exposed to the Application layer only through IRegulationEvidenceSource.
+        services.AddHttpClient<RagServiceClient>()
+            .ConfigureHttpClient(client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(CreateInternalServiceHandler)
+            .RemoveAllLoggers();
+        services.AddTransient<BuildMind.Application.Abstractions.Regulations.IRegulationEvidenceSource>(
+            provider => provider.GetRequiredService<RagServiceClient>());
+        services.AddTransient<BuildMind.Application.Abstractions.Regulations.IRegulatoryConstraintSource>(
+            provider => provider.GetRequiredService<RagServiceClient>());
 
         // BE-M4-D04: do not advertise the server implementation. This only affects Kestrel; a reverse proxy
         // or load balancer in front of the API may add its own headers and must be configured separately.

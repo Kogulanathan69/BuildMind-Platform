@@ -102,3 +102,10 @@ Post-merge run #55 failed one MySQL test because of a confirmed **MySql.Data 26.
 - **Outstanding:**
   - 18. 5 consecutive green database attempts on the 10-I commit.
   - 19. Lead decision on doc 27 (provider spike, stall detection, upstream report).
+
+## 11. Consolidated MVP handover (2026-11-19, phase 03)
+The current single source of truth for M4 + M7 MVP status, dependencies and production blockers is [28-MVP-STATUS-AND-DEPENDENCIES.md](28-MVP-STATUS-AND-DEPENDENCIES.md) (§5 = final state).
+
+- Setup: [30-LOCAL-BACKEND-RUNBOOK.md](30-LOCAL-BACKEND-RUNBOOK.md).
+- Proposed M6–M7 integration: [29](29-M6-M7-REGULATORY-CONSTRAINT-CONTRACT-PROPOSAL.md).
+- **Note:** PR #30 merged without the agreed 5 verified runs or a review. R-1/R-3 remain open on `develop`.

@@ -11,16 +11,14 @@ namespace BuildMind.Infrastructure.Persistence.Connections;
 /// <c>Dictionary</c> fields <c>tlsConnectionRef</c> and <c>tlsRetry</c> are mutated after the TLS handshake
 /// (<c>set_Item</c>, <c>Remove</c> at IL 891–1055) <b>outside</b> its own <c>SemaphoreSlim</c> (released at IL 613).
 /// Two TLS handshakes completing concurrently anywhere in the process can corrupt them. That is the CI run #55
-/// failure ("Operations that change non-concurrent collections must have exclusive access" in
-/// <c>Dictionary.Remove</c>). Upstream: MySQL Bug #111759 and #110717. No fixed provider version exists
-/// (26.10.0 is the latest).
+/// failure. Upstream: MySQL Bug #111759 and #110717. No fixed provider version exists (26.10.0 is the latest).
 /// </summary>
 /// <remarks>
-/// <para>TLS is NOT weakened: only the opening step is serialized, so every physical connection still negotiates
-/// TLS. Commands, transactions and already-open pooled connections run fully concurrently. No retry is added.</para>
-/// <para>Trade-off: a burst of new physical connections opens one after another (each waiter honours its own
-/// cancellation token). While MySQL is unreachable, waiters queue behind the connect timeout of the open in
-/// progress. Readiness keeps its own deadline and reports <c>timeout</c> truthfully.</para>
+/// <para>TLS is NOT weakened: only the opening step is serialized. Commands, transactions and already-open pooled
+/// connections run fully concurrently. No retry is added.</para>
+/// <para>Waiting for the gate is bounded (STEP 10-F). <b>Holding it is NOT</b> (open decision, STEP 10-H): MySql.Data
+/// does not bound or cancel its handshake once TCP is connected, so one stalled handshake holds the gate until it
+/// ends and every other open fails after its wait limit (503). See doc 25 §16 (risk R-3).</para>
 /// <para>Remove this gate only after a provider release whose IL no longer mutates these fields outside a lock,
 /// verified the same way.</para>
 /// </remarks>
@@ -47,20 +45,44 @@ public sealed class MySqlConnectionGateTimeoutException(TimeSpan waited)
     public TimeSpan Waited { get; } = waited;
 }
 
-/// <summary>One-at-a-time opening. Instances exist so tests can verify semantics in isolation.</summary>
+/// <summary>
+/// Identity of ONE connection-opening operation. EF Core passes the same <c>ConnectionId</c> and <c>StartTime</c> to
+/// every callback of one open (<c>RelationalConnection.OpenInternal</c> reads <c>UtcNow</c> once); a direct open uses
+/// a fresh unique identity.
+/// </summary>
+internal readonly record struct OpenOperation(Guid ConnectionId, DateTimeOffset StartTime)
+{
+    internal static OpenOperation From(ConnectionEventData eventData) => new(eventData.ConnectionId, eventData.StartTime);
+
+    internal static OpenOperation NewDirect() => new(Guid.NewGuid(), DateTimeOffset.UtcNow);
+}
+
+/// <summary>
+/// One-at-a-time opening. Ownership is tracked per connection AND per open operation (STEP 10-H/10-I):
+/// <list type="bullet">
+/// <item>Re-entry without waiting is allowed only for the SAME operation (for example the shared interceptor
+/// registered twice, or two interceptors sharing one gate, during one EF Core open).</item>
+/// <item>An independent open of the same connection is NOT re-entry: it waits like any other opener, so two opens of
+/// one connection can never run concurrently.</item>
+/// <item>Release is accepted only from the operation that holds the gate. Duplicate, late or foreign completion
+/// callbacks are no-ops, so they can never release another operation's hold.</item>
+/// <item>The semaphore is released exactly once, when the holding operation's last registration releases.</item>
+/// </list>
+/// </summary>
 internal sealed class OpenGate
 {
     /// <summary>Used when a connection reports no connect timeout (0 means "infinite" in ADO.NET).</summary>
     internal static readonly TimeSpan FallbackWait = TimeSpan.FromSeconds(30);
 
     private readonly SemaphoreSlim semaphore = new(1, 1);
+    private readonly ConditionalWeakTable<DbConnection, Hold> holds = new();
+    private readonly Lock holdsLock = new();
 
     internal int AvailableSlots => semaphore.CurrentCount;
 
     /// <summary>
-    /// STEP 10-F: waiting for the gate is bounded by the connection's own connect timeout, so the total time is at
-    /// most about twice that timeout (gate wait plus the open itself), never unbounded. The caller's cancellation
-    /// still applies.
+    /// STEP 10-F: waiting for the gate is bounded by the connection's own connect timeout. The caller's cancellation
+    /// still applies. HOLDING the gate is not bounded (open risk R-3).
     /// </summary>
     internal static TimeSpan WaitLimit(DbConnection connection) =>
         connection.ConnectionTimeout > 0 ? TimeSpan.FromSeconds(connection.ConnectionTimeout) : FallbackWait;
@@ -69,126 +91,199 @@ internal sealed class OpenGate
     {
         ArgumentNullException.ThrowIfNull(connection);
 
-        await EnterAsync(connection, cancellationToken).ConfigureAwait(false);
+        var operation = OpenOperation.NewDirect();
+        await EnterAsync(connection, operation, cancellationToken).ConfigureAwait(false);
         try
         {
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            Exit();
+            Release(connection, operation);
         }
     }
 
-    internal void Enter(DbConnection connection)
+    /// <summary>Returns true when the semaphore was really acquired, false for a re-entry by the same operation.</summary>
+    internal bool Enter(DbConnection connection, OpenOperation operation)
     {
+        ArgumentNullException.ThrowIfNull(connection);
+        if (TryReenter(connection, operation))
+        {
+            return false;
+        }
+
         var limit = WaitLimit(connection);
         if (!semaphore.Wait(limit))
         {
             throw new MySqlConnectionGateTimeoutException(limit);
         }
+
+        Register(connection, operation);
+        return true;
     }
 
-    internal async Task EnterAsync(DbConnection connection, CancellationToken cancellationToken)
+    /// <summary>Returns true when the semaphore was really acquired, false for a re-entry by the same operation.</summary>
+    internal async Task<bool> EnterAsync(DbConnection connection, OpenOperation operation, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(connection);
+        if (TryReenter(connection, operation))
+        {
+            return false;
+        }
+
         var limit = WaitLimit(connection);
         if (!await semaphore.WaitAsync(limit, cancellationToken).ConfigureAwait(false))
         {
             throw new MySqlConnectionGateTimeoutException(limit);
         }
+
+        Register(connection, operation);
+        return true;
     }
 
-    internal void Exit() => semaphore.Release();
+    /// <summary>
+    /// Releases one registration of <paramref name="operation"/>. A callback from any other operation (late,
+    /// duplicate or foreign) is ignored. The semaphore is released when the holder's last registration ends.
+    /// </summary>
+    internal void Release(DbConnection connection, OpenOperation operation)
+    {
+        lock (holdsLock)
+        {
+            if (!holds.TryGetValue(connection, out var hold) || hold.Operation != operation)
+            {
+                return;
+            }
+
+            if (--hold.Count > 0)
+            {
+                return;
+            }
+
+            holds.Remove(connection);
+        }
+
+        semaphore.Release();
+    }
+
+    internal bool IsHeldBy(DbConnection connection)
+    {
+        lock (holdsLock)
+        {
+            return holds.TryGetValue(connection, out _);
+        }
+    }
+
+    private bool TryReenter(DbConnection connection, OpenOperation operation)
+    {
+        lock (holdsLock)
+        {
+            if (!holds.TryGetValue(connection, out var hold) || hold.Operation != operation)
+            {
+                return false; // not held, or held by an INDEPENDENT operation: wait for the gate
+            }
+
+            hold.Count++;
+            return true;
+        }
+    }
+
+    private void Register(DbConnection connection, OpenOperation operation)
+    {
+        lock (holdsLock)
+        {
+            // The semaphore is held, so no other operation can hold the gate (for this or any connection).
+            holds.AddOrUpdate(connection, new Hold(operation));
+        }
+    }
+
+    private sealed class Hold(OpenOperation operation)
+    {
+        public OpenOperation Operation { get; } = operation;
+
+        public int Count = 1;
+    }
 }
 
 /// <summary>
 /// Holds the gate from <c>ConnectionOpening</c> until <c>ConnectionOpened</c>, <c>ConnectionFailed</c> or
-/// <c>ConnectionCanceled</c>. The holder is tracked per connection, so a release happens exactly once and only for
-/// an opener that acquired.
+/// <c>ConnectionCanceled</c> of the SAME open operation. Ownership and exactly-once release are enforced by
+/// <see cref="OpenGate"/>.
 /// </summary>
 /// <remarks>
 /// Verified against the shipped EF Core Relational 10.0.12 IL (<c>RelationalConnection.OpenInternal</c> and
 /// <c>&lt;OpenInternalAsync&gt;d__72</c>):
 /// <list type="bullet">
 /// <item>Opening goes through <c>ConnectionOpening[Async]</c>, then <c>OpenDbConnection[Async]</c> (skipped when
-/// suppressed), then <c>ConnectionOpened[Async]</c>.</item>
+/// suppressed), then <c>ConnectionOpened[Async]</c>; <c>startTime</c> is read once for the whole operation.</item>
 /// <item>On an exception, the catch calls <c>IExceptionDetector.IsCancellation</c>: a cancellation goes to
-/// <c>ConnectionCanceled[Async]</c>, which calls the interceptor's <c>ConnectionCanceled</c>, NOT
-/// <c>ConnectionFailed</c>; any other failure goes to <c>ConnectionFailed[Async]</c>. All three exits must
-/// release. Before STEP 10-F a cancelled open leaked the gate and deadlocked all later opens.</item>
-/// <item>Interceptors run only when <c>ShouldLogConnectionOpen</c> is true. The per-context logger resets its
-/// suppression whenever an interceptor needs the event (<c>NeedsEventData</c>), so every open is intercepted. This
-/// is verified live by <c>SSL02</c>.</item>
+/// <c>ConnectionCanceled[Async]</c>, any other failure to <c>ConnectionFailed[Async]</c>. All three exits release.</item>
+/// <item>Interceptors run only when <c>ShouldLogConnectionOpen</c> is true; with an interceptor present the
+/// per-context suppression is reset on every open (verified live by <c>SSL02</c>).</item>
 /// </list>
 /// Not covered (provider-internal, residual risk R-1): MySql.Data's <c>MySqlConnection.CancelQuery</c> opens its own
 /// unpooled connection for <c>KILL QUERY</c> directly, bypassing EF Core.
 /// </remarks>
 internal sealed class SerializedOpenInterceptor(OpenGate gate) : DbConnectionInterceptor
 {
-    private static readonly object Held = new();
-    private readonly ConditionalWeakTable<DbConnection, object> holders = new();
-
     private long acquisitions;
+    private long reentries;
 
-    /// <summary>Number of times this interceptor acquired the gate (diagnostics and tests).</summary>
+    /// <summary>Number of times this interceptor really acquired the gate (diagnostics and tests).</summary>
     internal long Acquisitions => Interlocked.Read(ref acquisitions);
+
+    /// <summary>Number of re-entrant (duplicate, same-operation) openings that did not wait.</summary>
+    internal long Reentries => Interlocked.Read(ref reentries);
 
     public override InterceptionResult ConnectionOpening(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
     {
-        gate.Enter(connection);
-        Mark(connection);
+        Count(gate.Enter(connection, OpenOperation.From(eventData)));
         return result;
     }
 
     public override async ValueTask<InterceptionResult> ConnectionOpeningAsync(
         DbConnection connection, ConnectionEventData eventData, InterceptionResult result, CancellationToken cancellationToken = default)
     {
-        await gate.EnterAsync(connection, cancellationToken).ConfigureAwait(false);
-        Mark(connection);
+        Count(await gate.EnterAsync(connection, OpenOperation.From(eventData), cancellationToken).ConfigureAwait(false));
         return result;
     }
 
-    public override void ConnectionOpened(DbConnection connection, ConnectionEndEventData eventData) => Release(connection);
+    public override void ConnectionOpened(DbConnection connection, ConnectionEndEventData eventData) =>
+        gate.Release(connection, OpenOperation.From(eventData));
 
     public override Task ConnectionOpenedAsync(DbConnection connection, ConnectionEndEventData eventData, CancellationToken cancellationToken = default)
     {
-        Release(connection);
+        gate.Release(connection, OpenOperation.From(eventData));
         return Task.CompletedTask;
     }
 
-    public override void ConnectionFailed(DbConnection connection, ConnectionErrorEventData eventData) => Release(connection);
-
-    // STEP 10-F (G1): EF Core reports a cancelled open here, never through ConnectionFailed.
-    public override void ConnectionCanceled(DbConnection connection, ConnectionEndEventData eventData) => Release(connection);
-
-    public override Task ConnectionCanceledAsync(DbConnection connection, ConnectionEndEventData eventData, CancellationToken cancellationToken = default)
-    {
-        Release(connection);
-        return Task.CompletedTask;
-    }
+    public override void ConnectionFailed(DbConnection connection, ConnectionErrorEventData eventData) =>
+        gate.Release(connection, OpenOperation.From(eventData));
 
     public override Task ConnectionFailedAsync(DbConnection connection, ConnectionErrorEventData eventData, CancellationToken cancellationToken = default)
     {
-        Release(connection);
+        gate.Release(connection, OpenOperation.From(eventData));
         return Task.CompletedTask;
     }
 
-    private void Mark(DbConnection connection)
+    // STEP 10-F (G1): EF Core reports a cancelled open here, never through ConnectionFailed.
+    public override void ConnectionCanceled(DbConnection connection, ConnectionEndEventData eventData) =>
+        gate.Release(connection, OpenOperation.From(eventData));
+
+    public override Task ConnectionCanceledAsync(DbConnection connection, ConnectionEndEventData eventData, CancellationToken cancellationToken = default)
     {
-        Interlocked.Increment(ref acquisitions);
-        if (!holders.TryAdd(connection, Held))
-        {
-            // Unexpected concurrent double open of one connection: never keep the gate for it.
-            gate.Exit();
-            throw new InvalidOperationException("The connection is already being opened.");
-        }
+        gate.Release(connection, OpenOperation.From(eventData));
+        return Task.CompletedTask;
     }
 
-    private void Release(DbConnection connection)
+    private void Count(bool acquired)
     {
-        if (holders.Remove(connection))
+        if (acquired)
         {
-            gate.Exit();
+            Interlocked.Increment(ref acquisitions);
+        }
+        else
+        {
+            Interlocked.Increment(ref reentries);
         }
     }
 }

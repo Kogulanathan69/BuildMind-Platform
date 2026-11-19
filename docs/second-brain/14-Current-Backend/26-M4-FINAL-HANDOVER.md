@@ -86,3 +86,19 @@ Post-merge run #55 failed one MySQL test because of a confirmed **MySql.Data 26.
 - **Residual risk R-1:** MySql.Data's internal `KILL QUERY` connection bypasses the gate.
 - **Outstanding:** 5 consecutive green database runs on the candidate commit (doc 25 §15), then independent review, then a separately verified post-merge CI run.
 - **Final QA OPEN; production readiness BLOCKED.**
+
+## 9. STEP 10-H update (2026-11-19)
+- PR #30's first CI attempt **failed** (48 database tests): a stalled test handshake held the process-wide open gate for the whole run (doc 25 §16).
+- Corrected within the existing design: per-connection gate ownership (no self-deadlock), and an isolated, bounded SSL03.
+- **Lead deferred the gate-semantics decision.** Risk **R-3** (one stalled handshake blocks all opens) is OPEN and blocks production readiness.
+- **Outstanding:**
+  - 16. Decide R-3 (bounded lease vs strict hold vs other).
+  - 17. 5 consecutive green database runs on the corrected commit.
+- **Final QA OPEN; M4 not production-ready.**
+
+## 10. STEP 10-I update (2026-11-19)
+- Gate ownership is now per open operation: no concurrent opens of one connection, and no foreign releases. SSL03 cleanup is guaranteed.
+- Architecture alternatives: doc 27 (proposed). **Production NOT approved; R-1 and R-3 open.**
+- **Outstanding:**
+  - 18. 5 consecutive green database attempts on the 10-I commit.
+  - 19. Lead decision on doc 27 (provider spike, stall detection, upstream report).

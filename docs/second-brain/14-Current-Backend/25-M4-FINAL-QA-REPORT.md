@@ -354,7 +354,7 @@ Run #57 digests: `dotnet-test-results` `dc46aff9…`, `mysql-compatibility-resul
 
 | # | Run id | Attempt | Commit | Result | Artifact digests |
 |---|---|---|---|---|---|
-| 1 | pending | | | | |
+| 1 | PR #30 run (merge `c080a25`) | 1 | `279c3b3` | **FAILED**: 48 database tests (STEP 10-H) | log archive `cdf6a99d…` |
 | 2 | pending | | | | |
 | 3 | pending | | | | |
 | 4 | pending | | | | |
@@ -365,3 +365,100 @@ Run #57 digests: `dotnet-test-results` `dc46aff9…`, `mysql-compatibility-resul
 - **Remove the gate when either holds:**
   1. a MySql.Data release whose `StartSSL`/`StartSSLAsync` IL no longer mutates `tlsConnectionRef`/`tlsRetry` outside a lock (verified the same way, with SSL01 kept as regression);
   2. an approved provider change.
+
+## 16. STEP 10-H — gate held forever by a stalled handshake (2026-11-19)
+
+**Consecutive green database attempts: 0/5 (reset).** Final QA remains OPEN.
+
+### Evidence
+- Source: the job log archive downloaded by the lead (`logs_120159306446.zip`, SHA-256 `cdf6a99d…`), from the PR #30 run on `refs/pull/30/merge`, `HEAD is now at c080a25 Merge 279c3b3 into 2ad74d1`.
+- Totals read from the logs:
+  - Reports 54, Workflow 123, Requirements 233, Application 128, Infrastructure 435 (all passed);
+  - M3 contract checks 266 passed; Python 54 passed;
+  - MySQL **11/59**;
+  - **1,352 executed, 1,304 passed, 48 failed.**
+- **Reconciled `develop` (`2ad74d1`) executed baseline:** **1,339** (Reports 54, Workflow 123, Requirements 233, Application 128, Infrastructure 425, M3 266, MySQL 56, Python 54). M5 #28 and M3 #25 changed Workflow (70 → 123) and M3 (246 → 266).
+
+### Timeline (xUnit clock)
+1. **00:00.29:** start.
+2. **~00:01.9:** SSL03 opens an EF context, configured through **`MySqlContextOptions.Apply`** (so with the **process-wide** gate), against a loopback listener that accepts TCP but never sends the MySQL greeting.
+3. From ~00:02, every other open (EF and direct) waits its 15 s limit and fails with `MySqlConnectionGateTimeoutException`: **94 occurrences, 47 tests**. Some failed after 2 × 15 s (R07, M03, CC02).
+4. **01:01.93:** xUnit abandons SSL03 after 60 s, but the open keeps running.
+5. **07:50:** end. The gate was held for the whole run.
+
+### Root cause (confirmed)
+1. **The provider open never completed**, despite a 500 ms cancellation token and `ConnectionTimeout=5`. If it had completed (successfully, failed or cancelled), SSL03's own `await` would have returned and failed fast on its assertions; instead the call never returned. So MySql.Data 26.10.0 doesn't bound or cancel the handshake once TCP is connected.
+2. **The open-gate design holds the process-wide gate for the entire provider open.** So one stalled handshake blocks every open in the process, and every waiter fails after its bounded wait (503).
+3. **SSL03's design** pointed the production gate at a silent server. That turned a test of the dedicated interceptor into a process-wide outage.
+
+**Ruled out:**
+- a missing release callback (the open never returned to EF Core);
+- the original provider TLS race;
+- duplicate registration: none exists, since `Apply` is called once per builder and the spike contexts register once.
+
+**Also observed:** `MySQLExecutionStrategy` wraps the gate timeout in an `InvalidOperationException` that suggests `EnableRetryOnFailure`. It still classifies as 503, and **no retry is configured** (forbidden).
+
+### Lead decision (explicit in-session answer, 2026-11-19)
+**"Stop; revisit design".** The gate semantics (a strict hold until the provider open ends) are **not** changed now; the bounded-lease alternative is deferred.
+
+So **risk R-3 is OPEN and blocks production readiness:** one stalled MySQL handshake (a server or network path that accepts TCP and then stalls) blocks all connection opens process-wide until it ends. Waiters fail with 503 after `ConnectionTimeout`.
+
+Alternatives for the later decision:
+- **(a) Bounded lease:** release after the connect timeout while the stalled open continues ungated. Residual: a rare provider race on that open (R-2).
+- **(b) Strict hold**, as now.
+- **(c) Another design.**
+
+### Corrections in 10-H (within the existing design)
+1. **Per-connection ownership moved into `OpenGate`.** A connection that already holds the gate re-enters without waiting (counted as `Reentries`); the semaphore is released exactly once, at the outermost release; releasing a non-holder is a no-op.
+   - This removes the latent self-deadlock when the shared interceptor is registered twice, or when two interceptors share one gate (previously a 15 s wait and then a failure).
+2. **SSL03 rewritten:**
+   - process-isolated: a dedicated context **without** `MySqlContextOptions.Apply`, so it never touches the process gate;
+   - doesn't depend on the provider honouring cancellation: after a bounded wait, the server side is closed, forcing the stalled open to fail (≤ 20 s);
+   - records whether the provider honoured the 500 ms token (evidence);
+   - then asserts exactly one acquisition and a released gate.
+3. **SSL04 added:** a refused open through the production configuration, then successful EF and direct TLS opens (the gate recovers).
+
+### Tests (compiled; NOT executed)
+- **Infrastructure +6:**
+  - duplicate registration of the same interceptor (no self-wait, exactly-once release);
+  - two interceptors sharing one gate (sync path);
+  - re-entrant acquisition counted and released once;
+  - a failed open followed by a successful one;
+  - recovery right after a waiter timed out;
+  - a gate timeout wrapped by the execution strategy is still 503.
+- **MySQL:** SSL03 replaced, SSL04 added.
+- Existing objectives kept; no timeouts were raised (the SSL limits are unchanged and the 20 s cap applies only to the forced failure).
+- **Compiled inventory:** Infrastructure **441**, MySQL **60**. Expected full backend once executed: 1,352 − 435 + 441 − 59 + 60 = **1,359**.
+
+### Verification requirement (unchanged)
+5 consecutive green `database-compatibility` attempts on the **corrected** candidate commit, recorded per attempt.
+
+## 17. STEP 10-I — reviewed corrections for development/CI (2026-11-19)
+
+**Scope (lead):** development and CI verification only. **Production approval is NOT granted.** No bounded lease. R-1 and R-3 stay unresolved.
+
+### Audit of the 10-H diff
+| Check | Result |
+|---|---|
+| Duplicate interceptor registration | ✅ Same-operation re-entry: no self-wait, exactly one semaphore release |
+| **Re-entry vs independent concurrent opens of the same connection** | **DEFECT in 10-H (fixed).** Ownership was keyed only by the `DbConnection`, so a second independent open of the same connection (e.g. two concurrent `OpenAsync` calls) would have re-entered and run concurrently. Now keyed by **open operation**: EF Core's `(ConnectionId, StartTime)`, which is identical for all callbacks of one open because `OpenInternal` reads `UtcNow` once (IL 12); direct opens use a fresh unique identity. An independent open waits (bounded) like any other opener |
+| **Duplicate or delayed callbacks releasing another operation's hold** | **DEFECT in 10-H (fixed).** A late `Opened`/`Failed`/`Canceled` from an earlier open of the same connection could release a later open's hold. Release is now accepted only from the holding operation; late, duplicate or foreign callbacks are no-ops |
+| SSL03 isolation | ✅ Dedicated context without `MySqlContextOptions.Apply`, so it never touches the process gate |
+| **SSL03 socket cleanup** | **Gap (fixed).** If the accept failed, the open was never awaited and the sockets weren't closed; and `await using` disposed the context before the listener closed, while the open could still be in flight. Now `try/finally`: close both socket ends, stop the listener, wait at most 20 s for the open, and dispose the context only once the open has ended. The ambiguous `IsNotType<TimeoutException>` check was replaced by explicit `IsCompleted` and faulted/cancelled assertions |
+| SSL04 recovery | ✅ Refused open through the production config (fast refusal), then successful EF and direct TLS opens |
+| TLS policies | ✅ No connection-string or `SslMode` changes |
+
+### Tests (compiled; NOT executed)
+- **Infrastructure +3:**
+  - independent opens of one connection are serialized (no re-entry);
+  - concurrent direct opens of one connection never overlap;
+  - late, duplicate and foreign callbacks never release another operation's hold.
+- All unit tests now pass real EF `ConnectionEventData` / `ConnectionEndEventData` / `ConnectionErrorEventData`. The constructors were verified in the EF Core 10.0.12 metadata: no null checks; `ConnectionId` and `StartTime` are carried.
+- **Inventory:** Infrastructure **444**, MySQL **60**, Python 54. Expected full backend: **1,362**.
+
+### Architecture alternatives
+See [27-MYSQL-CONNECTION-ARCHITECTURE-DECISION.md](27-MYSQL-CONNECTION-ARCHITECTURE-DECISION.md). It is proposed, not approved.
+
+### Verification
+- The 5-consecutive-run count **restarts at 0** on the new commit.
+- **Even 5/5 does NOT resolve R-3 (or R-1).**

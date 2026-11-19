@@ -63,3 +63,7 @@
 2026-11-19 — STEP 10-E: run #55 failure investigated; MySql.Data 26.10.0 TLS static-state race confirmed from IL; process-wide open gate implemented (uncommitted). Evidence EV-20261119-04..05.
 
 2026-11-19 — STEP 10-F: open-gate audit against the EF Core 10.0.12 IL; G1/G2 fixed; TLS policy wording corrected; lead approvals recorded. Evidence EV-20261119-06.
+
+2026-11-19 — STEP 10-H: PR #30 CI failure analysed (stalled handshake held the open gate); per-connection gate ownership; SSL03 isolated; SSL04 added; R-3 recorded as an open lead decision. Evidence EV-20261119-07..08.
+
+2026-11-19 — STEP 10-I: gate ownership per open operation; SSL03 bounded cleanup; ADR proposal for MySQL connection reliability (doc 27). Evidence EV-20261119-09.

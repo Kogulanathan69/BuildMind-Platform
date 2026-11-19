@@ -5,6 +5,7 @@ using BuildMind.Infrastructure.Persistence.Connections;
 using BuildMind.Persistence.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
 using MySql.Data.MySqlClient;
+using Xunit.Abstractions;
 
 namespace BuildMind.Persistence.IntegrationTests;
 
@@ -15,7 +16,7 @@ namespace BuildMind.Persistence.IntegrationTests;
 /// interceptor) with direct opens (gate helper). Every connection must open AND prove it negotiated TLS
 /// (<c>Ssl_cipher</c> non-empty): the fix serializes opening and never weakens TLS.
 /// </summary>
-public sealed class MySqlTlsConcurrencyLiveTests
+public sealed class MySqlTlsConcurrencyLiveTests(ITestOutputHelper output)
 {
     private const int Rounds = 6;
     private const int ParallelOpens = 24;
@@ -56,33 +57,81 @@ public sealed class MySqlTlsConcurrencyLiveTests
     }
 
     [Fact(Timeout = 60_000)]
-    public async Task SSL03_a_cancelled_or_failed_ef_core_open_always_releases_the_gate()
+    public async Task SSL03_a_stalled_then_failed_open_releases_its_gate_without_touching_the_process_gate()
     {
-        // STEP 10-F (G1): a server that accepts TCP but never sends the MySQL greeting; the open is cancelled.
+        // STEP 10-H: a server that accepts TCP but never sends the MySQL greeting. In PR #30's CI the provider ignored
+        // both the 500 ms token and ConnectionTimeout=5 here, and because the 10-F version used the PRODUCTION gate it
+        // held the process-wide gate for the whole run (47 other tests failed). This version is isolated: a dedicated
+        // gate only, and it never depends on the provider honouring cancellation. After a bounded wait the server side
+        // is closed, which forces the stalled open to fail.
         var (interceptor, gate) = Dedicated();
-        using var silent = new TcpListener(IPAddress.Loopback, 0);
+        var silent = new TcpListener(IPAddress.Loopback, 0);
         silent.Start();
         var port = ((IPEndPoint)silent.LocalEndpoint).Port;
-        var accepted = silent.AcceptTcpClientAsync();
         var target = new MySqlConnectionStringBuilder(TestConnectionString(pooling: false))
         {
             Server = "127.0.0.1",
             Port = (uint)port,
             ConnectionTimeout = 5,
         }.ConnectionString;
-        await using var context = ContextWith(interceptor, target);
+        var context = IsolatedContext(interceptor, target);
+        var connection = context.Database.GetDbConnection();
         using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
-
-        var failure = await Record.ExceptionAsync(() => context.Database.OpenConnectionAsync(cancel.Token));
-
-        Assert.NotNull(failure); // cancelled (ConnectionCanceled) or timed out (ConnectionFailed): both must release
-        Assert.Equal(1, interceptor.Acquisitions);
-        Assert.Equal(1, gate.AvailableSlots);
-        silent.Stop();
-        if (accepted.IsCompletedSuccessfully)
+        TcpClient? serverSide = null;
+        var opening = context.Database.OpenConnectionAsync(cancel.Token);
+        try
         {
-            (await accepted).Dispose();
+            serverSide = await silent.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            var honouredCancellation = await Task.WhenAny(opening, Task.Delay(TimeSpan.FromSeconds(3))) == opening;
+            output.WriteLine($"Provider honoured the 500 ms cancellation within 3 s: {honouredCancellation}");
+
+            serverSide.Client.Close(); // force the stalled handshake to fail
+            await Task.WhenAny(opening, Task.Delay(TimeSpan.FromSeconds(20)));
+
+            Assert.True(opening.IsCompleted, "the stalled open did not end after the server side was closed");
+            Assert.True(opening.IsFaulted || opening.IsCanceled, "an open against a silent server cannot succeed");
+            Assert.Equal(1, interceptor.Acquisitions);
+            Assert.False(gate.IsHeldBy(connection));
+            Assert.Equal(1, gate.AvailableSlots);
         }
+        finally
+        {
+            // Guaranteed, bounded cleanup on every path (including a failed accept or assertion): close both socket
+            // ends, then wait a bounded time for the provider open to end. The context is disposed only once the open
+            // has ended, so disposal can never block on an in-flight handshake.
+            serverSide?.Dispose();
+            silent.Stop();
+            silent.Dispose();
+            await Task.WhenAny(opening, Task.Delay(TimeSpan.FromSeconds(20)));
+            _ = opening.Exception; // observe the expected failure
+            if (opening.IsCompleted)
+            {
+                await context.DisposeAsync();
+            }
+        }
+    }
+
+    [Fact(Timeout = 60_000)]
+    public async Task SSL04_a_failed_production_open_is_followed_by_a_successful_one()
+    {
+        // STEP 10-H: a refused open through the PRODUCTION configuration (process-wide gate), then real opens through
+        // both the EF Core and direct paths must succeed: the gate recovers after failure.
+        var refused = new MySqlConnectionStringBuilder(TestConnectionString(pooling: false))
+        {
+            Server = "127.0.0.1",
+            Port = (uint)FreeLoopbackPort(),
+            ConnectionTimeout = 3,
+        }.ConnectionString;
+        await using (var failing = BuildMindMigrationTests.CreateContext(refused))
+        {
+            Assert.NotNull(await Record.ExceptionAsync(() => failing.Database.OpenConnectionAsync()));
+        }
+
+        var ef = await OpenThroughEfAsync(TestConnectionString(pooling: false));
+        var direct = await OpenDirectAsync(TestConnectionString(pooling: false));
+
+        Assert.False(string.IsNullOrWhiteSpace(ef));
+        Assert.False(string.IsNullOrWhiteSpace(direct));
     }
 
     private static (SerializedOpenInterceptor Interceptor, OpenGate Gate) Dedicated()
@@ -98,6 +147,22 @@ public sealed class MySqlTlsConcurrencyLiveTests
         MySqlContextOptions.Apply(builder, connectionString, 30);
         builder.AddInterceptors(interceptor);
         return new BuildMindDbContext(builder.Options);
+    }
+
+    private static BuildMindDbContext IsolatedContext(SerializedOpenInterceptor interceptor, string connectionString) =>
+        // Deliberately NOT MySqlContextOptions.Apply: this context must never touch the process-wide gate.
+        new(new DbContextOptionsBuilder<BuildMindDbContext>()
+            .UseMySQL(connectionString)
+            .AddInterceptors(interceptor)
+            .Options);
+
+    private static int FreeLoopbackPort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
     }
 
     private static string TestConnectionString(bool pooling) =>

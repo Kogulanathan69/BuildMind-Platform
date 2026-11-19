@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using BuildMind.Infrastructure.Configuration;
 using MySql.Data.MySqlClient;
+using BuildMind.Infrastructure.Persistence.Connections;
 
 namespace BuildMind.Persistence.IntegrationTests.Support;
 
@@ -84,7 +85,7 @@ internal sealed partial class DisposableMySqlDatabase : IAsyncDisposable
     private static async Task ExecuteAsync(string connectionString, string sql)
     {
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
+        await MySqlConnectionOpenGate.OpenAsync(connection);
         await using var command = new MySqlCommand(sql, connection);
         await command.ExecuteNonQueryAsync();
     }

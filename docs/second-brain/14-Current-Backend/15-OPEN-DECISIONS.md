@@ -115,6 +115,14 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
 
 - 2026-11-19 (STEP 10-A): approvals still needed before M4 can be called production-ready: A1/A2, C6, C7, C2/C5b, G11, the hosting posture (AllowedHosts, HTTPS/HSTS), request size and rate limits, GitHub Actions SHA pinning, the production database account policy, and independent review of PRs #8–#27 (G19). See [25-M4-FINAL-QA-REPORT.md](25-M4-FINAL-QA-REPORT.md).
 
+- 2026-11-19 (STEP 10-E): **decisions needed:** (1) accept the process-wide connection-open serialization as the MySql.Data TLS-race workaround (performance trade-off; TLS unchanged); (2) the verification method for an intermittent race: ≥5 consecutive green `database-compatibility` runs via manual re-runs (no workflow change), or an approved stress step; (3) optionally, an approved isolated CI diagnostic that reproduces the UNGUARDED provider race in its own process (never in the main test process, since corruption is process-wide); (4) reporting the defect upstream (an external action requiring approval). Provider upgrade: none available (26.10.0 latest).
+
+- 2026-11-19 (STEP 10-F): **lead approved** (explicit in-session answer) process-wide serialized MySQL connection opening, acceptance after 5 consecutive green database CI runs on the same commit, and unchanged TLS policies and provider versions. **Deferred** (no action without new approval): a stress workflow, an ungated reproduction, an upstream bug report. Residual risk R-1 (provider `KILL QUERY` connection ungated) is accepted until an upstream fix.
+
+- 2026-11-19 (STEP 10-H): **lead decision "Stop; revisit design"**: the open-gate semantics are NOT changed (strict hold until the provider open ends). **OPEN, blocking production readiness: R-3.** MySql.Data doesn't bound or cancel its handshake after TCP connect, so one stalled handshake holds the process-wide gate and every other open fails with 503 after `ConnectionTimeout`. Options for the decision: (a) bounded lease (release after the connect timeout; residual rare provider race R-2), (b) strict hold, (c) another design. Stress workflow, ungated reproduction and upstream report remain deferred.
+
+- 2026-11-19 (STEP 10-I): the lead authorized the 10-H/10-I corrections for **development and CI only** (explicit instruction); **production NOT approved**; no bounded lease; R-1/R-3 unresolved. **New decision pending:** doc 27 (provider spike MySqlConnector + Pomelo, stall detection + recovery, circuit breaker, upstream report).
+
 - 2026-11-19 (M7 MVP): **lead approved** (explicit in-session answers):
   - G10: code-only copy into `rag-service/`; the canonical engine is confirmed as the source of the copy, and its workspace stays the corpus location;
   - G11 (RAG hosting only): a separate private FastAPI service;

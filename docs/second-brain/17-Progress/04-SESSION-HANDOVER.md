@@ -165,6 +165,27 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Next: CI on the draft PR → verify 1,258 → independent QA review.
 - M4 is not complete and not production-ready. M7/RAG not started.
 
+## 2026-11-19 — STEP 10-E MySql.Data TLS concurrency failure
+- Post-merge run #55 failed `M03` (intermittent; #54, #56 and #57 green). Root cause confirmed in the provider IL (doc 25 §14).
+- Fix on `feature/m4-mysql-ssl-concurrency-fix` (from `2ad74d1`): `MySqlConnectionOpenGate`, +7 tests. **Uncommitted, awaiting review.**
+- Final QA not passed; production readiness blocked. M7 not started.
+- Next: review → commit → draft PR → ≥5 consecutive green database runs.
+
+## 2026-11-19 — STEP 10-F workaround audit and delivery
+- Lead approval recorded. G1 (cancelled-open gate leak) and G2 (unbounded wait) fixed; R-1 documented.
+- Compiled: Infrastructure 435, MySQL 59.
+- Next: draft PR → 5 consecutive green database attempts on the same commit (record ids, attempts, digests in doc 25 §15) → independent review → post-merge CI.
+
+## 2026-11-19 — STEP 10-H open-gate failure
+- PR #30 attempt 1: 48 database failures. Cause confirmed: a stalled SSL03 handshake held the process-wide gate (doc 25 §16).
+- Lead deferred the gate-semantics decision (R-3 open). Fixed within the design: per-connection ownership, isolated SSL03, SSL04.
+- Compiled: Infrastructure 441, MySQL 60. **Uncommitted, awaiting review.** M7 not started.
+
+## 2026-11-19 — STEP 10-I
+- Operation-scoped gate ownership; SSL03 cleanup guaranteed; ADR proposal doc 27.
+- Committed to PR #30; the 5-run count restarts at 0.
+- Production not approved; R-1/R-3 open. M7 not started.
+
 ## 2026-11-19 — Accelerated MVP: M7 retrieval service
 - **M4:** run #59 green by metadata only; artifacts need an authenticated download → 5-run count 0/5 verified. PR #30 preserved; R-1/R-3 open.
 - **M7:** `feature/m7-rag-retrieval-service` from `develop` `2ad74d1`. rag-service (contract v1) with the reused engine; C# port and client; tests 44 CI + 6 real-corpus; real E2E. **Uncommitted.**

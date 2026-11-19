@@ -247,3 +247,7 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Local regression and live 12/12 hardening checks pass; the fabrication guard has been verified live.
 - M6 evidence pack: doc 29 §9–§10.
 - Still waiting: M6 (no branch yet), the domain reviewer (G06), independent reviews (G19), R-1/R-3.
+
+## 2026-11-19 — Constraint integrity (M6 conditional approval)
+- Done on `feature/m7-constraint-integrity`: BM-JCS-1 digests, reviewer authorization, sealed and pinned tables and registries, overlap conflicts, synthetic isolation, Production transport, evidence gate, shared M6 scenarios.
+- Next: CI results; M6 answers to doc 29 §11 items 1–4; G06 real reviewer registry; python-services authentication with its maintainer; R-1/R-3 stay open.

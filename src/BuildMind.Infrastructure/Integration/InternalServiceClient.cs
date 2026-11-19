@@ -96,12 +96,20 @@ public class InternalServiceClient
     public bool IsEnabled => baseUri is not null;
 
     public Task<T> GetJsonAsync<T>(string relativePath, Func<T, bool>? isValid, CancellationToken cancellationToken) =>
-        SendAsync(HttpMethod.Get, relativePath, content: null, isValid, cancellationToken);
+        SendAsync(HttpMethod.Get, relativePath, content: null, isValid, isValidRaw: null, cancellationToken);
 
     /// <summary>Single POST, never retried.</summary>
     public Task<TResponse> PostJsonAsync<TRequest, TResponse>(
         string relativePath, TRequest body, Func<TResponse, bool>? isValid, CancellationToken cancellationToken) =>
-        SendAsync(HttpMethod.Post, relativePath, JsonContent(body), isValid, cancellationToken);
+        SendAsync(HttpMethod.Post, relativePath, JsonContent(body), isValid, isValidRaw: null, cancellationToken);
+
+    /// <summary>
+    /// Single POST, never retried, whose validator also receives the strictly parsed raw root element, so integrity
+    /// checks (for example an independently recomputed digest) run over exactly what was received.
+    /// </summary>
+    public Task<TResponse> PostJsonVerifiedAsync<TRequest, TResponse>(
+        string relativePath, TRequest body, Func<TResponse, JsonElement, bool> isValidRaw, CancellationToken cancellationToken) =>
+        SendAsync(HttpMethod.Post, relativePath, JsonContent(body), isValid: null, isValidRaw, cancellationToken);
 
     /// <summary>
     /// Resolves a code-defined relative path under the base URL, or throws. ALLOWLIST (STEP 08-B): one or more
@@ -155,7 +163,8 @@ public class InternalServiceClient
     }
 
     private async Task<T> SendAsync<T>(
-        HttpMethod method, string relativePath, HttpContent? content, Func<T, bool>? isValid, CancellationToken cancellationToken)
+        HttpMethod method, string relativePath, HttpContent? content, Func<T, bool>? isValid, Func<T, JsonElement, bool>? isValidRaw,
+        CancellationToken cancellationToken)
     {
         var target = Resolve(relativePath);
 
@@ -239,22 +248,20 @@ public class InternalServiceClient
                 throw Failure(DependencyFailureKind.Unavailable, status);
             }
 
-            if (!IsStrictJsonObject(body))
-            {
-                throw Failure(DependencyFailureKind.MalformedResponse, status);
-            }
+            using var document = ParseStrictObject(body) ?? throw Failure(DependencyFailureKind.MalformedResponse, status);
 
             T? value;
             try
             {
-                value = JsonSerializer.Deserialize<T>(body, Json);
+                value = document.RootElement.Deserialize<T>(Json);
             }
             catch (JsonException)
             {
                 throw Failure(DependencyFailureKind.MalformedResponse, status);
             }
 
-            if (value is null || (isValid is not null && !isValid(value)))
+            if (value is null || (isValid is not null && !isValid(value))
+                || (isValidRaw is not null && !isValidRaw(value, document.RootElement)))
             {
                 throw Failure(DependencyFailureKind.MalformedResponse, status);
             }
@@ -296,14 +303,32 @@ public class InternalServiceClient
     /// <summary>Raw validation before deserialization: well-formed, no duplicate properties, bounded depth, object root.</summary>
     internal static bool IsStrictJsonObject(ReadOnlySpan<byte> body)
     {
+        using var document = ParseStrictObject(body.ToArray());
+        return document is not null;
+    }
+
+    private static JsonDocument? ParseStrictObject(byte[] body)
+    {
+        JsonDocument? document = null;
         try
         {
-            using var document = JsonDocument.Parse(body.ToArray(), StrictDocument);
-            return document.RootElement.ValueKind == JsonValueKind.Object;
+            document = JsonDocument.Parse(body, StrictDocument);
+            if (document.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                var result = document;
+                document = null;
+                return result;
+            }
+
+            return null;
         }
         catch (JsonException)
         {
-            return false;
+            return null;
+        }
+        finally
+        {
+            document?.Dispose();
         }
     }
 

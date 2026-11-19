@@ -137,3 +137,56 @@
 - no M6 consumer exists (no M6 branch or code on the remote as of this check).
 
 **Requested from M6:** review §9 and §10 and answer the four open questions in §9 (kinds/units, condition-field sources, domain reviewer/table location, Gazette/council precedence).
+
+## 11. Constraint integrity: final technical evidence for M6 review (2026-11-19)
+**Basis:** on 2026-11-19 M6 conditionally approved the provisional `constraints-0` design: the seven kinds, their units, revision binding and the C# orchestration direction. This section implements the conditions. **Status:** branch `feature/m7-constraint-integrity`, synthetic data only, **pending M6 + lead review**. No M6-owned code was changed; M6 contracts and validation are used read-only in tests.
+
+### M4: integrity and transport
+| Condition | Implementation | Evidence |
+|---|---|---|
+| Agreed digest serialization | **BM-JCS-1**: RFC 8785 (JCS), with numbers restricted to finite values, integers below 1e15, and decimals between 1e-4 and 1e15 without exponent. Anything outside that range is **rejected**, never approximated. Implemented as `rag-service/app/canonical_json.py` and `CanonicalJson.cs`. | Shared vectors `rag-service/contract/canonical_json_vectors.v1.json` (9 valid, 5 invalid), run by both suites |
+| Independent digest recomputation | The C# client recomputes `evidence_pack_id` from the **received bytes**, excluding that field, and requires `digest_algorithm = SHA-256/BM-JCS-1`. | Unsealed edits are rejected (5 cases); a resealed harmless edit is accepted, which proves the check really recomputes |
+| Ranges, kinds, comparators, condition units | Per-kind comparator, unit and range; condition field → unit and range; unsatisfiable conditions and duplicate ids rejected. Each rule is tested on **resealed** packs, so the rule itself (not the digest) causes the rejection. | `StrictContractTests` (40 tampered packs) |
+| Synthetic evidence isolation | The client rejects synthetic packs unless `Services:Rag:AllowSyntheticConstraints` is set. That setting fails start-up outside **Development/Testing**, and Python may never set it. The gate treats synthetic evidence as UNVERIFIED unless explicitly allowed. rag-service loads a synthetic table only with `BUILDMIND_RAG_ALLOW_SYNTHETIC_CONSTRAINTS=1`. | C# start-up tests; live start-up refusal |
+| Production transport without plaintext exceptions | In **Production**, every enabled internal service must use https or loopback, with or without a token, and `AllowPlaintextPrivateNetwork` itself fails start-up. Staging keeps the explicit, reviewable exception until G11. | `ConstraintIntegrityTests` (6 transport cases + host start-up) |
+| Rotation, cancellation, timeout, safe errors | Unchanged and still covered: two-token rotation (Python); timeout → `Timeout`; caller cancellation is not a dependency failure; 503 → `Unavailable` | Existing tests |
+| python-services authentication | **Coordination item** for the python-services maintainer (M6 bootstrap owner); not changed here. The C# transport rules already apply to Python. | — |
+
+### M7: review, integrity and applicability
+| Condition | Implementation | Evidence |
+|---|---|---|
+| Reviewer **authorization** (not only id format) | A separate, sealed **reviewer registry** (pseudonymous ids only; no names). Every reviewed or rejected constraint must be signed off by a reviewer who is registered, ACTIVE, holding the stated role, scoped to its jurisdiction **and** kind, and within the authorization period on `reviewed_at`. A revoked reviewer invalidates **all** of their sign-offs, so those constraints need re-review. The table cannot load without the registry, and the pack carries the registry version and digest. | 9 refusal cases, plus registry tampering and invalid registries; live: no-registry and wrong-pin start-ups refused |
+| Table integrity and version | The table carries an `integrity` seal over BM-JCS-1. A real table needs **version, table digest and registry digest pins** and may not use synthetic versions or identities. A synthetic table needs `synthetic-` versions and `synthetic:`/`SYN-` identities. | Tamper, pin and namespace tests |
+| Overlapping applicability and conflicts | Conditions form intervals per field (open and closed bounds). Two reviewed constraints **conflict when their applicability overlaps** and their requirements differ. The C# client independently rejects a VERIFIED result that hides such an overlap, and a CONFLICTING result without one. | 5 boundary cases (for example `<= 9` and `>= 9` overlap at exactly 9 m) plus a different-fields case |
+| No unsupported precedence | No specificity, recency or Gazette/council precedence is ever applied: a conditional rule does **not** override a general one; they are CONFLICTING. **Behaviour change:** the earlier v0 test that treated "general + conditional" as non-conflicting now expects CONFLICTING, by M6's condition. | `test_a_general_rule_and_an_overlapping_conditional_rule_conflict_without_assumed_precedence` |
+| Provenance and exact binding | Unchanged: citations must reconstruct from the hash-verified corpus; packs are bound to exact project, land and requirement revisions. | Existing tests; live refusal against the real corpus |
+
+### Missing or conflicting evidence can never produce FEASIBLE
+`ConstraintEvidenceGate`, in the Application layer, maps a verified pack and the **mandatory kinds** to M6's `RegulatoryEvidenceStatuses`, with precedence **CONFLICTING > MISSING > UNVERIFIED > REVIEWED**:
+- a mandatory kind absent from the pack is MISSING;
+- MISSING carries no rule-set version (an M6 rule).
+
+The gate does not decide feasibility. M6's `GenerationContractValidation` remains authoritative and already refuses FEASIBLE unless the evidence status is REVIEWED. For every shared scenario, the tests run pack → client verification → gate → **M6's own validator**:
+
+| Scenario | Rear | Side | Front | M6 status | FEASIBLE allowed? |
+|---|---|---|---|---|---|
+| north-baseline | VERIFIED | UNVERIFIED | MISSING | MISSING | No: M6 rejects it |
+| all-setbacks-verified | VERIFIED | VERIFIED | VERIFIED | REVIEWED | Yes: M6 accepts it (positive control) |
+| rear-conflict-overlapping-conditions | CONFLICTING | VERIFIED | VERIFIED | CONFLICTING | No |
+| rear-disjoint-conditions | VERIFIED ×2 | VERIFIED | VERIFIED | REVIEWED | Yes (M6 evaluates the conditions) |
+| side-unverified-only | VERIFIED | UNVERIFIED | VERIFIED | UNVERIFIED | No |
+| unknown-jurisdiction | MISSING | MISSING | MISSING | MISSING | No |
+
+Shared fixtures for M6: `rag-service/contract/constraints_scenarios.v0.json`. They are generated by `rag-service/tools/build_contract_fixtures.py`, and a test fails if any committed fixture drifts from the builder.
+
+### Contract mismatches found against M6's merged contracts (#38): decisions needed
+1. **Reviewer identity type:** M6 `ReviewedConstraintDto.reviewedBy` is a GUID; M7 uses a pseudonymous string id (`reviewer_id`). Choose one: a GUID registry id, or string ids on both sides.
+2. **Parcel-edge mapping:** M6 consumes setbacks **per parcel edge** (`parcelEdgeIndex`, `distanceM`); M7 provides per-kind front/rear/side values. Which edge is front, rear or side is geometry. **Proposal:** M6 maps the edges; M7 never guesses them.
+3. **Evidence binding in M6 results:** `FeasibilityResultDto` has no `evidence_pack_id`, `table_sha256` or `project_revision`. **Proposal:** add `regulatoryEvidencePackId` so a feasibility result is traceable to the exact verified pack.
+4. **Mandatory kinds per check:** confirm that M6's initial feasibility treats FRONT/REAR/SIDE as mandatory.
+
+**Not claimed:**
+- no real regulatory values or real reviewers exist (G06);
+- legal currency is unverified;
+- C# tests compile locally but run only in CI (Smart App Control);
+- no cross-service activation until M6 agrees items 1–4.

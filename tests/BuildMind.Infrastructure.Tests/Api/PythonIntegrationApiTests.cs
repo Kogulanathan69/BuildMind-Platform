@@ -18,7 +18,7 @@ public sealed class PythonIntegrationApiTests
     private static readonly Dictionary<string, string?> PythonEnabled = new()
     {
         ["Services:Python:Enabled"] = "true",
-        ["Services:Python:BaseUrl"] = $"http://{PythonHost}:8000",
+        ["Services:Python:BaseUrl"] = $"https://{PythonHost}:8000",
         ["Services:Python:TimeoutSeconds"] = "1",
     };
 

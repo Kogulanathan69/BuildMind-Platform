@@ -1,29 +1,54 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using BuildMind.Application.Abstractions.Regulations;
 
 namespace BuildMind.Infrastructure.Integration;
 
 /// <summary>
-/// M7 constraint evidence packs (constraints contract v0, PENDING M6 + lead approval) on the same hardened transport.
-/// Every pack is checked on receipt: bound to EXACTLY the requested revisions, jurisdiction and kinds; per-kind states
-/// consistent with the returned constraints (VERIFIED requires a human-reviewed value, MISSING has none, REJECTED never
-/// appears); kind-specific comparator and unit; finite values; never a legal-verification claim. Any violation is a
-/// <c>MalformedResponse</c>, never a partially trusted pack.
+/// M7 constraint evidence packs (constraints contract v0, conditionally approved by M6 on 2026-11-19) on the same
+/// hardened transport. Every pack is verified on receipt, independently of the service that produced it:
+/// <list type="bullet">
+/// <item>Integrity: <c>evidence_pack_id</c> is recomputed as SHA-256 over BuildMind canonical JSON v1 (BM-JCS-1) of
+/// the received pack without that field; any mismatch means tampering or a serialization disagreement.</item>
+/// <item>Binding: exactly the requested revisions, jurisdiction, building use and kinds (same order).</item>
+/// <item>States: VERIFIED needs a human-reviewed value and no overlapping reviewed disagreement; CONFLICTING needs a
+/// real overlapping disagreement; UNVERIFIED has only unreviewed values; MISSING has none; REJECTED never appears.</item>
+/// <item>Values: kind-specific comparator, unit and plausible range; condition fields with their unit and range.</item>
+/// <item>Review identity: pseudonymous reviewer id and review reference on every reviewed value, review date not
+/// in the future; synthetic identities only in synthetic packs and never in real ones. Reviewer AUTHORIZATION
+/// (registry membership, revocation, role, jurisdiction/kind scope, period) is enforced when rag-service loads the
+/// table; the pack carries the authorizing registry's version and digest, which are checked here.</item>
+/// <item>Synthetic packs are rejected unless explicitly allowed (Development/Testing only).</item>
+/// </list>
+/// Any violation is a <c>MalformedResponse</c>, never a partially trusted pack. M6 remains the only owner of
+/// feasibility decisions; this client returns evidence, never pass/fail.
 /// </summary>
 public sealed partial class RagServiceClient : IRegulatoryConstraintSource
 {
     internal const string ConstraintsPath = "internal/v1/regulations/constraints";
     internal const string ConstraintsContractVersion = "constraints-0";
+    internal const string SyntheticReviewerPrefix = "synthetic:";
+    internal const string SyntheticReferencePrefix = "SYN-";
+    internal const string SyntheticTablePrefix = "synthetic-";
 
-    private static readonly Dictionary<RegulatoryConstraintKind, (string Wire, string Comparator, string Unit)> KindRules = new()
+    private static readonly Dictionary<RegulatoryConstraintKind, (string Wire, string Comparator, string Unit, double Min, double Max)> KindRules = new()
     {
-        [RegulatoryConstraintKind.RearSpaceMin] = ("REAR_SPACE_MIN", ">=", "m"),
-        [RegulatoryConstraintKind.SideSpaceMin] = ("SIDE_SPACE_MIN", ">=", "m"),
-        [RegulatoryConstraintKind.FrontSetbackMin] = ("FRONT_SETBACK_MIN", ">=", "m"),
-        [RegulatoryConstraintKind.BuildingHeightMax] = ("BUILDING_HEIGHT_MAX", "<=", "m"),
-        [RegulatoryConstraintKind.PlotCoverageMax] = ("PLOT_COVERAGE_MAX", "<=", "percent"),
-        [RegulatoryConstraintKind.FloorAreaRatioMax] = ("FLOOR_AREA_RATIO_MAX", "<=", "ratio"),
-        [RegulatoryConstraintKind.ParkingSpacesMin] = ("PARKING_SPACES_MIN", ">=", "count"),
+        [RegulatoryConstraintKind.RearSpaceMin] = ("REAR_SPACE_MIN", ">=", "m", 0, 100),
+        [RegulatoryConstraintKind.SideSpaceMin] = ("SIDE_SPACE_MIN", ">=", "m", 0, 100),
+        [RegulatoryConstraintKind.FrontSetbackMin] = ("FRONT_SETBACK_MIN", ">=", "m", 0, 100),
+        [RegulatoryConstraintKind.BuildingHeightMax] = ("BUILDING_HEIGHT_MAX", "<=", "m", 0, 1000),
+        [RegulatoryConstraintKind.PlotCoverageMax] = ("PLOT_COVERAGE_MAX", "<=", "percent", 0, 100),
+        [RegulatoryConstraintKind.FloorAreaRatioMax] = ("FLOOR_AREA_RATIO_MAX", "<=", "ratio", 0, 100),
+        [RegulatoryConstraintKind.ParkingSpacesMin] = ("PARKING_SPACES_MIN", ">=", "count", 0, 1000),
+    };
+
+    private static readonly Dictionary<string, (string Unit, double Min, double Max)> ConditionRules = new(StringComparer.Ordinal)
+    {
+        ["building_height_m"] = ("m", 0, 1000),
+        ["plot_area_m2"] = ("m2", 0, 1_000_000),
+        ["floors"] = ("count", 0, 200),
+        ["road_width_m"] = ("m", 0, 200),
     };
 
     private static readonly Dictionary<string, ConstraintKindStatus> KindStatuses = new(StringComparer.Ordinal)
@@ -34,7 +59,6 @@ public sealed partial class RagServiceClient : IRegulatoryConstraintSource
         ["MISSING"] = ConstraintKindStatus.Missing,
     };
 
-    private static readonly HashSet<string> ConditionFields = ["building_height_m", "plot_area_m2", "floors", "road_width_m"];
     private static readonly HashSet<string> ConditionComparators = ["<", "<=", ">", ">=", "=="];
 
     public async Task<RegulatoryConstraintPack> GetConstraintsAsync(RegulatoryConstraintQuery query, CancellationToken cancellationToken)
@@ -48,13 +72,20 @@ public sealed partial class RagServiceClient : IRegulatoryConstraintSource
             query.ResidentialOnly ? "residential" : null,
             WireBinding.From(query.Binding));
 
-        var wire = await PostJsonAsync<WireConstraintsRequest, WireConstraintPack>(
-                ConstraintsPath, request, pack => IsValidPack(pack, request), cancellationToken)
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var wire = await PostJsonVerifiedAsync<WireConstraintsRequest, WireConstraintPack>(
+                ConstraintsPath,
+                request,
+                (pack, raw) => IsValidPack(pack, request, today) && IsAuthentic(pack, raw) && (allowSyntheticConstraints || pack.Synthetic is false),
+                cancellationToken)
             .ConfigureAwait(false);
 
         return new RegulatoryConstraintPack(
             wire.EvidencePackId!,
             wire.TableVersion!,
+            wire.TableSha256!,
+            wire.ReviewerRegistryVersion!,
+            wire.ReviewerRegistrySha256!,
             wire.Synthetic!.Value,
             wire.Jurisdiction!,
             query.Binding,
@@ -64,7 +95,7 @@ public sealed partial class RagServiceClient : IRegulatoryConstraintSource
                 [.. k.Constraints!.Select(c => c!).Select(c => new RegulatoryConstraint(
                     c.ConstraintId!, c.Comparator!, c.Value!.Value, c.Unit!, c.AppliesTo!,
                     [.. c.Conditions!.Select(x => x!).Select(x => new ConstraintCondition(x.Field!, x.Comparator!, x.Value!.Value, x.Unit!))],
-                    c.ReviewStatus!, c.ReviewerRole, c.ReviewedAt,
+                    c.ReviewStatus!, c.ReviewerRole, c.ReviewerId, c.ReviewReference, c.ReviewedAt,
                     new ConstraintSource(c.Source!.DocumentId!, c.Source.Page, c.Source.StartChar, c.Source.EndChar, c.Source.Excerpt!)))]))],
             wire.OverallStatus == "COMPLETE",
             [.. wire.Warnings!.Select(w => w!)]); // every element proven non-null by IsValidPack
@@ -90,11 +121,23 @@ public sealed partial class RagServiceClient : IRegulatoryConstraintSource
         }
     }
 
-    internal static bool IsValidPack(WireConstraintPack p, WireConstraintsRequest request)
+    /// <summary>Independent integrity check: the digest is recomputed from the received bytes, never trusted.</summary>
+    internal static bool IsAuthentic(WireConstraintPack pack, JsonElement raw) =>
+        pack.DigestAlgorithm == CanonicalJson.Algorithm
+        && CanonicalJson.TrySha256(raw, excludeRootMember: "evidence_pack_id") is { } recomputed
+        && string.Equals(recomputed, pack.EvidencePackId, StringComparison.Ordinal);
+
+    internal static bool IsValidPack(WireConstraintPack p, WireConstraintsRequest request, DateOnly today)
     {
-        if (p.ContractVersion != ConstraintsContractVersion || p.LegalStatusVerified is not false || p.Synthetic is null
+        if (p.ContractVersion != ConstraintsContractVersion || p.LegalStatusVerified is not false || p.Synthetic is not { } synthetic
             || p.EvidencePackId is null || !DocumentIdPattern().IsMatch(p.EvidencePackId)
-            || string.IsNullOrEmpty(p.TableVersion) || p.Jurisdiction != request.Jurisdiction
+            || p.TableSha256 is null || !DocumentIdPattern().IsMatch(p.TableSha256)
+            || p.TableVersion is null || !TableVersionPattern().IsMatch(p.TableVersion)
+            || p.TableVersion.StartsWith(SyntheticTablePrefix, StringComparison.Ordinal) != synthetic
+            || p.ReviewerRegistrySha256 is null || !DocumentIdPattern().IsMatch(p.ReviewerRegistrySha256)
+            || p.ReviewerRegistryVersion is null || !TableVersionPattern().IsMatch(p.ReviewerRegistryVersion)
+            || p.ReviewerRegistryVersion.StartsWith(SyntheticTablePrefix, StringComparison.Ordinal) != synthetic
+            || p.Jurisdiction != request.Jurisdiction
             || p.BuildingUse != request.BuildingUse || p.Binding != request.Binding
             || p.Warnings is null || p.Warnings.Any(w => w is null)
             || p.Kinds is null || !p.Kinds.Select(k => k?.Kind).SequenceEqual(request.Kinds)
@@ -111,17 +154,19 @@ public sealed partial class RagServiceClient : IRegulatoryConstraintSource
             }
 
             var rule = KindRules.Single(r => r.Value.Wire == k.Kind).Value;
-            if (!k.Constraints.All(c => IsValidConstraint(c, rule.Comparator, rule.Unit)))
+            if (!k.Constraints.All(c => IsValidConstraint(c, rule, synthetic, today))
+                || k.Constraints.Select(c => c!.ConstraintId).Distinct(StringComparer.Ordinal).Count() != k.Constraints.Count)
             {
                 return false;
             }
 
-            var reviewed = k.Constraints.Count(c => c!.ReviewStatus == "HUMAN_REVIEWED");
+            var reviewed = k.Constraints.Where(c => c!.ReviewStatus == "HUMAN_REVIEWED").Select(c => c!).ToList();
+            var conflict = HasOverlappingDisagreement(reviewed);
             var consistent = status switch
             {
-                ConstraintKindStatus.Verified => reviewed >= 1,
-                ConstraintKindStatus.Conflicting => reviewed >= 2,
-                ConstraintKindStatus.Unverified => reviewed == 0 && k.Constraints.Count >= 1,
+                ConstraintKindStatus.Verified => reviewed.Count >= 1 && !conflict,
+                ConstraintKindStatus.Conflicting => conflict,
+                ConstraintKindStatus.Unverified => reviewed.Count == 0 && k.Constraints.Count >= 1,
                 ConstraintKindStatus.Missing => k.Constraints.Count == 0,
                 _ => false,
             };
@@ -135,18 +180,118 @@ public sealed partial class RagServiceClient : IRegulatoryConstraintSource
         return (p.OverallStatus == "COMPLETE") == complete;
     }
 
-    private static bool IsValidConstraint(WireConstraint? c, string comparator, string unit) =>
+    private static bool IsValidConstraint(WireConstraint? c, (string Wire, string Comparator, string Unit, double Min, double Max) rule, bool synthetic, DateOnly today) =>
         c is not null
-        && !string.IsNullOrEmpty(c.ConstraintId)
-        && c.Comparator == comparator && c.Unit == unit
-        && c.Value is { } value && double.IsFinite(value)
+        && c.ConstraintId is not null && ConstraintIdPattern().IsMatch(c.ConstraintId)
+        && c.Kind == rule.Wire
+        && c.Comparator == rule.Comparator && c.Unit == rule.Unit
+        && c.Value is { } value && double.IsFinite(value) && value >= rule.Min && value <= rule.Max
         && c.AppliesTo is "residential" or "any"
-        && c.ReviewStatus is "HUMAN_REVIEWED" or "UNREVIEWED" // REJECTED must never be returned
-        && (c.ReviewStatus != "HUMAN_REVIEWED" || (!string.IsNullOrEmpty(c.ReviewerRole) && c.ReviewedAt is not null))
-        && c.Conditions is not null && c.Conditions.All(x => x is not null && x.Field is not null && ConditionFields.Contains(x.Field)
-            && x.Comparator is not null && ConditionComparators.Contains(x.Comparator) && x.Value is { } v && double.IsFinite(v) && !string.IsNullOrEmpty(x.Unit))
+        && c.Conditions is not null && c.Conditions.Count <= 5 && c.Conditions.All(IsValidCondition) && Region(c.Conditions!) is not null
+        && IsValidReview(c, synthetic, today)
         && c.Source is { } s && s.DocumentId is not null && DocumentIdPattern().IsMatch(s.DocumentId)
         && s.Page >= 1 && s.StartChar >= 0 && s.EndChar > s.StartChar && !string.IsNullOrEmpty(s.Excerpt);
+
+    private static bool IsValidCondition(WireCondition? x) =>
+        x is { Field: { } field, Comparator: { } comparator, Value: { } v, Unit: { } unit }
+        && ConditionRules.TryGetValue(field, out var rule) && unit == rule.Unit
+        && ConditionComparators.Contains(comparator) && double.IsFinite(v) && v >= rule.Min && v <= rule.Max;
+
+    private static bool IsValidReview(WireConstraint c, bool synthetic, DateOnly today)
+    {
+        if (c.ReviewStatus == "UNREVIEWED")
+        {
+            return c.ReviewerRole is null && c.ReviewerId is null && c.ReviewReference is null && c.ReviewedAt is null;
+        }
+
+        if (c.ReviewStatus != "HUMAN_REVIEWED" // REJECTED must never be returned; nothing else exists
+            || string.IsNullOrWhiteSpace(c.ReviewerRole) || c.ReviewedAt is not { } reviewedAt || reviewedAt > today
+            || c.ReviewerId is null || !ReviewerIdPattern().IsMatch(c.ReviewerId)
+            || c.ReviewReference is null || !ReviewReferencePattern().IsMatch(c.ReviewReference))
+        {
+            return false;
+        }
+
+        var syntheticIdentity = c.ReviewerId.StartsWith(SyntheticReviewerPrefix, StringComparison.Ordinal);
+        var syntheticReference = c.ReviewReference.StartsWith(SyntheticReferencePrefix, StringComparison.Ordinal);
+        return synthetic ? syntheticIdentity && syntheticReference : !syntheticIdentity && !syntheticReference;
+    }
+
+    // ---- applicability (shared semantics with rag-service/app/constraints.py; no precedence is ever assumed) -------
+
+    private readonly record struct Interval(double Low, bool LowInclusive, double High, bool HighInclusive);
+
+    private static readonly Interval Unbounded = new(double.NegativeInfinity, false, double.PositiveInfinity, false);
+
+    private static Interval ToInterval(WireCondition c) => c.Comparator switch
+    {
+        ">=" => new(c.Value!.Value, true, double.PositiveInfinity, false),
+        ">" => new(c.Value!.Value, false, double.PositiveInfinity, false),
+        "<=" => new(double.NegativeInfinity, false, c.Value!.Value, true),
+        "<" => new(double.NegativeInfinity, false, c.Value!.Value, false),
+        _ => new(c.Value!.Value, true, c.Value!.Value, true),
+    };
+
+    private static Interval? Intersect(Interval a, Interval b)
+    {
+        var (low, lowIn) = a.Low > b.Low ? (a.Low, a.LowInclusive) : b.Low > a.Low ? (b.Low, b.LowInclusive) : (a.Low, a.LowInclusive && b.LowInclusive);
+        var (high, highIn) = a.High < b.High ? (a.High, a.HighInclusive) : b.High < a.High ? (b.High, b.HighInclusive) : (a.High, a.HighInclusive && b.HighInclusive);
+        return low > high || (low == high && !(lowIn && highIn)) ? null : new Interval(low, lowIn, high, highIn);
+    }
+
+    private static Dictionary<string, Interval>? Region(IEnumerable<WireCondition?> conditions)
+    {
+        var region = new Dictionary<string, Interval>(StringComparer.Ordinal);
+        foreach (var c in conditions)
+        {
+            var merged = Intersect(region.GetValueOrDefault(c!.Field!, Unbounded), ToInterval(c));
+            if (merged is null)
+            {
+                return null;
+            }
+
+            region[c.Field!] = merged.Value;
+        }
+
+        return region;
+    }
+
+    private static bool Overlap(WireConstraint a, WireConstraint b)
+    {
+        var ra = Region(a.Conditions!)!;
+        var rb = Region(b.Conditions!)!;
+        return ra.Keys.Union(rb.Keys).All(f => Intersect(ra.GetValueOrDefault(f, Unbounded), rb.GetValueOrDefault(f, Unbounded)) is not null);
+    }
+
+    private static bool HasOverlappingDisagreement(List<WireConstraint> reviewed)
+    {
+        for (var i = 0; i < reviewed.Count; i++)
+        {
+            for (var j = i + 1; j < reviewed.Count; j++)
+            {
+                var (a, b) = (reviewed[i], reviewed[j]);
+                var differ = a.Comparator != b.Comparator || a.Value != b.Value || a.Unit != b.Unit;
+                if (differ && Overlap(a, b))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    [GeneratedRegex("^[a-z0-9][a-z0-9._-]{2,63}$", RegexOptions.CultureInvariant)]
+    private static partial Regex ConstraintIdPattern();
+
+    [GeneratedRegex("^[a-z0-9][a-z0-9._-]{0,63}$", RegexOptions.CultureInvariant)]
+    private static partial Regex TableVersionPattern();
+
+    [GeneratedRegex("^(synthetic:)?[a-z0-9][a-z0-9._-]{2,63}$", RegexOptions.CultureInvariant)]
+    private static partial Regex ReviewerIdPattern();
+
+    [GeneratedRegex("^[A-Z][A-Z0-9]{1,9}-[0-9]{4}-[0-9]{3,6}$", RegexOptions.CultureInvariant)]
+    private static partial Regex ReviewReferencePattern();
 
     internal sealed record WireConstraintsRequest(
         [property: JsonPropertyName("jurisdiction")] string Jurisdiction,
@@ -165,7 +310,11 @@ public sealed partial class RagServiceClient : IRegulatoryConstraintSource
 
     internal sealed record WireConstraintPack(
         [property: JsonPropertyName("contract_version")] string? ContractVersion,
+        [property: JsonPropertyName("digest_algorithm")] string? DigestAlgorithm,
         [property: JsonPropertyName("table_version")] string? TableVersion,
+        [property: JsonPropertyName("table_sha256")] string? TableSha256,
+        [property: JsonPropertyName("reviewer_registry_version")] string? ReviewerRegistryVersion,
+        [property: JsonPropertyName("reviewer_registry_sha256")] string? ReviewerRegistrySha256,
         [property: JsonPropertyName("synthetic")] bool? Synthetic,
         [property: JsonPropertyName("jurisdiction")] string? Jurisdiction,
         [property: JsonPropertyName("building_use")] string? BuildingUse,
@@ -191,6 +340,8 @@ public sealed partial class RagServiceClient : IRegulatoryConstraintSource
         [property: JsonPropertyName("conditions")] List<WireCondition?>? Conditions,
         [property: JsonPropertyName("review_status")] string? ReviewStatus,
         [property: JsonPropertyName("reviewer_role")] string? ReviewerRole,
+        [property: JsonPropertyName("reviewer_id")] string? ReviewerId,
+        [property: JsonPropertyName("review_reference")] string? ReviewReference,
         [property: JsonPropertyName("reviewed_at")] DateOnly? ReviewedAt,
         [property: JsonPropertyName("source")] WireSource? Source);
 

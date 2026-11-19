@@ -25,6 +25,7 @@ from .strict_json import MAX_BODY_BYTES, RequestRejected, read_json_object
 
 SERVICE_NAME = "buildmind-rag"
 CONSTRAINTS_VARIABLE = "BUILDMIND_RAG_CONSTRAINTS"
+REVIEWERS_VARIABLE = "BUILDMIND_RAG_REVIEWERS"
 logger = logging.getLogger(SERVICE_NAME)
 
 
@@ -136,7 +137,20 @@ def _load_constraints(engine: RetrievalEngine | None) -> ConstraintProvider | No
     if engine is None:
         # Provenance cannot be verified without the hash-verified corpus: never serve unverifiable constraints.
         raise RuntimeError("A constraint table requires the regulation corpus for provenance verification")
-    return ConstraintProvider(json.loads(Path(path).read_text(encoding="utf-8")), engine.page_text)
+    reviewers = os.environ.get(REVIEWERS_VARIABLE, "").strip()
+    if not reviewers:
+        # Reviewer authorization cannot be verified without the registry: never serve unauthorizable constraints.
+        raise RuntimeError("A constraint table requires the reviewer registry (BUILDMIND_RAG_REVIEWERS)")
+    # Synthetic tables only with an explicit isolated-testing opt-in; real tables require version and digest pins.
+    return ConstraintProvider(
+        json.loads(Path(path).read_text(encoding="utf-8")),
+        engine.page_text,
+        json.loads(Path(reviewers).read_text(encoding="utf-8")),
+        expected_reviewers_sha256=os.environ.get("BUILDMIND_RAG_REVIEWERS_SHA256", "").strip() or None,
+        allow_synthetic=os.environ.get("BUILDMIND_RAG_ALLOW_SYNTHETIC_CONSTRAINTS", "").strip() == "1",
+        expected_version=os.environ.get("BUILDMIND_RAG_CONSTRAINTS_VERSION", "").strip() or None,
+        expected_sha256=os.environ.get("BUILDMIND_RAG_CONSTRAINTS_SHA256", "").strip() or None,
+    )
 
 
 _engine = _load_engine()

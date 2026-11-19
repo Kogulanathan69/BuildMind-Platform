@@ -40,6 +40,8 @@ $env:BUILDMIND_RAG_INDEX       = '<...>\output\regulation_retrieval_step4\multi_
 $env:BUILDMIND_RAG_INTERNAL_TOKENS = '<32+ random printable chars>'   # G11 MVP; up to 2 comma-separated for rotation
 # development-only opt-out (never elsewhere): $env:BUILDMIND_RAG_AUTH = 'disabled'
 # optional, human-reviewed constraint table (no real table exists yet): $env:BUILDMIND_RAG_CONSTRAINTS = '<path to table json>'
+# required with a table: $env:BUILDMIND_RAG_REVIEWERS = '<path to sealed reviewer registry json>'
+# synthetic fixtures only, isolated dev/testing: $env:BUILDMIND_RAG_ALLOW_SYNTHETIC_CONSTRAINTS = '1'
 python -B -m uvicorn app.main:app --host 127.0.0.1 --port 8100
 # check: GET http://127.0.0.1:8100/health -> {"service":"buildmind-rag","status":"ok","contract_version":"1","corpus_loaded":true}
 ```

@@ -260,3 +260,7 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 ## 2026-11-19 — PR #41 CI corrections
 - Trace-id false positive replaced by a structured leakage check; acceptance service moved to 8094 with port guards and a workflow port test; C10 workload bounds in rag-service.
 - Next: CI on the new head; then M6 approvals (§11), G06, G11, G19, R-1/R-3.
+
+## 2026-11-19 — Shapely pin and mandatory-test guard
+- `chore/m4-m6-shapely-geometry-ci`: `shapely==2.1.2` (approved) and a CI guard against skipped mandatory tests; locally 717/0/0 with 89/89 D02.
+- Next: CI counts for this branch and for `feature/m7-final-acceptance` (AC05/AC06), read from the JUnit artifacts or job logs.

@@ -38,8 +38,16 @@ public sealed class InternalServiceOptions
 
     /// <summary>
     /// Outside Development a token-bearing service must use https or a loopback address, so the shared secret never
-    /// crosses a network in cleartext. Setting this to true is an explicit, reviewable exception for a private network
-    /// until the hosting/TLS decision (G11) is made. Default false.
+    /// crosses a network in cleartext. Setting this to true is an explicit, reviewable exception for a private
+    /// network in non-production environments (for example Staging) until the hosting/TLS decision (G11) is made.
+    /// It is REFUSED in Production, where every enabled service must use https or loopback. Default false.
     /// </summary>
     public bool AllowPlaintextPrivateNetwork { get; set; }
+
+    /// <summary>
+    /// RAG only: accept constraint evidence packs built from SYNTHETIC test tables. Allowed only in the Development
+    /// and Testing environments (start-up validation refuses it elsewhere). Default false: synthetic packs are
+    /// rejected as malformed, so test values can never be consumed as regulations.
+    /// </summary>
+    public bool AllowSyntheticConstraints { get; set; }
 }

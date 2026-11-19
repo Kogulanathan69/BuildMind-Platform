@@ -71,3 +71,10 @@ C# configuration: `Services__Rag__Enabled=true`, `Services__Rag__BaseUrl=http://
 - **Endpoint:** `POST /internal/v1/regulations/constraints` returns a human-reviewed constraint evidence pack bound to exact project, land and requirement revisions. See doc 29 §9.
 - **Table:** `BUILDMIND_RAG_CONSTRAINTS` points to a versioned table JSON. Every citation must reconstruct from the loaded corpus, or the service refuses to start. **No real regulatory values are in this repository**; tests use `tests/fixtures/synthetic_constraints.v0.json`.
 - **Strict request parsing:** every POST is validated as raw JSON first (16 KB streamed limit, `application/json`, no duplicate keys, no NaN, depth ≤ 32).
+
+## Constraint integrity (2026-11-19; pending M6 + lead review)
+- **Canonical digest:** BM-JCS-1 (`app/canonical_json.py`); shared vectors in `contract/canonical_json_vectors.v1.json`.
+- **Reviewer authorization:** `BUILDMIND_RAG_REVIEWERS` points to a sealed reviewer registry, which is required whenever a table is configured. Each sign-off must come from a registered, active reviewer with the matching role, scoped to the jurisdiction and kind, within the authorization period.
+- **Pins for real tables:** `BUILDMIND_RAG_CONSTRAINTS_VERSION`, `BUILDMIND_RAG_CONSTRAINTS_SHA256` and `BUILDMIND_RAG_REVIEWERS_SHA256`.
+- **Synthetic tables:** only with `BUILDMIND_RAG_ALLOW_SYNTHETIC_CONSTRAINTS=1` (isolated development and testing).
+- **Fixtures:** `python tools/build_contract_fixtures.py [--check]` regenerates or verifies every synthetic fixture, including the shared M6 setback scenarios.

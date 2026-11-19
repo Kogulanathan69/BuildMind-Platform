@@ -147,6 +147,12 @@ public class InternalServiceClient
 
         using var request = new HttpRequestMessage(method, target) { Content = content };
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        if (!string.IsNullOrEmpty(options.AuthToken))
+        {
+            // G11 MVP: only ever sent to the validated base URL (Resolve), never logged (framework loggers removed).
+            request.Headers.TryAddWithoutValidation(InternalServiceOptions.AuthHeaderName, options.AuthToken);
+        }
+
         PropagateTraceContext(request);
 
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

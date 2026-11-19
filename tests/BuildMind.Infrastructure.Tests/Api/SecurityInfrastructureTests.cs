@@ -101,6 +101,7 @@ public sealed class SecurityInfrastructureTests
                 ["Services:Python:BaseUrl"] = "http://python-services.internal:8000",
                 ["Services:Rag:Enabled"] = "true",
                 ["Services:Rag:BaseUrl"] = "http://rag.internal:8001",
+                ["Services:Rag:AuthToken"] = "synthetic-internal-token-0123456789abcdef",
             });
         await using var host = factory.WithPythonTransport(StubHttpHandler.Throws(new HttpRequestException("synthetic connection refused")))
             .WithRagTransport(StubHttpHandler.Throws(new HttpRequestException("synthetic connection refused")));

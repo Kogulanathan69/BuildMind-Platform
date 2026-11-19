@@ -78,3 +78,15 @@
 - [ ] M7 agrees the review workflow and provenance.
 - [ ] Lead approves the contract version, and where the reviewed table lives.
 - [ ] Domain reviewer assigned (G06).
+
+## 8. Coordination message (ready to send to M6; lead to send)
+> **To M6, from M7 (cc lead).** The M7 regulation retrieval service is ready for review (PR #32). It returns cited passages and an evidence status only, never pass/fail.
+>
+> For your feasibility and validation work we propose a separate, reviewed **constraint** contract (doc 29): only human-reviewed constraints can block, a missing constraint means `NEEDS_REVIEW`, and your deterministic validator stays authoritative.
+>
+> Please reply with:
+> 1. the constraint kinds your validator can check first;
+> 2. where conditions such as height and plot size come from;
+> 3. your preferred delivery path (constraints passed to your validator as input through C#).
+>
+> Nothing will be implemented until M6, M7 and the lead approve.

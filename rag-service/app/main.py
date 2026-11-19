@@ -1,7 +1,8 @@
 """BuildMind private regulation retrieval service (BE-M7, contract v1).
 
-Internal only: bind to loopback or a private network (G11 transport/auth still open). Interactive docs and the
-OpenAPI document are disabled. Errors never include exception text, file paths or request input.
+Internal only: bind to loopback or a private network. All /internal/* endpoints require the internal shared-secret
+token (G11 MVP, see app/auth.py; fail closed). Interactive docs and the OpenAPI document are disabled. Errors never
+include exception text, file paths, tokens or request input.
 """
 import logging
 from typing import Any
@@ -10,6 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from .auth import AUTH_HEADER, REQUIRED_WITHOUT_TOKENS, InternalAuth
 from .contracts import CONTRACT_VERSION, SearchRequest, SearchResponse, SourcesResponse
 from .engine import EngineSettings, RetrievalEngine, Step6Engine
 from .mapping import to_search_response, to_sources
@@ -26,11 +28,19 @@ def _problem(status: int, code: str, errors: list[dict[str, Any]] | None = None)
     return JSONResponse(status_code=status, content=body)
 
 
-def create_app(engine: RetrievalEngine | None) -> FastAPI:
+def create_app(engine: RetrievalEngine | None, auth: InternalAuth = REQUIRED_WITHOUT_TOKENS) -> FastAPI:
     app = FastAPI(title="BuildMind regulation retrieval", docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.middleware("http")
-    async def limit_body(request: Request, call_next):
+    async def guard(request: Request, call_next):
+        # Default-deny: everything except the identity/liveness probe requires the internal token. Authentication
+        # runs first, so unauthenticated callers learn nothing about routes, validation or payload rules.
+        if request.url.path != "/health":
+            failure = auth.check(request.headers.get(AUTH_HEADER))
+            if failure == "AUTH_NOT_CONFIGURED":
+                return _problem(503, failure)
+            if failure is not None:
+                return _problem(401, failure)
         length = request.headers.get("content-length")
         if length is not None and (not length.isdigit() or int(length) > MAX_BODY_BYTES):
             return _problem(413, "PAYLOAD_TOO_LARGE")
@@ -84,4 +94,4 @@ def _load_engine() -> RetrievalEngine | None:
     return Step6Engine(settings)  # fails fast on any identity/hash mismatch
 
 
-app = create_app(_load_engine())
+app = create_app(_load_engine(), InternalAuth.from_environment())

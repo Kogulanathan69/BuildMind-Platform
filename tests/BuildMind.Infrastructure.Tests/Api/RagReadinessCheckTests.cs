@@ -113,7 +113,7 @@ public sealed class RagReadinessCheckTests
     {
         await using var factory = new BuildMindApiFactory(
             "Production",
-            new Dictionary<string, string?> { ["Services:Rag:Enabled"] = "true", ["Services:Rag:BaseUrl"] = "http://rag.internal:8100" });
+            new Dictionary<string, string?> { ["Services:Rag:Enabled"] = "true", ["Services:Rag:BaseUrl"] = "http://rag.internal:8100", ["Services:Rag:AuthToken"] = "synthetic-internal-token-0123456789abcdef" });
         await using var host = factory.WithRagTransport(StubHttpHandler.Json(Healthy));
         using var client = host.CreateClient();
 
@@ -129,7 +129,7 @@ public sealed class RagReadinessCheckTests
     {
         await using var factory = new BuildMindApiFactory(
             "Production",
-            new Dictionary<string, string?> { ["Services:Rag:Enabled"] = "true", ["Services:Rag:BaseUrl"] = "http://rag.internal:8100" });
+            new Dictionary<string, string?> { ["Services:Rag:Enabled"] = "true", ["Services:Rag:BaseUrl"] = "http://rag.internal:8100", ["Services:Rag:AuthToken"] = "synthetic-internal-token-0123456789abcdef" });
         await using var host = factory.WithRagTransport(
             StubHttpHandler.Json(Healthy.Replace("\"corpus_loaded\":true", "\"corpus_loaded\":false", StringComparison.Ordinal)));
         using var client = host.CreateClient();

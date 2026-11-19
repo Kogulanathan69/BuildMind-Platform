@@ -209,3 +209,12 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
   - lead downloads the run #64 artifacts (count verification);
   - independent review of PR #32;
   - M6 coordination on doc 29.
+
+## 2026-11-19 — Fast-track phase 04
+- G11 MVP token auth (rag-service + C# client) implemented and verified locally (doc 31).
+- Acceptance matrix: doc 32.
+- M6 coordination message: doc 29 §8 (lead to send).
+- **Next:**
+  - CI on PR #32 for the new C# auth tests;
+  - lead artifact download for count verification;
+  - python-services auth after M6 agreement.

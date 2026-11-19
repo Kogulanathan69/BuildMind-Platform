@@ -1,8 +1,9 @@
 """Request validation, failure translation and exposure rules (no corpus needed)."""
 import pytest
-from fastapi.testclient import TestClient
 
-from app.main import MAX_BODY_BYTES, SERVICE_NAME, create_app
+from support import authed_client
+
+from app.main import MAX_BODY_BYTES, SERVICE_NAME
 
 SEARCH = "/internal/v1/regulations/search"
 SECRET = "SYNTHETIC-SECRET-rag-7f3a"
@@ -33,14 +34,14 @@ class RecordingEngine:
 
 
 def test_health_reports_identity_and_corpus_state():
-    body = TestClient(create_app(None)).get("/health").json()
+    body = authed_client(None).get("/health").json()
 
     assert body == {"service": SERVICE_NAME, "status": "ok", "contract_version": "1", "corpus_loaded": False}
 
 
 @pytest.mark.parametrize("path,method", [(SEARCH, "post"), ("/internal/v1/regulations/sources", "get")])
 def test_without_a_corpus_the_service_is_truthfully_unavailable(path, method):
-    client = TestClient(create_app(None))
+    client = authed_client(None)
     response = client.post(path, json={"query": "rear space"}) if method == "post" else client.get(path)
 
     assert response.status_code == 503
@@ -62,7 +63,7 @@ def test_without_a_corpus_the_service_is_truthfully_unavailable(path, method):
     {"query": "rear space", "document_ids": ["a" * 64, "b" * 64, "c" * 64, "d" * 64]},
 ])
 def test_invalid_requests_are_422_without_echoing_input(body):
-    response = TestClient(create_app(RecordingEngine())).post(SEARCH, json=body)
+    response = authed_client(RecordingEngine()).post(SEARCH, json=body)
 
     assert response.status_code == 422
     data = response.json()
@@ -71,7 +72,7 @@ def test_invalid_requests_are_422_without_echoing_input(body):
 
 
 def test_oversized_body_is_rejected_before_parsing():
-    response = TestClient(create_app(RecordingEngine())).post(
+    response = authed_client(RecordingEngine()).post(
         SEARCH, content=b"{" + b" " * MAX_BODY_BYTES + b"}", headers={"content-type": "application/json"})
 
     assert response.status_code == 413
@@ -79,7 +80,7 @@ def test_oversized_body_is_rejected_before_parsing():
 
 
 def test_engine_validation_error_is_422_without_detail():
-    client = TestClient(create_app(RaisingEngine(ValueError(SECRET))), raise_server_exceptions=False)
+    client = authed_client(RaisingEngine(ValueError(SECRET)), raise_server_exceptions=False)
 
     response = client.post(SEARCH, json={"query": "rear space"})
 
@@ -87,7 +88,7 @@ def test_engine_validation_error_is_422_without_detail():
 
 
 def test_unexpected_engine_failure_is_a_generic_500(caplog):
-    client = TestClient(create_app(RaisingEngine(RuntimeError(SECRET))), raise_server_exceptions=False)
+    client = authed_client(RaisingEngine(RuntimeError(SECRET)), raise_server_exceptions=False)
 
     response = client.post(SEARCH, json={"query": "rear space"})
 
@@ -98,7 +99,7 @@ def test_unexpected_engine_failure_is_a_generic_500(caplog):
 
 def test_filters_are_passed_exactly_as_requested():
     engine = RecordingEngine()
-    client = TestClient(create_app(engine))
+    client = authed_client(engine)
 
     client.post(SEARCH, json={"query": "rear space", "jurisdiction": "North", "k": 3})
     client.post(SEARCH, json={"query": "rear space", "document_ids": ["a" * 64]})
@@ -111,4 +112,4 @@ def test_filters_are_passed_exactly_as_requested():
 
 @pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
 def test_interactive_docs_and_schema_are_not_exposed(path):
-    assert TestClient(create_app(None)).get(path).status_code == 404
+    assert authed_client(None).get(path).status_code == 404

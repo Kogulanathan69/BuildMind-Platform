@@ -1,6 +1,8 @@
 # RAG service (M7): private regulation evidence retrieval
 
-**MVP status (2026-11-19, `feature/m7-rag-retrieval-service`): implemented for development and CI.** Not production-approved. G11 internal transport and authentication are still open, so the service must stay on loopback or a private network.
+**MVP status (2026-11-19, `feature/m7-rag-retrieval-service`): implemented for development and CI.** Not production-approved.
+
+**Internal authentication (G11 MVP):** every endpoint except `/health` requires `X-BuildMind-Internal-Token`, configured with `BUILDMIND_RAG_INTERNAL_TOKENS` (1–2 values of 32+ characters; fail closed). The development-only opt-out is `BUILDMIND_RAG_AUTH=disabled`. See `docs/second-brain/14-Current-Backend/31-INTERNAL-SERVICE-AUTH.md`. Transport and hosting are still open, so keep the service on loopback or a private network.
 
 ## What it does
 - **Endpoint:** `POST /internal/v1/regulations/search`, evidence contract **v1** (lead-approved 2026-11-19).

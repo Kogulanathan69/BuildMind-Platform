@@ -6,10 +6,9 @@ Run explicitly, read-only, against the approved STEP 4 corpus:
 The tests FAIL (never skip) if the variables are missing.
 """
 import pytest
-from fastapi.testclient import TestClient
 
 from app.engine import EngineSettings, Step6Engine
-from app.main import create_app
+from support import authed_client
 
 COLOMBO = "Colombo Municipal Council planning area"
 MAHARAGAMA = "Maharagama Urban Council planning area"
@@ -25,7 +24,7 @@ def engine():
 
 @pytest.fixture(scope="module")
 def client(engine):
-    return TestClient(create_app(engine))
+    return authed_client(engine)
 
 
 def _records(engine):

@@ -37,6 +37,8 @@ python -m pip install -r requirements-dev.txt     # or reuse a venv with the sam
 $env:BUILDMIND_RAG_CORPUS_ROOT = '<corpus root containing input_pdfs\ and output\documents\>'
 $env:BUILDMIND_RAG_MANIFEST    = '<...>\output\regulation_retrieval_step4\approved_corpus_manifest.json'
 $env:BUILDMIND_RAG_INDEX       = '<...>\output\regulation_retrieval_step4\multi_document_index.json'
+$env:BUILDMIND_RAG_INTERNAL_TOKENS = '<32+ random printable chars>'   # G11 MVP; up to 2 comma-separated for rotation
+# development-only opt-out (never elsewhere): $env:BUILDMIND_RAG_AUTH = 'disabled'
 python -B -m uvicorn app.main:app --host 127.0.0.1 --port 8100
 # check: GET http://127.0.0.1:8100/health -> {"service":"buildmind-rag","status":"ok","contract_version":"1","corpus_loaded":true}
 ```
@@ -62,6 +64,7 @@ $env:ASPNETCORE_ENVIRONMENT = 'Development'
 $env:ASPNETCORE_URLS = 'http://127.0.0.1:8080'
 $env:Services__Python__Enabled = 'true'; $env:Services__Python__BaseUrl = 'http://127.0.0.1:8000/'
 $env:Services__Rag__Enabled = 'true';    $env:Services__Rag__BaseUrl    = 'http://127.0.0.1:8100/'
+$env:Services__Rag__AuthToken = '<same value as one BUILDMIND_RAG_INTERNAL_TOKENS entry>'   # required outside Development
 # optional database:
 # $env:Database__Enabled = 'true'; $env:ConnectionStrings__BuildMind = '<from user secrets / environment>'
 dotnet run --project src/BuildMind.API -c Release
@@ -89,4 +92,4 @@ dotnet run --project src/BuildMind.API -c Release
 | python-services | 8000 |
 | rag-service | 8100 |
 
-All bind to **127.0.0.1**. Do not expose the Python or RAG services publicly: they have no authentication yet (G11).
+All bind to **127.0.0.1**. Do not expose the Python or RAG services publicly. rag-service requires the internal token (doc 31); python-services has no authentication yet. G11 transport and hosting remain open.

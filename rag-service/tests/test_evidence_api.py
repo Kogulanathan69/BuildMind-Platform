@@ -1,8 +1,8 @@
 """Contract v1 end-to-end over the real copied retrieval/evidence code with a synthetic corpus."""
 import pytest
-from fastapi.testclient import TestClient
 
-from app.main import create_app
+from support import authed_client
+
 from synthetic_corpus import (
     NORTH, NORTH_JURISDICTION, SOUTH, SOUTH_JURISDICTION, UNKNOWN_DOCUMENT, SyntheticEngine, page_text,
 )
@@ -12,7 +12,7 @@ SEARCH = "/internal/v1/regulations/search"
 
 @pytest.fixture(scope="module")
 def client():
-    return TestClient(create_app(SyntheticEngine()), raise_server_exceptions=False)
+    return authed_client(SyntheticEngine(), raise_server_exceptions=False)
 
 
 def search(client, **body):

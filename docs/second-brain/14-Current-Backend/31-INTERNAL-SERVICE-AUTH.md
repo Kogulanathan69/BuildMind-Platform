@@ -53,3 +53,6 @@
 - **Production:** every enabled internal service (token or not) must use `https` or a loopback address; `AllowPlaintextPrivateNetwork=true` fails start-up. Staging keeps the explicit exception until G11.
 - **Synthetic constraint evidence:** `Services:Rag:AllowSyntheticConstraints` only in Development/Testing (`Testing` environment name); never for Python.
 - **python-services authentication:** coordination item with the python-services maintainer (M6 bootstrap owner). The C# transport rules already cover Python.
+
+## RAG auth opt-out needs two settings (2026-11-19, M6 H4-R1 C09)
+`BUILDMIND_RAG_AUTH=disabled` is honoured **only** together with `BUILDMIND_RAG_ENVIRONMENT=development`; otherwise rag-service refuses to start. Any other mode value still means authentication is required. Validation errors return a fixed body (`{"code":"VALIDATION_FAILED"}`) and never reflect submitted names or values.

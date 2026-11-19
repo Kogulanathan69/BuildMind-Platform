@@ -107,12 +107,16 @@ def height(comparator, value):
 
 
 def pack(tbl, **request):
-    body = {"jurisdiction": NORTH_JURISDICTION, "kinds": SETBACKS, "building_use": "residential", "binding": BINDING} | request
+    body = scenario_request(**request)
     provider = ConstraintProvider(tbl, page_text, reviewers(), allow_synthetic=True)
     return body, provider.lookup(ConstraintsRequest.model_validate(body))
 
 
-def scenarios():
+def scenario_cases():
+    """(name, description, table, request overrides, expected M6 status) for every shared setback scenario.
+
+    Also used by the test-only acceptance service (tests/acceptance_app.py) so live and file fixtures cannot diverge.
+    """
     reviewed_front = constraint("syn.north.front-setback", NORTH_JURISDICTION, "FRONT_SETBACK_MIN", ">=", 2, "m", "residential", FRONT,
                                 ("HUMAN_REVIEWED", NORTH_REVIEWER, "SYN-2026-005"))
     reviewed_side = constraint("syn.north.side-space", NORTH_JURISDICTION, "SIDE_SPACE_MIN", ">=", 1, "m", "any", SIDE,
@@ -138,8 +142,16 @@ def scenarios():
         ("unknown-jurisdiction", "No constraints for the jurisdiction: every setback MISSING.",
          complete, {"jurisdiction": "Synthetic East Council planning area"}, "MISSING"),
     ]
+    return cases
+
+
+def scenario_request(**overrides):
+    return {"jurisdiction": NORTH_JURISDICTION, "kinds": SETBACKS, "building_use": "residential", "binding": BINDING} | overrides
+
+
+def scenarios():
     out = []
-    for name, description, tbl, overrides, m6_status in cases:
+    for name, description, tbl, overrides, m6_status in scenario_cases():
         request, response = pack(tbl, **overrides)
         out.append({
             "name": name,

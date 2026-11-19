@@ -36,11 +36,6 @@ def _problem(status: int, code: str, errors: list[dict[str, Any]] | None = None)
     return JSONResponse(status_code=status, content=body)
 
 
-def _validation_errors(errors) -> list[dict[str, Any]]:
-    # Location and message only: the offending input is never echoed back.
-    return [{"loc": [str(part) for part in error.get("loc", ())], "msg": error.get("msg", "")} for error in errors]
-
-
 def create_app(
     engine: RetrievalEngine | None,
     auth: InternalAuth = REQUIRED_WITHOUT_TOKENS,
@@ -67,11 +62,11 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def validation_failed(_: Request, exc: RequestValidationError) -> JSONResponse:
-        return _problem(422, "VALIDATION_FAILED", _validation_errors(exc.errors()))
+        return _problem(422, "VALIDATION_FAILED")  # fixed body: submitted names/values are never reflected
 
     @app.exception_handler(ValidationError)
     async def model_validation_failed(_: Request, exc: ValidationError) -> JSONResponse:
-        return _problem(422, "VALIDATION_FAILED", _validation_errors(exc.errors()))
+        return _problem(422, "VALIDATION_FAILED")
 
     @app.exception_handler(RequestRejected)
     async def rejected(_: Request, exc: RequestRejected) -> JSONResponse:

@@ -32,7 +32,12 @@ public enum ConstraintKindStatus
 }
 
 /// <summary>The exact revisions an evidence pack is bound to (never inferred by the provider).</summary>
-public sealed record ConstraintBinding(Guid ProjectId, int ProjectRevision, Guid LandRevisionId, Guid RequirementRevisionId);
+/// <param name="ProjectRevision">The project's Int64 revision (<c>Project.Revision</c>), 1 to <see cref="MaxProjectRevision"/>.</param>
+public sealed record ConstraintBinding(Guid ProjectId, long ProjectRevision, Guid LandRevisionId, Guid RequirementRevisionId)
+{
+    /// <summary>Largest revision that canonical JSON (BM-JCS-1) represents exactly in both languages (below 1e15).</summary>
+    public const long MaxProjectRevision = 999_999_999_999_999;
+}
 
 public sealed record RegulatoryConstraintQuery(
     string Jurisdiction,

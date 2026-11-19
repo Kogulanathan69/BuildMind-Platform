@@ -1465,6 +1465,7 @@ CrossMemberContractCompatibilityScenarios.Register(Run);
 ProductionAdapterContractScenarios.Register(Run);
 AuthorizationContractScenarios.Register(Run);
 CommandFingerprintContractScenarios.Register(Run);
+F02SecurityContractScenarios.Register(Run);
 DiagnosticContractScenarios.Register(Run);
 PersistenceContractScenarios.Register(Run);
 AdvancedGeometryContractScenarios.Register(Run);

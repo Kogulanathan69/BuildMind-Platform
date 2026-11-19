@@ -18,11 +18,19 @@ public sealed class ServicesOptions
     /// <param name="requireRagAuthToken">
     /// G11 (MVP): true outside Development, so an enabled RAG service must have an internal auth token (fail closed).
     /// </param>
-    public IReadOnlyList<string> Validate(bool requireRagAuthToken = false)
+    /// <param name="enforceSecureTransport">True outside Development: a token must not travel over plaintext http to a
+    /// non-loopback host unless <see cref="InternalServiceOptions.AllowPlaintextPrivateNetwork"/> is set.</param>
+    public IReadOnlyList<string> Validate(bool requireRagAuthToken = false, bool enforceSecureTransport = false)
     {
         var failures = new List<string>();
         ValidateService(Python, $"{SectionName}:Python", failures);
         ValidateService(Rag, $"{SectionName}:Rag", failures);
+        if (enforceSecureTransport)
+        {
+            ValidateTransport(Python, $"{SectionName}:Python", failures);
+            ValidateTransport(Rag, $"{SectionName}:Rag", failures);
+        }
+
         if (requireRagAuthToken && Rag is { Enabled: true } && string.IsNullOrEmpty(Rag.AuthToken))
         {
             failures.Add($"{SectionName}:Rag:AuthToken is required outside Development when {SectionName}:Rag:Enabled is true.");
@@ -62,6 +70,20 @@ public sealed class ServicesOptions
         {
             failures.Add(
                 $"{key}:TimeoutSeconds must be between {InternalServiceOptions.MinTimeoutSeconds} and {InternalServiceOptions.MaxTimeoutSeconds}.");
+        }
+    }
+
+    private static void ValidateTransport(InternalServiceOptions? service, string key, List<string> failures)
+    {
+        if (service is not { Enabled: true } || string.IsNullOrEmpty(service.AuthToken) || service.AllowPlaintextPrivateNetwork
+            || !Uri.TryCreate(service.BaseUrl?.Trim(), UriKind.Absolute, out var uri))
+        {
+            return;
+        }
+
+        if (uri.Scheme == Uri.UriSchemeHttp && !uri.IsLoopback)
+        {
+            failures.Add($"{key}:BaseUrl must use https (or a loopback address) when {key}:AuthToken is set, unless {key}:AllowPlaintextPrivateNetwork is explicitly true.");
         }
     }
 

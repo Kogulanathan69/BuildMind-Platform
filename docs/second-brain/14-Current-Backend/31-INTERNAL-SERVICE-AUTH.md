@@ -42,3 +42,9 @@
 - **A shared secret is not caller identity.** Anyone holding the token can call; protect it like a password.
 - **python-services is not protected yet.** It needs the M6 custodian's agreement.
 - No replay protection beyond the token itself (a signed short-lived JWT would add it, as a future option).
+
+## Hardening (2026-11-19, M6-review corrections)
+- **Repeated token headers** are rejected (401): proxies and frameworks disagree on which copy wins.
+- **Transport enforcement (outside Development):** a service with `AuthToken` must use `https` or a loopback address. Plaintext to a network host fails start-up unless `Services:<Name>:AllowPlaintextPrivateNetwork=true` is set explicitly, as a reviewable exception until hosting/TLS (G11) is decided.
+- **Strict internal JSON:** responses are validated raw before deserialization (duplicates, comments, trailing commas, depth, object root). Unknown members are rejected; API input rejects duplicate properties (400).
+- **Verified by tests:** rotation (Python), timeout and cancellation (C# constraint client), and safe 503/504 mapping.

@@ -58,3 +58,10 @@ class Step6Engine:
 
     def registry(self):
         return self._registry
+
+    def page_text(self, document_id: str, page: int) -> str | None:
+        """Exact extracted page text from the hash-verified corpus (used to verify constraint provenance)."""
+        record = self._service.assessor.records.get(document_id)
+        if record is None or not 1 <= page <= len(record["pages"]):
+            return None
+        return record["pages"][page - 1]["text"]

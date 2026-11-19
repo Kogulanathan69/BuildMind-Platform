@@ -66,3 +66,8 @@ C# configuration: `Services__Rag__Enabled=true`, `Services__Rag__BaseUrl=http://
 - The corpus has **three** approved documents (UDA Gazette 2235/54, the Colombo and Maharagama development plans). Their legal currency and amendments are unverified.
 - Maharagama naming ambiguity makes its passages `AMBIGUOUS_EVIDENCE` by design.
 - Parcel-level applicability is never decided.
+
+## Regulatory constraints (contract v0, synthetic only; pending M6 + lead approval)
+- **Endpoint:** `POST /internal/v1/regulations/constraints` returns a human-reviewed constraint evidence pack bound to exact project, land and requirement revisions. See doc 29 §9.
+- **Table:** `BUILDMIND_RAG_CONSTRAINTS` points to a versioned table JSON. Every citation must reconstruct from the loaded corpus, or the service refuses to start. **No real regulatory values are in this repository**; tests use `tests/fixtures/synthetic_constraints.v0.json`.
+- **Strict request parsing:** every POST is validated as raw JSON first (16 KB streamed limit, `application/json`, no duplicate keys, no NaN, depth ≤ 32).

@@ -4,20 +4,27 @@ Internal only: bind to loopback or a private network. All /internal/* endpoints 
 token (G11 MVP, see app/auth.py; fail closed). Interactive docs and the OpenAPI document are disabled. Errors never
 include exception text, file paths, tokens or request input.
 """
+import json
 import logging
+import os
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from .auth import AUTH_HEADER, REQUIRED_WITHOUT_TOKENS, InternalAuth
-from .contracts import CONTRACT_VERSION, SearchRequest, SearchResponse, SourcesResponse
+from .constraints import ConstraintProvider, ConstraintsRequest
+from .contracts import CONTRACT_VERSION, SearchRequest, SourcesResponse
 from .engine import EngineSettings, RetrievalEngine, Step6Engine
 from .mapping import to_search_response, to_sources
+from .strict_json import MAX_BODY_BYTES, RequestRejected, read_json_object
 
 SERVICE_NAME = "buildmind-rag"
-MAX_BODY_BYTES = 16 * 1024
+CONSTRAINTS_VARIABLE = "BUILDMIND_RAG_CONSTRAINTS"
 logger = logging.getLogger(SERVICE_NAME)
 
 
@@ -28,7 +35,16 @@ def _problem(status: int, code: str, errors: list[dict[str, Any]] | None = None)
     return JSONResponse(status_code=status, content=body)
 
 
-def create_app(engine: RetrievalEngine | None, auth: InternalAuth = REQUIRED_WITHOUT_TOKENS) -> FastAPI:
+def _validation_errors(errors) -> list[dict[str, Any]]:
+    # Location and message only: the offending input is never echoed back.
+    return [{"loc": [str(part) for part in error.get("loc", ())], "msg": error.get("msg", "")} for error in errors]
+
+
+def create_app(
+    engine: RetrievalEngine | None,
+    auth: InternalAuth = REQUIRED_WITHOUT_TOKENS,
+    constraints: ConstraintProvider | None = None,
+) -> FastAPI:
     app = FastAPI(title="BuildMind regulation retrieval", docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.middleware("http")
@@ -36,7 +52,9 @@ def create_app(engine: RetrievalEngine | None, auth: InternalAuth = REQUIRED_WIT
         # Default-deny: everything except the identity/liveness probe requires the internal token. Authentication
         # runs first, so unauthenticated callers learn nothing about routes, validation or payload rules.
         if request.url.path != "/health":
-            failure = auth.check(request.headers.get(AUTH_HEADER))
+            presented = request.headers.getlist(AUTH_HEADER)
+            # A repeated token header is ambiguous (proxies and frameworks pick different values): always reject.
+            failure = "UNAUTHENTICATED" if len(presented) > 1 else auth.check(presented[0] if presented else None)
             if failure == "AUTH_NOT_CONFIGURED":
                 return _problem(503, failure)
             if failure is not None:
@@ -48,9 +66,15 @@ def create_app(engine: RetrievalEngine | None, auth: InternalAuth = REQUIRED_WIT
 
     @app.exception_handler(RequestValidationError)
     async def validation_failed(_: Request, exc: RequestValidationError) -> JSONResponse:
-        # Location and message only: the offending input is never echoed back.
-        errors = [{"loc": [str(part) for part in error.get("loc", ())], "msg": error.get("msg", "")} for error in exc.errors()]
-        return _problem(422, "VALIDATION_FAILED", errors)
+        return _problem(422, "VALIDATION_FAILED", _validation_errors(exc.errors()))
+
+    @app.exception_handler(ValidationError)
+    async def model_validation_failed(_: Request, exc: ValidationError) -> JSONResponse:
+        return _problem(422, "VALIDATION_FAILED", _validation_errors(exc.errors()))
+
+    @app.exception_handler(RequestRejected)
+    async def rejected(_: Request, exc: RequestRejected) -> JSONResponse:
+        return _problem(exc.status, exc.code)
 
     @app.exception_handler(Exception)
     async def unexpected(_: Request, exc: Exception) -> JSONResponse:
@@ -61,8 +85,10 @@ def create_app(engine: RetrievalEngine | None, auth: InternalAuth = REQUIRED_WIT
     def health() -> dict[str, Any]:
         return {"service": SERVICE_NAME, "status": "ok", "contract_version": CONTRACT_VERSION, "corpus_loaded": engine is not None}
 
-    @app.post("/internal/v1/regulations/search", response_model=SearchResponse)
-    def search(request: SearchRequest):
+    @app.post("/internal/v1/regulations/search")
+    async def search(http: Request):
+        # Strict raw JSON first (size, media type, duplicates, NaN, depth), then the contract model.
+        request = SearchRequest.model_validate(await read_json_object(http))
         if engine is None:
             return _problem(503, "CORPUS_UNAVAILABLE")
         filters: dict[str, str] = {}
@@ -71,17 +97,25 @@ def create_app(engine: RetrievalEngine | None, auth: InternalAuth = REQUIRED_WIT
         if request.document_ids is not None and len(request.document_ids) == 1:
             filters["document_id"] = request.document_ids[0]
         try:
-            result = engine.search(request.query, request.k, filters, request.document_ids)
+            result = await run_in_threadpool(engine.search, request.query, request.k, filters, request.document_ids)
         except ValueError:
             # Engine-side validation (for example an unsupported filter combination). Message deliberately dropped.
             return _problem(422, "VALIDATION_FAILED")
-        return to_search_response(result)
+        return to_search_response(result).model_dump(mode="json")
 
     @app.get("/internal/v1/regulations/sources", response_model=SourcesResponse)
     def sources():
         if engine is None:
             return _problem(503, "CORPUS_UNAVAILABLE")
         return SourcesResponse(sources=to_sources(engine.registry()))
+
+    @app.post("/internal/v1/regulations/constraints")
+    async def regulatory_constraints(http: Request):
+        """Human-reviewed constraint evidence pack (constraints contract v0; pending M6 + lead approval)."""
+        request = ConstraintsRequest.model_validate(await read_json_object(http))
+        if constraints is None:
+            return _problem(503, "CONSTRAINTS_UNAVAILABLE")
+        return constraints.lookup(request)
 
     return app
 
@@ -94,4 +128,16 @@ def _load_engine() -> RetrievalEngine | None:
     return Step6Engine(settings)  # fails fast on any identity/hash mismatch
 
 
-app = create_app(_load_engine(), InternalAuth.from_environment())
+def _load_constraints(engine: RetrievalEngine | None) -> ConstraintProvider | None:
+    path = os.environ.get(CONSTRAINTS_VARIABLE, "").strip()
+    if not path:
+        logger.warning("Constraint table not configured; constraints return 503 CONSTRAINTS_UNAVAILABLE")
+        return None
+    if engine is None:
+        # Provenance cannot be verified without the hash-verified corpus: never serve unverifiable constraints.
+        raise RuntimeError("A constraint table requires the regulation corpus for provenance verification")
+    return ConstraintProvider(json.loads(Path(path).read_text(encoding="utf-8")), engine.page_text)
+
+
+_engine = _load_engine()
+app = create_app(_engine, InternalAuth.from_environment(), _load_constraints(_engine))

@@ -256,7 +256,7 @@ public sealed class RequirementsApplicationServiceTests
     }
 
     private sealed class SyntheticUnknownOutcome : Exception { }
-    private sealed class Setup
+    internal sealed class Setup
     {
         public User User { get; } = new();
         public Project Project { get; }
@@ -276,7 +276,7 @@ public sealed class RequirementsApplicationServiceTests
             Assert.Equal(0, Projects.Calls); Assert.Equal(0, Catalogues.Calls); Assert.Equal(0, Store.Reads); Assert.Equal(0, Store.Writes);
         }
     }
-    private sealed class User : ICurrentUser
+    internal sealed class User : ICurrentUser
     {
         public Guid Id { get; set; } = Guid.Parse("70000000-0000-0000-0000-000000000007");
         public bool Authenticated { get; set; } = true;
@@ -286,7 +286,7 @@ public sealed class RequirementsApplicationServiceTests
         public IReadOnlySet<string> Roles { get; } = new HashSet<string>();
         public Guid GetRequiredUserId() => RequiredId ?? Id;
     }
-    private sealed class Projects : IProjectRepository
+    internal sealed class Projects : IProjectRepository
     {
         public Project? Returned { get; set; }
         public bool IgnoreFilter { get; set; }
@@ -303,7 +303,7 @@ public sealed class RequirementsApplicationServiceTests
         public Task AddAsync(Project project, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> UpdateAsync(Project project, Guid ownerId, long expectedRevision, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
-    private sealed class Catalogues : IRequirementCatalogueProvider
+    internal sealed class Catalogues : IRequirementCatalogueProvider
     {
         public RequirementCatalogue? Policy { get; set; } = F.Catalogue();
         public Exception? Failure { get; set; }
@@ -316,8 +316,9 @@ public sealed class RequirementsApplicationServiceTests
             return Failure is null ? Task.FromResult(Policy) : Task.FromException<RequirementCatalogue?>(Failure);
         }
     }
-    private sealed class Store : IRequirementRevisionRepository
+    internal sealed class Store : IRequirementRevisionRepository
     {
+        private readonly object _gate = new();
         public RequirementRevision? Current { get; set; }
         public Dictionary<Guid, RequirementRevision> History { get; } = [];
         public int Reads { get; private set; }
@@ -329,11 +330,15 @@ public sealed class RequirementsApplicationServiceTests
         public Task<RequirementRevision?> GetAsync(Guid projectId, Guid revisionId, CancellationToken cancellationToken) => Task.FromResult(History.GetValueOrDefault(revisionId));
         public Task<RequirementSaveResult> TrySaveAtomicallyAsync(Guid? expectedRevisionId, RequirementRevision proposedRevision, CancellationToken cancellationToken)
         {
-            Writes++;
-            if (Failure is not null) return Task.FromException<RequirementSaveResult>(Failure);
-            if (Rejection is not null) return Task.FromResult(new RequirementSaveResult(Rejection.Value));
-            Current = proposedRevision; History.Add(Current.Id, Current); AfterCommit?.Invoke();
-            return Task.FromResult(new RequirementSaveResult(RequirementSaveStatus.Saved, Current));
+            lock (_gate)
+            {
+                Writes++;
+                if (Failure is not null) return Task.FromException<RequirementSaveResult>(Failure);
+                if (Rejection is not null) return Task.FromResult(new RequirementSaveResult(Rejection.Value));
+                if (Current?.Id != expectedRevisionId) return Task.FromResult(new RequirementSaveResult(RequirementSaveStatus.RevisionConflict));
+                Current = proposedRevision; History.Add(Current.Id, Current); AfterCommit?.Invoke();
+                return Task.FromResult(new RequirementSaveResult(RequirementSaveStatus.Saved, Current));
+            }
         }
     }
 }

@@ -39,9 +39,9 @@ public sealed class RequirementsEndpointModule : IApiEndpointModule
         return Map(await service.SaveAsync(project, request.ToApplicationRequest(), cancellationToken), project, save: true);
     }
 
-    private static IResult InvalidProject() => ApiProblems.ValidationFailed(new Dictionary<string, string[]> { ["id"] = ["A nonempty project identity is required."] });
+    internal static IResult InvalidProject() => ApiProblems.ValidationFailed(new Dictionary<string, string[]> { ["id"] = ["A nonempty project identity is required."] });
 
-    private static IResult Map(RequirementsOperationResult result, Guid projectId, bool save = false)
+    internal static IResult Map(RequirementsOperationResult result, Guid projectId, bool save = false)
     {
         if (result.Status == RequirementsOperationStatus.Success && result.Revision!.ProjectId != projectId)
             return Problem(500);
@@ -65,7 +65,7 @@ public sealed class RequirementsEndpointModule : IApiEndpointModule
         };
     }
 
-    private static IResult Problem(int status, string? code = null)
+    internal static IResult Problem(int status, string? code = null)
     {
         code ??= ProblemDetailsDefaults.GetDefaultCode(status)!;
         return Results.Problem(statusCode: status, type: ProblemDetailsDefaults.GetTypeForCode(code),
@@ -86,7 +86,9 @@ public static class RequirementsFeatureRegistration
         services.AddScoped<RequirementRevisionReader>();
         services.AddScoped<ValidatedRequirementRevisionWriter>();
         services.AddScoped<IRequirementsApplicationService, RequirementsApplicationService>();
+        services.AddScoped<IRequirementsSectionApplicationService, RequirementsSectionApplicationService>();
         services.AddSingleton<IApiEndpointModule, RequirementsEndpointModule>();
+        services.AddSingleton<IApiEndpointModule, RequirementsSectionsEndpointModule>();
         return services;
     }
 }

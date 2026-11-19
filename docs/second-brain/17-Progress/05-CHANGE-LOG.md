@@ -87,3 +87,7 @@
 2026-11-19 — Post-merge verification of PR #35 (CI #77/#78, live 12/12, fabrication guard); revised M6 evidence (doc 29 §10). Evidence EV-20261119-20.
 
 2026-11-19 — Constraint integrity: BM-JCS-1 shared digest with independent C# recomputation; reviewer authorization registry; sealed and pinned tables; overlapping-applicability conflicts without precedence; synthetic isolation; Production transport without plaintext exceptions; `ConstraintEvidenceGate`; shared M6 setback scenarios. Evidence EV-20261119-21.
+
+2026-11-19 — Cross-member integration: Int64 bounded revisions, strict C# internal typing, fixed 422 bodies, two-setting RAG auth opt-out, test-only acceptance service + C# live acceptance (AC01–AC04) in CI. Evidence EV-20261119-22.
+
+2026-11-19 — PR #41 CI corrections: structured problem-details leakage check, distinct CI loopback ports with guards and a regression test, rag-service workload bounds (C10). Evidence EV-20261119-23.

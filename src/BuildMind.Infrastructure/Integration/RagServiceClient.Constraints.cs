@@ -114,7 +114,8 @@ public sealed partial class RagServiceClient : IRegulatoryConstraintSource
             throw new ArgumentException("Kinds must be 1 to 7 distinct known constraint kinds.", nameof(query));
         }
 
-        if (query.Binding is null || query.Binding.ProjectRevision < 1 || query.Binding.ProjectId == Guid.Empty
+        if (query.Binding is null || query.Binding.ProjectRevision is < 1 or > ConstraintBinding.MaxProjectRevision
+            || query.Binding.ProjectId == Guid.Empty
             || query.Binding.LandRevisionId == Guid.Empty || query.Binding.RequirementRevisionId == Guid.Empty)
         {
             throw new ArgumentException("The binding must identify exact, non-empty project, land and requirement revisions.", nameof(query));
@@ -301,7 +302,7 @@ public sealed partial class RagServiceClient : IRegulatoryConstraintSource
 
     internal sealed record WireBinding(
         [property: JsonPropertyName("project_id")] Guid ProjectId,
-        [property: JsonPropertyName("project_revision")] int ProjectRevision,
+        [property: JsonPropertyName("project_revision")] long ProjectRevision,
         [property: JsonPropertyName("land_revision_id")] Guid LandRevisionId,
         [property: JsonPropertyName("requirement_revision_id")] Guid RequirementRevisionId)
     {

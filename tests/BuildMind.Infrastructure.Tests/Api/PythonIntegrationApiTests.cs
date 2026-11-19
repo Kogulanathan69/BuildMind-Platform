@@ -92,11 +92,99 @@ public sealed class PythonIntegrationApiTests
         {
             var problem = await ProblemResponse.ReadAsync(response);
             Assert.Equal(code, problem.GetString("code"));
-            Assert.DoesNotContain(PythonHost, problem.RawBody, StringComparison.Ordinal);
-            Assert.DoesNotContain("8000", problem.RawBody, StringComparison.Ordinal);
-            Assert.DoesNotContain("Exception", problem.RawBody, StringComparison.Ordinal);
+            AssertNoInternalDetails(problem.RawBody);
         }
     }
+
+    /// <summary>
+    /// Structured leakage check. The random traceId (32 lowercase hex, or the ASP.NET Core connection id) can contain
+    /// any digit sequence, so it is validated by FORMAT and excluded from substring checks; every other property name
+    /// and string value must not reveal the internal host, the port, a URL or an exception type. The raw body is still
+    /// checked for the host, URL schemes and exception names, which can never occur inside a valid trace id.
+    /// </summary>
+    internal static void AssertNoInternalDetails(string rawBody)
+    {
+        using var document = JsonDocument.Parse(rawBody);
+        var root = document.RootElement;
+        Assert.Equal(JsonValueKind.Object, root.ValueKind);
+
+        if (root.TryGetProperty("traceId", out var traceId))
+        {
+            Assert.Equal(JsonValueKind.String, traceId.ValueKind);
+            Assert.Matches(@"^(?:[0-9a-f]{32}|[0-9A-Z]{13}:[0-9A-F]{8})$", traceId.GetString());
+        }
+
+        foreach (var text in Texts(root, isRoot: true))
+        {
+            Assert.DoesNotContain(PythonHost, text, StringComparison.OrdinalIgnoreCase);
+            foreach (var forbidden in new[] { "8000", "://", "Exception" })
+            {
+                Assert.DoesNotContain(forbidden, text, StringComparison.Ordinal);
+            }
+        }
+
+        Assert.DoesNotContain(PythonHost, rawBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("://", rawBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("Exception", rawBody, StringComparison.Ordinal);
+    }
+
+    private static IEnumerable<string> Texts(JsonElement element, bool isRoot = false)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    yield return property.Name;
+                    if (isRoot && property.NameEquals("traceId"))
+                    {
+                        continue; // validated by format above
+                    }
+
+                    foreach (var text in Texts(property.Value))
+                    {
+                        yield return text;
+                    }
+                }
+
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    foreach (var text in Texts(item))
+                    {
+                        yield return text;
+                    }
+                }
+
+                break;
+            case JsonValueKind.String:
+                yield return element.GetString()!;
+                break;
+            case JsonValueKind.Number:
+                yield return element.GetRawText(); // a bare 8000 anywhere else is still a leak
+                break;
+        }
+    }
+
+    [Theory]
+    [InlineData("{\"code\":\"DEPENDENCY_UNAVAILABLE\",\"traceId\":\"4bf92f3577b34da6a3ce929d0e0e8000\"}")] // the CI false positive
+    [InlineData("{\"code\":\"DEPENDENCY_UNAVAILABLE\",\"traceId\":\"80008000800080008000800080008000\"}")]
+    [InlineData("{\"code\":\"DEPENDENCY_UNAVAILABLE\",\"traceId\":\"0HN8000ABCDEF:80000001\"}")]
+    public void Leakage_check_accepts_trace_ids_that_happen_to_contain_the_port_digits(string body) =>
+        AssertNoInternalDetails(body);
+
+    [Theory]
+    [InlineData("{\"code\":\"X\",\"detail\":\"python-services.internal unreachable\",\"traceId\":\"4bf92f3577b34da6a3ce929d0e0e4736\"}")]
+    [InlineData("{\"code\":\"X\",\"detail\":\"connect to 10.0.0.5:8000 failed\",\"traceId\":\"4bf92f3577b34da6a3ce929d0e0e4736\"}")]
+    [InlineData("{\"code\":\"X\",\"instance\":\"https://internal/x\",\"traceId\":\"4bf92f3577b34da6a3ce929d0e0e4736\"}")]
+    [InlineData("{\"code\":\"X\",\"detail\":\"HttpRequestException\",\"traceId\":\"4bf92f3577b34da6a3ce929d0e0e4736\"}")]
+    [InlineData("{\"code\":\"X\",\"errors\":{\"port\":[8000]},\"traceId\":\"4bf92f3577b34da6a3ce929d0e0e4736\"}")]
+    [InlineData("{\"code\":\"X\",\"8000\":\"x\",\"traceId\":\"4bf92f3577b34da6a3ce929d0e0e4736\"}")]
+    [InlineData("{\"code\":\"X\",\"traceId\":\"python-services.internal:8000\"}")]                             // a leak disguised as a traceId
+    [InlineData("{\"code\":\"X\",\"traceId\":\"not-a-trace-id-8000\"}")]
+    public void Leakage_check_still_detects_host_port_url_and_exception_leaks(string body) =>
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertNoInternalDetails(body));
 
     [Theory]
     [InlineData("Timeout", HttpStatusCode.GatewayTimeout, "DEPENDENCY_TIMEOUT")]

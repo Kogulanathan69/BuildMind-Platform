@@ -78,3 +78,16 @@ C# configuration: `Services__Rag__Enabled=true`, `Services__Rag__BaseUrl=http://
 - **Pins for real tables:** `BUILDMIND_RAG_CONSTRAINTS_VERSION`, `BUILDMIND_RAG_CONSTRAINTS_SHA256` and `BUILDMIND_RAG_REVIEWERS_SHA256`.
 - **Synthetic tables:** only with `BUILDMIND_RAG_ALLOW_SYNTHETIC_CONSTRAINTS=1` (isolated development and testing).
 - **Fixtures:** `python tools/build_contract_fixtures.py [--check]` regenerates or verifies every synthetic fixture, including the shared M6 setback scenarios.
+
+## Cross-service acceptance (test-only)
+- `tests/acceptance_app.py` serves each shared scenario through the real app (auth required) for the C# live acceptance tests. It is never part of the deployed service and refuses to start without `BUILDMIND_ACCEPTANCE_SYNTHETIC=1` and a token.
+- The auth opt-out `BUILDMIND_RAG_AUTH=disabled` now also requires `BUILDMIND_RAG_ENVIRONMENT=development`.
+- 422 responses are a fixed `{"code":"VALIDATION_FAILED"}`.
+
+## Workload bounds (C10)
+`BUILDMIND_RAG_MAX_CONCURRENT_WORK` (1–64, default 4) and `BUILDMIND_RAG_WORK_TIMEOUT_SECONDS` (1–60, default 10) bound engine work:
+- over budget → 504 `WORK_TIMEOUT`;
+- no free slot → immediate 503 `SERVICE_BUSY`;
+- a slot is freed only when its work has actually finished.
+
+Invalid values fail start-up.

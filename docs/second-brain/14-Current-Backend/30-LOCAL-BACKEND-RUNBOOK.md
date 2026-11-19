@@ -38,7 +38,7 @@ $env:BUILDMIND_RAG_CORPUS_ROOT = '<corpus root containing input_pdfs\ and output
 $env:BUILDMIND_RAG_MANIFEST    = '<...>\output\regulation_retrieval_step4\approved_corpus_manifest.json'
 $env:BUILDMIND_RAG_INDEX       = '<...>\output\regulation_retrieval_step4\multi_document_index.json'
 $env:BUILDMIND_RAG_INTERNAL_TOKENS = '<32+ random printable chars>'   # G11 MVP; up to 2 comma-separated for rotation
-# development-only opt-out (never elsewhere): $env:BUILDMIND_RAG_AUTH = 'disabled'
+# development-only opt-out (never elsewhere; BOTH lines are required): $env:BUILDMIND_RAG_AUTH = 'disabled'; $env:BUILDMIND_RAG_ENVIRONMENT = 'development'
 # optional, human-reviewed constraint table (no real table exists yet): $env:BUILDMIND_RAG_CONSTRAINTS = '<path to table json>'
 # required with a table: $env:BUILDMIND_RAG_REVIEWERS = '<path to sealed reviewer registry json>'
 # synthetic fixtures only, isolated dev/testing: $env:BUILDMIND_RAG_ALLOW_SYNTHETIC_CONSTRAINTS = '1'

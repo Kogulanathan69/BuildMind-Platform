@@ -70,3 +70,5 @@ Start-up failure tests must prove the failure is an `OptionsValidationException`
 - (M6-review corrections) Strict raw-JSON validation before deserialization on both sides; duplicate JSON properties rejected (API input, internal responses, rag-service requests); repeated internal-token headers rejected; tokens refused over plaintext to network hosts outside Development; constraint tables refused unless every citation reconstructs from the hash-verified corpus.
 
 - (Constraint integrity) Evidence packs are verified by independent BM-JCS-1 digest recomputation. Constraint tables and reviewer registries are integrity-sealed and pinned. Reviewer authorization is enforced at load. Synthetic evidence is isolated to Development/Testing. Production has no plaintext internal transport and no exception flag.
+
+- (Cross-member integration) Internal C# contracts are exact-case and strictly typed. rag-service never reflects submitted names or values in 422 responses. The RAG auth opt-out requires a second, explicit development declaration. The test-only acceptance service cannot run without a token.

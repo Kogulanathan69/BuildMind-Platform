@@ -419,6 +419,21 @@ def test_endpoint_rejects_invalid_contract_structures(body):
     assert response.status_code == 422 and response.json()["code"] == "VALIDATION_FAILED"
 
 
+@pytest.mark.parametrize(("revision", "accepted"), [
+    (1, True), (2_147_483_648, True), (999_999_999_999_999, True),   # Int64 revisions beyond Int32
+    (1_000_000_000_000_000, False), (2**63 - 1, False), (0, False),  # outside the exact BM-JCS-1 integer domain
+])
+def test_project_revisions_are_int64_within_the_canonical_integer_domain(revision, accepted):
+    response = client(provider()).post(ENDPOINT, json={"jurisdiction": NORTH_JURISDICTION, "kinds": ["REAR_SPACE_MIN"],
+                                                       "binding": BINDING | {"project_revision": revision}})
+
+    assert response.status_code == (200 if accepted else 422)
+    if accepted:
+        pack = response.json()
+        assert pack["binding"]["project_revision"] == revision
+        assert pack["evidence_pack_id"] == canonical_json.digest({k: v for k, v in pack.items() if k != "evidence_pack_id"})
+
+
 def test_retrieval_never_creates_constraints():
     """A search for a phrase that exists in the corpus does not change the constraint pack."""
     c = client(provider())

@@ -16,6 +16,7 @@ from dataclasses import dataclass
 AUTH_HEADER = "X-BuildMind-Internal-Token"
 TOKENS_VARIABLE = "BUILDMIND_RAG_INTERNAL_TOKENS"
 MODE_VARIABLE = "BUILDMIND_RAG_AUTH"
+ENVIRONMENT_VARIABLE = "BUILDMIND_RAG_ENVIRONMENT"
 MIN_TOKEN_LENGTH = 32
 MAX_TOKEN_LENGTH = 256
 MAX_TOKENS = 2
@@ -43,6 +44,9 @@ class InternalAuth:
         mode = os.environ.get(MODE_VARIABLE, "required").strip().lower()
         raw = os.environ.get(TOKENS_VARIABLE, "")
         tokens = [t.strip() for t in raw.split(",") if t.strip()]
+        if mode == "disabled" and os.environ.get(ENVIRONMENT_VARIABLE, "").strip().lower() != "development":
+            # A single setting must never be able to switch authentication off in a deployed service.
+            raise RuntimeError(f"{MODE_VARIABLE}=disabled requires {ENVIRONMENT_VARIABLE}=development")
         return InternalAuth.from_tokens(tokens, required=(mode != "disabled"))
 
     def check(self, presented: str | None) -> str | None:

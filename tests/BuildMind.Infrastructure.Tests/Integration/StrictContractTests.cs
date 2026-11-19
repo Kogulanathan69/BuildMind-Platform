@@ -233,6 +233,8 @@ public sealed class StrictContractTests
         ExampleQuery with { Kinds = [] },
         ExampleQuery with { Kinds = [RegulatoryConstraintKind.RearSpaceMin, RegulatoryConstraintKind.RearSpaceMin] },
         ExampleQuery with { Binding = Binding with { ProjectRevision = 0 } },
+        ExampleQuery with { Binding = Binding with { ProjectRevision = ConstraintBinding.MaxProjectRevision + 1 } }, // outside BM-JCS-1
+        ExampleQuery with { Binding = Binding with { ProjectRevision = long.MaxValue } },
         ExampleQuery with { Binding = Binding with { LandRevisionId = Guid.Empty } },
     };
 
@@ -291,6 +293,49 @@ public sealed class StrictContractTests
     {
         var failure = await Assert.ThrowsAsync<DependencyFailureException>(() =>
             Client(StubHttpHandler.Json(Example), allowSynthetic: false).GetConstraintsAsync(ExampleQuery, CancellationToken.None));
+
+        Assert.Equal(DependencyFailureKind.MalformedResponse, failure.Kind);
+    }
+
+    [Theory]
+    [InlineData(3_000_000_000L)]                          // beyond Int32: Project.Revision is Int64 (M6 H4-R1 C08)
+    [InlineData(ConstraintBinding.MaxProjectRevision)]
+    public async Task Int64_project_revisions_are_bound_and_verified(long revision)
+    {
+        var resealed = Tamper(p => p["binding"]!["project_revision"] = revision);
+
+        var pack = await Client(StubHttpHandler.Json(resealed))
+            .GetConstraintsAsync(ExampleQuery with { Binding = Binding with { ProjectRevision = revision } }, CancellationToken.None);
+
+        Assert.Equal(revision, pack.Binding.ProjectRevision);
+    }
+
+    public static TheoryData<string> LenientTyping => new()
+    {
+        Tamper(p => p["binding"]!["project_revision"] = "3"),                    // number as string (Web default would accept)
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["value"] = "3"),
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["source"]!["page"] = "1"),
+        Tamper(p => { var v = p["overall_status"]; p.Remove("overall_status"); p["Overall_Status"] = v!.DeepClone(); }), // wrong case
+        Tamper(p => { var v = p["synthetic"]; p.Remove("synthetic"); p["Synthetic"] = v!.DeepClone(); }),
+    };
+
+    [Theory]
+    [MemberData(nameof(LenientTyping))]
+    public async Task Internal_contracts_are_exact_case_and_strictly_typed(string json)
+    {
+        var failure = await Assert.ThrowsAsync<DependencyFailureException>(() =>
+            Client(StubHttpHandler.Json(json)).GetConstraintsAsync(ExampleQuery, CancellationToken.None));
+
+        Assert.Equal(DependencyFailureKind.MalformedResponse, failure.Kind);
+    }
+
+    [Theory]
+    [InlineData("{\"Service\":\"buildmind-rag\",\"status\":\"ok\",\"contract_version\":\"1\",\"corpus_loaded\":true}")]
+    [InlineData("{\"service\":\"buildmind-rag\",\"status\":\"ok\",\"contract_version\":\"1\",\"corpus_loaded\":\"true\"}")]
+    public async Task Health_contract_is_exact_case_and_strictly_typed(string body)
+    {
+        var failure = await Assert.ThrowsAsync<DependencyFailureException>(() =>
+            Client(StubHttpHandler.Json(body)).CheckHealthAsync(CancellationToken.None));
 
         Assert.Equal(DependencyFailureKind.MalformedResponse, failure.Kind);
     }

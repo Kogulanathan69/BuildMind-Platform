@@ -39,6 +39,10 @@ public class InternalServiceClient
     /// </summary>
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
+        // Web defaults are lenient; internal contracts are exact (M6 H4-R1 C11): member names match case-sensitively
+        // and numbers are accepted only as JSON numbers, never as strings.
+        PropertyNameCaseInsensitive = false,
+        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.Strict,
         MaxDepth = 64,
         AllowDuplicateProperties = false,
         UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow,

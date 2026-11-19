@@ -51,6 +51,7 @@ CONDITION_RULES: dict[str, tuple[str, tuple[float, float]]] = {
     "floors": ("count", (0, 200)),
     "road_width_m": ("m", (0, 200)),
 }
+MAX_PROJECT_REVISION = 999_999_999_999_999
 SYNTHETIC_REVIEWER_PREFIX = "synthetic:"
 SYNTHETIC_REFERENCE_PREFIX = "SYN-"
 
@@ -193,7 +194,8 @@ class Binding(_Strict):
     """Exact revisions the evidence pack is bound to (supplied by the C# orchestration, never inferred)."""
 
     project_id: UUID
-    project_revision: StrictInt = Field(ge=1)
+    # Int64 like Project.Revision, bounded below 1e15 so BM-JCS-1 represents it exactly in Python and C#.
+    project_revision: StrictInt = Field(ge=1, le=MAX_PROJECT_REVISION)
     land_revision_id: UUID
     requirement_revision_id: UUID
 

@@ -154,3 +154,5 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
   - conservative revocation (all of a revoked reviewer's sign-offs become invalid);
   - Production allows no plaintext exception (Staging keeps it until G11);
   - python-services authentication with its maintainer.
+
+- 2026-11-19 (cross-member integration, doc 29 §12): M4/M7-owned H4-R1 items are closed or proposed for closure: revision width, strict typing, no-reflection errors, two-setting auth opt-out, live synthetic acceptance. **Still needed:** M6 + lead answers to §11 items 1–4; M6 runtime consumer; M2/M5 condition-value sources; evidence pack id in M6 jobs (M4 + M6); G06 real registry/tables; python-services auth; G11; G19.

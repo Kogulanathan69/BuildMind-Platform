@@ -190,3 +190,68 @@ Shared fixtures for M6: `rag-service/contract/constraints_scenarios.v0.json`. Th
 - legal currency is unverified;
 - C# tests compile locally but run only in CI (Smart App Control);
 - no cross-service activation until M6 agrees items 1–4.
+
+## 12. Cross-member integration status after PR #40 (2026-11-19)
+**Merged:** PR #40 → `develop` `542a137`. The squash tree is byte-identical to the reviewed head `3fa4c9c`, with **0 independent reviews** (G19).
+- **PR CI #87:** every job succeeded. This was the first execution of the C# integrity tests: digest recomputation, resealed tampering, gate → M6 validator, Production transport.
+- **Post-merge CI #78 → #88:** every job succeeded, including the full-stack smoke (step metadata; artifacts not read).
+
+**Branch:** `feature/m7-cross-member-integration` closes the M4/M7-owned items still open in M6's H4-R1 review (`docs/proposals/m6-ai-generation/BE-M6-D01-FINAL-DEVELOPMENT-REPORT.md`).
+
+| H4-R1 | Open item named by M6 | Status now | Evidence |
+|---|---|---|---|
+| C08 | C# does not recompute the digest | **Closed in #40**: independent BM-JCS-1 recomputation | `StrictContractTests`; CI #87 |
+| C08 | Int32 project revision vs M1's Int64 | **Closed here**: `ConstraintBinding.ProjectRevision` is `long`, bounded on both sides to 1…999,999,999,999,999 (the exact BM-JCS-1 integer domain) | Python 422 above the bound; C# `ArgumentException`; live 3,000,000,000 bound and digest-verified (AC04) |
+| C05 | Conflicts only in equal scopes | **Closed in #40**: overlapping-interval conflicts, no precedence | Boundary tests |
+| C11 | Web serializer defaults (case-insensitive names, numbers from strings) | **Closed here**: exact-case member names, `JsonNumberHandling.Strict` on every internal response | Lenient-typing and health tests |
+| C11 | Field-to-unit rules and ranges on both sides | **Closed in #40** | Both suites |
+| C09 | RAG formatter reflects submitted property names | **Closed here**: fixed 422 body `{"code":"VALIDATION_FAILED"}` | Python no-reflection test; live 422 |
+| C09 | One environment setting can disable RAG auth | **Closed here**: `BUILDMIND_RAG_AUTH=disabled` also requires `BUILDMIND_RAG_ENVIRONMENT=development`, otherwise start-up fails | 5 refusal cases |
+| C09 | Plaintext exception | **Closed for Production in #40**; Staging exception remains until G11 | Start-up tests |
+| C09 | python-services authentication | **Open**: coordination with the python-services maintainer (M6 bootstrap owner) | — |
+| C10 | Server-side bounded work | **Open**: client deadline, bulkhead and streamed 16 KB limit are verified; server CPU/time bounds per request are not | — |
+| C12 | Reviewed-evidence M6 end-to-end coverage | **Partly closed here (synthetic):** live cross-service acceptance in CI. Real rules, persisted jobs and M6's runtime consumer remain open | AC01–AC04 |
+
+### Cross-service acceptance (live, synthetic only)
+`rag-service/tests/acceptance_app.py` is a **test-only** service, never deployed: the real rag-service FastAPI app, with real auth and strict parsing, mounted once per shared scenario. It refuses to start without `BUILDMIND_ACCEPTANCE_SYNTHETIC=1` and a token, and it cannot run with auth disabled. CI starts it on loopback with its own random, masked token, which is added to the credential scan. `RagConstraintAcceptanceTests` then sends each scenario's pack:
+
+real Python HTTP bytes → production `RagServiceClient` (BM-JCS-1 recomputed in C#) → `ConstraintEvidenceGate` → **M6 `GenerationContractValidation`**.
+
+| Test | Proves |
+|---|---|
+| AC01 ×6 | Cross-language digest equality on live bytes. MISSING, CONFLICTING and UNVERIFIED evidence is rejected by M6's validator for FEASIBLE; only REVIEWED is accepted |
+| AC02 | Live synthetic evidence is rejected without the isolated opt-in; the gate never counts it as reviewed by default |
+| AC03 | Missing or wrong token → 401; no evidence is returned |
+| AC04 | An Int64 revision beyond Int32 is bound and digest-verified end to end |
+
+**Unauthorized reviewers** cannot reach this path at all: a table signed by an unregistered, revoked, out-of-scope or out-of-period reviewer fails at load, so no pack is ever served (#40; live start-up refusals).
+
+Local live run: 6/6 digests recomputed from wire bytes; no-token 401; token absent from the server log. **C# acceptance runs only in CI** (Smart App Control).
+
+### Remaining dependencies (owner → item)
+| Owner | Item | Blocks |
+|---|---|---|
+| **M6 + lead** | §11 items 1–4: reviewer id type (GUID vs pseudonymous string), M6 owns the parcel-edge mapping, `regulatoryEvidencePackId` in feasibility results and jobs, mandatory kinds | The M6 runtime adapter (pack → `RegulatoryEvidenceDto`) |
+| **M6** | Runtime consumer that calls `IRegulatoryConstraintSource` + `ConstraintEvidenceGate` and keeps `NEEDS_REVIEW` for incomplete evidence | Cross-service activation |
+| **M2 / M5 + M6** | Parcel facts, edge references and condition values (height, plot area, floors, road width) from the confirmed land and requirement revisions | Condition evaluation |
+| **M4 + M6** | Propagate the evidence pack id through job identity and atomic publication | Traceable feasibility results |
+| **Lead / G06** | Real reviewer registry custody, real reviewed tables, clause identity, Gazette/council precedence | Any real regulatory value |
+| **python-services maintainer** | Inbound authentication rollout | C09 |
+| **Lead / G11** | Hosting and TLS; Staging plaintext exception | Deployment |
+| **Lead / G19** | Independent reviews of PRs #30–#40 | Release |
+
+## 13. PR #41 CI corrections and server workload bounds (2026-11-19)
+CI on candidate `58d793a` (merge `2b70062`), as reported by the lead from the actual logs: 2,338 tests, **1 failure**. MySQL/live integration was 75/75, cross-service acceptance 10/10, python-services 628/628 and rag-service 224/224. The full-stack smoke also failed.
+
+| Defect | Root cause | Correction | Regression coverage |
+|---|---|---|---|
+| `PythonIntegrationApiTests` line 96 | `Assert.DoesNotContain("8000", RawBody)` matched a random trace id that happened to contain the digits 8000 | **Structured** leakage check: the traceId must match its format (32 lowercase hex, or the ASP.NET Core connection id) and is excluded from substring checks. Every other property name, string and number must not contain the host, `8000`, `://` or `Exception`. The raw body is still checked for the host, `://` and `Exception`, none of which can occur in a valid trace id | 3 trace ids containing 8000 accepted; 8 genuine leaks still detected (host, `ip:8000`, URL, exception name, numeric port, port as property name, leak disguised as traceId, malformed traceId) |
+| Full-stack smoke | The acceptance service and the smoke API both bound `127.0.0.1:8097` | Acceptance service moved to **8094** (all references). The acceptance step and the smoke script now refuse to start if their port already answers | `CiWorkflowPortTests`: every loopback listener in the workflow has a distinct port, and every loopback URL points at a declared listener |
+
+**C10, server-side work (closed for rag-service):** `app/workload.py`. Engine work (search and constraint lookup) runs on a dedicated pool bounded to `BUILDMIND_RAG_MAX_CONCURRENT_WORK` (1–64, default 4), with a per-request budget of `BUILDMIND_RAG_WORK_TIMEOUT_SECONDS` (1–60, default 10).
+- **Over budget:** 504 `WORK_TIMEOUT`.
+- **No free slot:** an immediate 503 `SERVICE_BUSY`, with no unbounded queue.
+- **Slot release:** a slot is released only when its thread has really finished, so overrunning work can never pile up behind new requests.
+- **C# mapping:** 503 → `Unavailable`, 504 → `Timeout`, which is the existing safe mapping.
+- **Tests:** 11, covering timeout, busy refusal, recovery, constraint lookups, normal work and configuration bounds.
+- **Out of scope:** process-level limits (uvicorn `--limit-concurrency`, container CPU and memory) remain deployment items (G11).

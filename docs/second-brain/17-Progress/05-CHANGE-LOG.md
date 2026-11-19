@@ -79,3 +79,5 @@
 2026-11-19 — Phase 05: integration audit (no conflicts), backend integration checklist with M6 shared-auth plan (doc 33), full local regression. Evidence EV-20261119-15.
 
 2026-11-19 — Final integration 01: CI full-stack smoke + live C#→RAG tests; R-1/R-3 fact-based re-evaluation (doc 27 §6). Evidence EV-20261119-16.
+
+2026-11-19 — Final integration 02: run #72 step-level evidence (full-stack smoke, live RAG); final M4/M7 delivery status (doc 28 §7). Evidence EV-20261119-17.

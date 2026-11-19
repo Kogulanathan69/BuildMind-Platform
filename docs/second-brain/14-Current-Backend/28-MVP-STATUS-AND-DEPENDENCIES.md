@@ -89,3 +89,26 @@ C# test execution happens only in CI.
 - **Members:** `develop` unchanged (`d5db6f8`). Member PRs #31 and #33 and the unmerged M5 commit touch **no** M4/M7-owned files, and no member code consumes the internal clients yet, so there's no integration conflict.
 - **Local regression (all green):** build 0 warnings; python-services 54; rag-service 68; real corpus 6; existing engine 93; workspace unchanged.
 - **New:** [33: backend integration checklist](33-BACKEND-INTEGRATION-CHECKLIST.md), covering rules, per-member status, the M6 shared-auth coordination plan and the final integration gate.
+
+## 7. Final MVP delivery status: M4 + M7 (2026-11-19, final integration step 02)
+
+**CI evidence, PR #32 run #72** (id 44474193455, `9a0a086`, attempt 1): all 3 jobs succeeded. GitHub API step results (`database-compatibility`) are all success:
+- start RAG service (live, per-run masked token);
+- MySQL + live integration tests (including the live C#→RAG and C#→Python tests);
+- **full-stack smoke** (built API + MySQL + Python + RAG; the script fails on any status, HTTP or leakage mismatch);
+- credential scan (including the RAG token);
+- sanitized upload;
+- RAG stop.
+
+Artifacts: `dotnet-test-results` `a38f4316…`, `mysql-compatibility-results` `9503196c…`, `python-test-results` `ec18b9b7…`. **Per-test counts are not yet verified from the artifacts** (no authenticated download in the session).
+
+**MySQL decision held:** the existing provider (MySql.Data 26.10.0 / MySql.EntityFrameworkCore 10.0.12) and the strict open gate are kept **for controlled MVP development only**. **R-1 and R-3 stay open production blockers** (doc 27 §6).
+
+| | M4 infrastructure | M7 RAG |
+|---|---|---|
+| **Delivered and CI-verified** | D01–D06 core; readiness (MySQL/Python/RAG); hardened internal client and bulkhead; G11 token (RAG side); CI full-stack smoke | D02 corpus evidence; D03 contract v1; D04 retrieval service, C# port, readiness, token auth (PR #32 green) |
+| **Awaiting independent review** | PRs #8–#30 (merged without review, G19) | **PR #32** (clean, mergeable; reviewer guide prepared) |
+| **Genuinely outstanding implementation** | JWT + auth policies (needs A1/A2 + M1); CORS (C6); storage adapter + request limits (M2 contract); job/version persistence and idempotency (M3/M6 contracts); python-services token (M6 custodian; C# side ready); production hosting/TLS (G11) | D05 regulatory-constraint integration (M6 + doc 29 approval); D06 end-to-end with M6 |
+| **Production blockers** | R-1/R-3; G11 transport/hosting; A1/A2/C6; G19 | G06 legal currency; G11; G19 |
+
+**Nothing else is implementable without a decision or another member's delivery.**

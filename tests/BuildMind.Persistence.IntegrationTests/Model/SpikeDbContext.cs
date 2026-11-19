@@ -3,6 +3,7 @@ using BuildMind.Infrastructure.Persistence.Transactions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
+using BuildMind.Infrastructure.Persistence.Connections;
 
 namespace BuildMind.Persistence.IntegrationTests.Model;
 
@@ -46,6 +47,7 @@ public sealed class SpikeDbContext(DbContextOptions<SpikeDbContext> options) : D
     {
         var builder = new DbContextOptionsBuilder<SpikeDbContext>()
             .UseMySQL(connectionString, mysql => mysql.MigrationsAssembly(typeof(SpikeDbContext).Assembly.GetName().Name))
+            .AddInterceptors(MySqlConnectionOpenGate.Interceptor) // STEP 10-E: MySql.Data TLS-state race
             .EnableSensitiveDataLogging(false)
             // The spike migration is hand-written without a model snapshot.
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
@@ -114,6 +116,7 @@ public sealed class RawTimestampContext(DbContextOptions<RawTimestampContext> op
     public static RawTimestampContext Create(string connectionString) =>
         new(new DbContextOptionsBuilder<RawTimestampContext>()
             .UseMySQL(connectionString)
+            .AddInterceptors(MySqlConnectionOpenGate.Interceptor) // STEP 10-E: MySql.Data TLS-state race
             .EnableSensitiveDataLogging(false)
             .Options);
 

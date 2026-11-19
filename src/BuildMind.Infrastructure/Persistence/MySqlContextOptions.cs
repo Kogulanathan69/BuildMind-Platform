@@ -49,6 +49,9 @@ internal static class MySqlContextOptions
         // results instead, which carry only kind, error number and constraint name.
         builder.ConfigureWarnings(warnings => warnings.Ignore(SuppressedFailureEvents));
 
+        // STEP 10-E: serialize connection opening (MySql.Data static TLS-state race; see MySqlConnectionOpenGate).
+        builder.AddInterceptors(Connections.MySqlConnectionOpenGate.Interceptor);
+
         return builder;
     }
 }

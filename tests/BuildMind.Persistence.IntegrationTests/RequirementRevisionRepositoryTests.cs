@@ -9,6 +9,7 @@ using BuildMind.Persistence.IntegrationTests.Support;
 using Microsoft.EntityFrameworkCore;
 using MySql.Data.MySqlClient;
 using Xunit.Abstractions;
+using BuildMind.Infrastructure.Persistence.Connections;
 
 namespace BuildMind.Persistence.IntegrationTests;
 
@@ -322,7 +323,7 @@ public sealed class RequirementRevisionRepositoryTests(ITestOutputHelper output)
     private static async Task<List<string>> ListAsync(DisposableMySqlDatabase database, string sql)
     {
         await using var connection = new MySqlConnection(database.ConnectionString);
-        await connection.OpenAsync();
+        await MySqlConnectionOpenGate.OpenAsync(connection);
         await using var command = new MySqlCommand(sql, connection);
         await using var reader = await command.ExecuteReaderAsync();
         var values = new List<string>();

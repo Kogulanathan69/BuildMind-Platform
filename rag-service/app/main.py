@@ -14,7 +14,6 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from starlette.concurrency import run_in_threadpool
 
 from .auth import AUTH_HEADER, REQUIRED_WITHOUT_TOKENS, InternalAuth
 from .constraints import ConstraintProvider, ConstraintsRequest
@@ -22,6 +21,7 @@ from .contracts import CONTRACT_VERSION, SearchRequest, SourcesResponse
 from .engine import EngineSettings, RetrievalEngine, Step6Engine
 from .mapping import to_search_response, to_sources
 from .strict_json import MAX_BODY_BYTES, RequestRejected, read_json_object
+from .workload import WorkLimiter
 
 SERVICE_NAME = "buildmind-rag"
 CONSTRAINTS_VARIABLE = "BUILDMIND_RAG_CONSTRAINTS"
@@ -40,7 +40,10 @@ def create_app(
     engine: RetrievalEngine | None,
     auth: InternalAuth = REQUIRED_WITHOUT_TOKENS,
     constraints: ConstraintProvider | None = None,
+    limiter: WorkLimiter | None = None,
 ) -> FastAPI:
+    # C10: bounded concurrent engine work with a per-request time budget (503 SERVICE_BUSY / 504 WORK_TIMEOUT).
+    limiter = limiter or WorkLimiter.from_environment()
     app = FastAPI(title="BuildMind regulation retrieval", docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.middleware("http")
@@ -93,7 +96,7 @@ def create_app(
         if request.document_ids is not None and len(request.document_ids) == 1:
             filters["document_id"] = request.document_ids[0]
         try:
-            result = await run_in_threadpool(engine.search, request.query, request.k, filters, request.document_ids)
+            result = await limiter.run(engine.search, request.query, request.k, filters, request.document_ids)
         except ValueError:
             # Engine-side validation (for example an unsupported filter combination). Message deliberately dropped.
             return _problem(422, "VALIDATION_FAILED")
@@ -111,7 +114,7 @@ def create_app(
         request = ConstraintsRequest.model_validate(await read_json_object(http))
         if constraints is None:
             return _problem(503, "CONSTRAINTS_UNAVAILABLE")
-        return constraints.lookup(request)
+        return await limiter.run(constraints.lookup, request)
 
     return app
 

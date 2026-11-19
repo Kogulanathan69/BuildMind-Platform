@@ -239,3 +239,19 @@ Local live run: 6/6 digests recomputed from wire bytes; no-token 401; token abse
 | **python-services maintainer** | Inbound authentication rollout | C09 |
 | **Lead / G11** | Hosting and TLS; Staging plaintext exception | Deployment |
 | **Lead / G19** | Independent reviews of PRs #30–#40 | Release |
+
+## 13. PR #41 CI corrections and server workload bounds (2026-11-19)
+CI on candidate `58d793a` (merge `2b70062`), as reported by the lead from the actual logs: 2,338 tests, **1 failure**. MySQL/live integration was 75/75, cross-service acceptance 10/10, python-services 628/628 and rag-service 224/224. The full-stack smoke also failed.
+
+| Defect | Root cause | Correction | Regression coverage |
+|---|---|---|---|
+| `PythonIntegrationApiTests` line 96 | `Assert.DoesNotContain("8000", RawBody)` matched a random trace id that happened to contain the digits 8000 | **Structured** leakage check: the traceId must match its format (32 lowercase hex, or the ASP.NET Core connection id) and is excluded from substring checks. Every other property name, string and number must not contain the host, `8000`, `://` or `Exception`. The raw body is still checked for the host, `://` and `Exception`, none of which can occur in a valid trace id | 3 trace ids containing 8000 accepted; 8 genuine leaks still detected (host, `ip:8000`, URL, exception name, numeric port, port as property name, leak disguised as traceId, malformed traceId) |
+| Full-stack smoke | The acceptance service and the smoke API both bound `127.0.0.1:8097` | Acceptance service moved to **8094** (all references). The acceptance step and the smoke script now refuse to start if their port already answers | `CiWorkflowPortTests`: every loopback listener in the workflow has a distinct port, and every loopback URL points at a declared listener |
+
+**C10, server-side work (closed for rag-service):** `app/workload.py`. Engine work (search and constraint lookup) runs on a dedicated pool bounded to `BUILDMIND_RAG_MAX_CONCURRENT_WORK` (1–64, default 4), with a per-request budget of `BUILDMIND_RAG_WORK_TIMEOUT_SECONDS` (1–60, default 10).
+- **Over budget:** 504 `WORK_TIMEOUT`.
+- **No free slot:** an immediate 503 `SERVICE_BUSY`, with no unbounded queue.
+- **Slot release:** a slot is released only when its thread has really finished, so overrunning work can never pile up behind new requests.
+- **C# mapping:** 503 → `Unavailable`, 504 → `Timeout`, which is the existing safe mapping.
+- **Tests:** 11, covering timeout, busy refusal, recovery, constraint lookups, normal work and configuration bounds.
+- **Out of scope:** process-level limits (uvicorn `--limit-concurrency`, container CPU and memory) remain deployment items (G11).

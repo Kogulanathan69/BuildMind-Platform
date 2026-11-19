@@ -256,3 +256,7 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - CI #87/#88 green.
 - `feature/m7-cross-member-integration` closes the M4/M7 H4-R1 items (C08 revision width, C11 strict typing, C09 no-reflection and auth opt-out) and adds live synthetic cross-service acceptance in CI.
 - Next: the PR's CI; M6 answers (§11 items 1–4) and the M6 runtime consumer; G06; python-services auth; G11; G19; R-1/R-3.
+
+## 2026-11-19 — PR #41 CI corrections
+- Trace-id false positive replaced by a structured leakage check; acceptance service moved to 8094 with port guards and a workflow port test; C10 workload bounds in rag-service.
+- Next: CI on the new head; then M6 approvals (§11), G06, G11, G19, R-1/R-3.

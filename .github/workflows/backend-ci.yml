@@ -47,7 +47,14 @@ jobs:
           python-version: '3.13'
       - run: python -m pip install -r python-services/requirements-dev.txt
       # STEP 08-C (lead-approved): JUnit XML so the Python count can be verified from the artifact.
-      - run: cd python-services && python -m pytest -q --junitxml=../TestResults/python/pytest-junit.xml
+      - run: cd python-services && python -m pytest -q -rs --junitxml=../TestResults/python/pytest-junit.xml
+      # Lead-approved 2026-11-19 with the Shapely pin: mandatory tests must RUN. Fails on any skipped python-services
+      # test and on any M6 D02 geometry module without a passing test (import-time skips or missing collection).
+      - name: Verify no mandatory python-services tests were skipped
+        run: >-
+          python -I tools/ci/check_pytest_junit.py TestResults/python/pytest-junit.xml
+          --require-module test_d02_area --require-module test_d02_feasibility
+          --require-module test_d02_footprint --require-module test_d02_parcel
       # M7 (lead-approved 2026-11-19): private regulation retrieval service, synthetic corpus only (no PDFs/indexes in CI).
       - name: Run rag-service tests
         run: |

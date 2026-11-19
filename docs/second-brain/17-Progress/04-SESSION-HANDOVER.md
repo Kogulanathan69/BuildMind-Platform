@@ -265,3 +265,7 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - `feature/m7-final-acceptance`: C11 prefix parity, live rotation and cancellation (AC05–AC06), and the C10 real-engine evidence; doc 29 §14 is the M4/M7 acceptance matrix.
 - New finding: M6 D02 tests skip without `shapely` (decision needed).
 - Open: §11 items 1–4, M6 pack-id propagation, G06, python-services auth, G11, G19, R-1/R-3.
+
+## 2026-11-19 — Shapely pin and mandatory-test guard
+- `chore/m4-m6-shapely-geometry-ci`: `shapely==2.1.2` (approved) and a CI guard against skipped mandatory tests; locally 717/0/0 with 89/89 D02.
+- Next: CI counts for this branch and for `feature/m7-final-acceptance` (AC05/AC06), read from the JUnit artifacts or job logs.

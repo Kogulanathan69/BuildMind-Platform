@@ -58,7 +58,7 @@ public sealed class RagServiceClientTests
         var request = Assert.Single(handler.Requests);
         Assert.Equal(HttpMethod.Post, request.Method);
         Assert.Equal(new Uri(Base + "internal/v1/regulations/search"), request.RequestUri);
-        using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies)!); // captured in flight; content is disposed after the call
         Assert.Equal("plot coverage", body.RootElement.GetProperty("query").GetString());
         Assert.Equal("Colombo Municipal Council planning area", body.RootElement.GetProperty("jurisdiction").GetString());
         Assert.Equal(3, body.RootElement.GetProperty("k").GetInt32());
@@ -72,7 +72,7 @@ public sealed class RagServiceClientTests
 
         await Client(handler).SearchAsync(new RegulationSearchQuery("rear space"), CancellationToken.None);
 
-        using var body = JsonDocument.Parse(await handler.Requests.Single().Content!.ReadAsStringAsync());
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies)!);
         Assert.False(body.RootElement.TryGetProperty("jurisdiction", out _));
         Assert.False(body.RootElement.TryGetProperty("document_ids", out _));
     }

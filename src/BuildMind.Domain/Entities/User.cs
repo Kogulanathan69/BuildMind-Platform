@@ -18,4 +18,31 @@ public sealed class User
 
     public DateTimeOffset CreatedAtUtc { get; init; }
         = DateTimeOffset.UtcNow;
+
+    public static User Restore(
+        Guid id,
+        string email,
+        string normalizedEmail,
+        string passwordHash,
+        string? fullName,
+        string? phoneNumber,
+        bool isActive,
+        DateTimeOffset createdAtUtc)
+    {
+        if (id == Guid.Empty)
+            throw new ArgumentException(
+                "User ID cannot be empty.", nameof(id));
+
+        return new User
+        {
+            Id = id,
+            Email = email,
+            NormalizedEmail = normalizedEmail,
+            PasswordHash = passwordHash,
+            FullName = fullName,
+            PhoneNumber = phoneNumber,
+            IsActive = isActive,
+            CreatedAtUtc = createdAtUtc
+        };
+    }
 }

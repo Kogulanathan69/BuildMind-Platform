@@ -61,6 +61,8 @@ internal sealed class ProjectRecord
 
     public long Revision { get; set; }
 
+    public long AuthorizationVersion { get; set; } = 1;
+
     public DateTimeOffset CreatedAtUtc { get; set; }
 
     public DateTimeOffset? UpdatedAtUtc { get; set; }

@@ -13,7 +13,7 @@ builder.Services
     .AddApplication()
     .AddInfrastructure(builder.Configuration)
     .AddBuildMindApiInfrastructure(builder.Configuration);
-
+var m1AuthEnabled = builder.AddM1AuthenticationApi();
 var app = builder.Build();
 
 // D04: safe response headers first, so they are also applied to error responses.
@@ -22,7 +22,13 @@ app.UseMiddleware<SecurityHeadersMiddleware>();
 // C3: safe RFC 9457 responses for unhandled exceptions and for empty 4xx/5xx responses (e.g. unknown routes).
 app.UseExceptionHandler();
 app.UseStatusCodePages();
-
+if (m1AuthEnabled)
+{
+    app.UseRouting();
+    app.UseRateLimiter();
+    app.UseAuthentication();
+    app.UseAuthorization();
+}
 // Liveness only: reports that the API process is running. It does not check MySQL, Python or RAG.
 app.MapGet("/health", () => Results.Ok(new { service = "buildmind-api", status = "ok" }));
 

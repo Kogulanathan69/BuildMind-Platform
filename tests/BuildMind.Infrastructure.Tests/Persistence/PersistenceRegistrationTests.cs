@@ -18,7 +18,8 @@ public sealed class PersistenceRegistrationTests
 
     /// <summary>The reviewed initial migration committed in STEP 06-E3 (generated in CI run 44314331460).</summary>
     internal const string InitialMigrationId = "20261118133137_InitialFeatureSchema";
-
+    internal const string AuthorizationMigrationId =
+    "20261119092022_AddProjectAuthorizationVersion";
     [Fact]
     public async Task Shipped_configuration_starts_with_the_database_disabled()
     {
@@ -148,7 +149,9 @@ public sealed class PersistenceRegistrationTests
             context.Model.GetEntityTypes().Select(e => e.GetTableName()).OrderBy(t => t, StringComparer.Ordinal));
         // The committed, reviewed migration is discoverable but never applied at start-up: the connection above
         // is still closed after the host started, so nothing connected to (let alone migrated) the database.
-        Assert.Equal(new[] { InitialMigrationId }, context.Database.GetMigrations());
+        Assert.Equal(
+            new[] { InitialMigrationId, AuthorizationMigrationId },
+            context.Database.GetMigrations());
         Assert.All(factory.Logs.Entries, e => Assert.DoesNotContain(Secret, e.AllText, StringComparison.Ordinal));
     }
 

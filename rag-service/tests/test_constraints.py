@@ -443,3 +443,71 @@ def test_retrieval_never_creates_constraints():
 
     assert before == after
     assert by_kind(after)["SIDE_SPACE_MIN"]["status"] == "UNVERIFIED" and by_kind(after)["FRONT_SETBACK_MIN"]["status"] == "MISSING"
+
+
+# ---- Python/C# receipt parity (M6 D02 C11) --------------------------------------------------------------------------
+
+def _real_shaped():
+    """In-memory REAL-SHAPED table and registry built from synthetic test data (never committed, never real values)."""
+    registry = copy.deepcopy(REVIEWERS)
+    registry["synthetic"] = False
+    registry["registry_version"] = "reviewers-2026.1"
+    for r in registry["reviewers"]:
+        r["reviewer_id"] = r["reviewer_id"].removeprefix("synthetic:")
+    registry = seal(registry)
+    table = copy.deepcopy(TABLE)
+    table["synthetic"] = False
+    table["table_version"] = "council-2026.1"
+    for n, c in enumerate(table["constraints"], 1):
+        if c["review_status"] != "UNREVIEWED":
+            c["reviewer_id"] = c["reviewer_id"].removeprefix("synthetic:")
+            c["review_reference"] = f"BMR-2026-{n:03d}"
+    table = seal(table)
+    pins = {"expected_version": "council-2026.1", "expected_sha256": table["integrity"]["sha256"],
+            "expected_reviewers_sha256": registry["integrity"]["sha256"]}
+    return table, registry, pins
+
+
+@pytest.mark.parametrize(("version", "synthetic"), [
+    ("reviewers-0.1", True),             # M6 D02 finding: synthetic registry without the synthetic- version prefix
+    ("synthetic-reviewers-2026.1", False),
+])
+def test_registry_version_prefix_must_match_the_synthetic_flag(version, synthetic):
+    if synthetic:
+        registry = seal(dict(copy.deepcopy(REVIEWERS), registry_version=version))
+        table, options = TABLE, {}
+    else:
+        table, registry, options = _real_shaped()
+        registry = seal(dict(registry, registry_version=version))
+        options = options | {"expected_reviewers_sha256": registry["integrity"]["sha256"], "allow_synthetic": False}
+
+    with pytest.raises(ValueError, match="registry version must start with synthetic- exactly when"):
+        provider(table, registry, **options)
+
+
+def _assert_csharp_receipt_prefix_rules(pack):
+    synthetic = pack["synthetic"]
+    assert pack["table_version"].startswith("synthetic-") == synthetic
+    assert pack["reviewer_registry_version"].startswith("synthetic-") == synthetic
+    for kind in pack["kinds"]:
+        for c in kind["constraints"]:
+            if c["review_status"] == "HUMAN_REVIEWED":
+                assert c["reviewer_id"].startswith("synthetic:") == synthetic
+                assert c["review_reference"].startswith("SYN-") == synthetic
+
+
+def test_every_pack_python_can_serve_satisfies_the_csharp_receipt_prefix_rules():
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
+    from build_contract_fixtures import reviewers as fixture_reviewers, scenario_cases, scenario_request
+    from synthetic_corpus import page_text
+
+    for _name, _description, table, overrides, _status in scenario_cases():
+        pack = ConstraintProvider(table, page_text, fixture_reviewers(), allow_synthetic=True).lookup(
+            ConstraintsRequest.model_validate(scenario_request(**overrides)))
+        _assert_csharp_receipt_prefix_rules(pack)
+
+    table, registry, pins = _real_shaped()
+    real = provider(table, registry, allow_synthetic=False, **pins).lookup(request(kinds=["REAR_SPACE_MIN", "BUILDING_HEIGHT_MAX"]))
+    assert real["synthetic"] is False and by_kind(real)["REAR_SPACE_MIN"]["status"] == "VERIFIED"
+    _assert_csharp_receipt_prefix_rules(real)

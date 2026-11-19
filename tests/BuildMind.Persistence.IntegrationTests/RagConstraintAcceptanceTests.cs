@@ -23,6 +23,7 @@ public sealed class RagConstraintAcceptanceTests(ITestOutputHelper output)
 {
     public const string UrlVariable = "BUILDMIND_TEST_RAG_ACCEPTANCE_URL";
     public const string TokenVariable = "BUILDMIND_TEST_RAG_ACCEPTANCE_TOKEN";
+    public const string NextTokenVariable = "BUILDMIND_TEST_RAG_ACCEPTANCE_TOKEN_NEXT";
 
     private static readonly RegulatoryConstraintKind[] Setbacks =
         [RegulatoryConstraintKind.FrontSetbackMin, RegulatoryConstraintKind.RearSpaceMin, RegulatoryConstraintKind.SideSpaceMin];
@@ -149,6 +150,39 @@ public sealed class RagConstraintAcceptanceTests(ITestOutputHelper output)
 
         Assert.Equal(Revision, pack.Binding.ProjectRevision);
         Assert.NotEqual(scenario["response"]!["evidence_pack_id"]!.GetValue<string>(), pack.EvidencePackId); // bound to the revision
+    }
+
+    [Fact]
+    public async Task AC05_live_token_rotation_accepts_current_and_next_tokens_and_nothing_else()
+    {
+        var scenario = Scenario("all-setbacks-verified");
+        var query = Query(scenario["request"]!);
+        var current = Require(TokenVariable);
+        var next = Require(NextTokenVariable);
+        Assert.NotEqual(current, next);
+
+        var withCurrent = await Client("all-setbacks-verified", current).GetConstraintsAsync(query, CancellationToken.None);
+        var withNext = await Client("all-setbacks-verified", next).GetConstraintsAsync(query, CancellationToken.None);
+        var retired = await Assert.ThrowsAsync<DependencyFailureException>(() =>
+            Client("all-setbacks-verified", "synthetic-retired-token-0123456789abcdef0123").GetConstraintsAsync(query, CancellationToken.None));
+
+        Assert.Equal(withCurrent.EvidencePackId, withNext.EvidencePackId); // same verified evidence through either credential
+        Assert.Equal(401, retired.StatusCode);
+    }
+
+    [Fact]
+    public async Task AC06_live_caller_cancellation_is_not_reported_as_a_dependency_failure()
+    {
+        var scenario = Scenario("all-setbacks-verified");
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            Client("all-setbacks-verified", Require(TokenVariable)).GetConstraintsAsync(Query(scenario["request"]!), cancelled.Token));
+
+        // The service stays healthy for the next caller (no leaked slot or poisoned connection).
+        var pack = await Client("all-setbacks-verified", Require(TokenVariable)).GetConstraintsAsync(Query(scenario["request"]!), CancellationToken.None);
+        Assert.Equal(scenario["response"]!["evidence_pack_id"]!.GetValue<string>(), pack.EvidencePackId);
     }
 
     private static string FeasibleJson(ConstraintEvidenceAssessment assessment)

@@ -66,3 +66,5 @@ Start-up failure tests must prove the failure is an `OptionsValidationException`
 - (M7 phase 02) RAG readiness reports reasons only: no URL, exception text or response body. Its probe is bounded to 3 s even if the transport ignores cancellation, and it has its own single-flight gate, separate from Python and MySQL.
 
 - (G11 MVP) rag-service requires the internal shared-secret token on every path except `/health` (default-deny, constant-time compare, two-token rotation, fail closed: 503 when required but unconfigured). C# sends it only to the validated base URL, never as `Authorization`, and never logs it. Outside Development an enabled RAG without a token fails start-up. See doc 31.
+
+- (M6-review corrections) Strict raw-JSON validation before deserialization on both sides; duplicate JSON properties rejected (API input, internal responses, rag-service requests); repeated internal-token headers rejected; tokens refused over plaintext to network hosts outside Development; constraint tables refused unless every citation reconstructs from the hash-verified corpus.

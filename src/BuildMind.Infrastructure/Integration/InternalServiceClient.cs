@@ -33,7 +33,24 @@ public class InternalServiceClient
     public const int DefaultMaxResponseBytes = 4 * 1024 * 1024;
 
     /// <summary>Web defaults (camelCase, case-insensitive) with an explicit nesting limit for untrusted responses.</summary>
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { MaxDepth = 64 };
+    /// <summary>
+    /// M6-review correction: strict contracts. Duplicate properties and unknown members are rejected; the raw document
+    /// is validated first (no comments, no trailing commas, depth, object root) BEFORE typed deserialization.
+    /// </summary>
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        MaxDepth = 64,
+        AllowDuplicateProperties = false,
+        UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow,
+    };
+
+    private static readonly JsonDocumentOptions StrictDocument = new()
+    {
+        MaxDepth = 64,
+        AllowDuplicateProperties = false,
+        AllowTrailingCommas = false,
+        CommentHandling = JsonCommentHandling.Disallow,
+    };
 
     private readonly HttpClient http;
     private readonly InternalServiceOptions options;
@@ -222,6 +239,11 @@ public class InternalServiceClient
                 throw Failure(DependencyFailureKind.Unavailable, status);
             }
 
+            if (!IsStrictJsonObject(body))
+            {
+                throw Failure(DependencyFailureKind.MalformedResponse, status);
+            }
+
             T? value;
             try
             {
@@ -271,6 +293,20 @@ public class InternalServiceClient
     /// Explicit W3C propagation from the current activity (the request's trace). SocketsHttpHandler's diagnostics
     /// handler also propagates, and skips the header when it is already present, so it is never duplicated.
     /// </summary>
+    /// <summary>Raw validation before deserialization: well-formed, no duplicate properties, bounded depth, object root.</summary>
+    internal static bool IsStrictJsonObject(ReadOnlySpan<byte> body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body.ToArray(), StrictDocument);
+            return document.RootElement.ValueKind == JsonValueKind.Object;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     private static void PropagateTraceContext(HttpRequestMessage request)
     {
         var activity = Activity.Current;

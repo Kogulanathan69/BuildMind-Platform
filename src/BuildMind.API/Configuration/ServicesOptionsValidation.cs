@@ -13,7 +13,7 @@ public sealed class ServicesOptionsValidation(IHostEnvironment environment) : IV
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var failures = options.Validate(requireRagAuthToken: !environment.IsDevelopment());
+        var failures = options.Validate(requireRagAuthToken: !environment.IsDevelopment(), enforceSecureTransport: !environment.IsDevelopment());
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }
 }

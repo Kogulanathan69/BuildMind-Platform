@@ -90,3 +90,31 @@
 > 3. your preferred delivery path (constraints passed to your validator as input through C#).
 >
 > Nothing will be implemented until M6, M7 and the lead approve.
+
+## 9. Revised technical submission to M6 (2026-11-19, after the M6 review: 2 PASS / 6 PARTIAL / 4 FAIL)
+**Status:** constraints contract **v0 IMPLEMENTED on `feature/m7-regulatory-constraints` with synthetic fixtures only**. It still **needs M6 + lead approval** before any real values are loaded or M6 consumes it. No M6-owned code was changed.
+
+### What M6 asked for → what now exists
+| M6 review area | Implementation | Evidence |
+|---|---|---|
+| Versioned, human-reviewed provider | `rag-service/app/constraints.py`: table with `contract_version` `constraints-0`, `table_version`, `synthetic` flag; strict schema (`extra=forbid`, frozen) | `tests/test_constraints.py` |
+| Verified numeric values and units | Closed kind enum; each kind fixes its comparator (`>=` MIN, `<=` MAX) and unit (`m`, `percent`, `ratio`, `count`); finite values in plausible ranges | Load-refusal tests (unit, comparator, range, NaN, unknown kind) |
+| Source provenance | Every constraint cites document/page/offsets/excerpt; **the table is refused unless every excerpt reconstructs exactly from the hash-verified corpus** | Synthetic refusals; **real-corpus test: synthetic citations are refused against the real corpus** |
+| Applicability | `applies_to` (`residential`/`any`) plus structured `conditions` (field/comparator/value/unit) returned as data; **M6 evaluates them** | Condition-scope test (different conditions ≠ conflict) |
+| Missing / conflicting / unverified states | Per kind: `VERIFIED` (only HUMAN_REVIEWED), `UNVERIFIED` (unreviewed only), `CONFLICTING` (reviewed values disagree in the same scope), `MISSING` (never "no limit"); `REJECTED` never returned; overall `COMPLETE` only if all VERIFIED | State tests |
+| Never auto-verify retrieved passages | The provider has no dependency on retrieval; there is no automatic review state; a search cannot change a pack | `test_retrieval_never_creates_constraints` |
+| Binding to exact revisions | Request **requires** `binding{project_id, project_revision, land_revision_id, requirement_revision_id}`; echoed and covered by a deterministic `evidence_pack_id` (SHA-256 of the canonical pack) | Determinism and revision-sensitivity tests; the C# client rejects a pack bound to any other revision |
+| Request validation and payload limits | Strict raw JSON before the models: streamed 16 KB limit (also chunked), `application/json` only, duplicate keys/NaN/trailing commas/depth > 32/non-object root → 400; schema → 422; no input echo | `tests/test_strict_json.py` |
+| Deterministic validation authoritative | The contract carries data only; M7 never returns pass/fail for a plan | By design; C# port docs |
+
+### Endpoint
+`POST /internal/v1/regulations/constraints`. Internal token required; it returns 503 `CONSTRAINTS_UNAVAILABLE` when no table is configured, or refuses to start when the corpus is missing (provenance cannot be verified). Example: `rag-service/contract/constraints_response.v0.example.json` (generated from the real provider; validated by both Python and C# tests).
+
+### C#
+`IRegulatoryConstraintSource` → `RagServiceClient.GetConstraintsAsync`. It validates the pack on receipt (binding, kinds, state consistency, units, comparators, no REJECTED, legal flag) → otherwise `MalformedResponse`.
+
+### Still needs M6 + lead decisions
+1. **Kind set and units:** is the first set (7 kinds) right for M6's validator?
+2. **Condition fields** (`building_height_m`, `plot_area_m2`, `floors`, `road_width_m`): where M6 gets their actual values (M2 land / M5 requirements).
+3. **Real values:** who is the domain reviewer (G06), and where does the reviewed table live? **No real regulatory values are in the repository.**
+4. **Gazette vs council precedence:** currently exact-jurisdiction only; overlapping scopes are not merged.

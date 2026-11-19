@@ -97,6 +97,10 @@ class SyntheticEngine:
     def registry(self):
         return self.index["source_registry"]
 
+    def page_text(self, document_id, page):
+        pages = PAGES.get(document_id)
+        return pages[page - 1] if pages and 1 <= page <= len(pages) else None
+
 
 def page_text(document_id, page):
     return PAGES[document_id][page - 1]

@@ -31,6 +31,18 @@ def _records(engine):
     return engine._service.assessor.records
 
 
+def test_constraints_citing_passages_absent_from_the_real_corpus_are_refused(engine):
+    """A table whose citations do not reconstruct from the approved, hash-verified corpus can never load."""
+    import json
+    from pathlib import Path
+
+    from app.constraints import ConstraintProvider
+
+    synthetic = json.loads((Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "synthetic_constraints.v0.json").read_text(encoding="utf-8"))
+    with pytest.raises(ValueError, match="does not reconstruct"):
+        ConstraintProvider(synthetic, engine.page_text)
+
+
 def test_exactly_the_three_approved_sources_are_served(client):
     sources = client.get("/internal/v1/regulations/sources").json()["sources"]
 

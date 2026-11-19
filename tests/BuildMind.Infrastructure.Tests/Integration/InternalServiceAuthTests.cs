@@ -72,7 +72,7 @@ public sealed class InternalServiceAuthTests
     {
         await using var factory = new BuildMindApiFactory(
             "Production",
-            new Dictionary<string, string?> { ["Services:Rag:Enabled"] = "true", ["Services:Rag:BaseUrl"] = "http://rag.internal:8100" });
+            new Dictionary<string, string?> { ["Services:Rag:Enabled"] = "true", ["Services:Rag:BaseUrl"] = "https://rag.internal:8100" });
 
         var exception = Record.Exception(() => factory.CreateClient());
 
@@ -101,7 +101,7 @@ public sealed class InternalServiceAuthTests
             new Dictionary<string, string?>
             {
                 ["Services:Rag:Enabled"] = "true",
-                ["Services:Rag:BaseUrl"] = "http://rag.internal:8100",
+                ["Services:Rag:BaseUrl"] = "https://rag.internal:8100",
                 ["Services:Rag:AuthToken"] = Token,
             });
         await using var host = factory.WithRagTransport(StubHttpHandler.Throws(new HttpRequestException("refused")));

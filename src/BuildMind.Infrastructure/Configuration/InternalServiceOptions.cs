@@ -35,4 +35,11 @@ public sealed class InternalServiceOptions
     /// Required for RAG outside Development (fail closed).
     /// </summary>
     public string? AuthToken { get; set; }
+
+    /// <summary>
+    /// Outside Development a token-bearing service must use https or a loopback address, so the shared secret never
+    /// crosses a network in cleartext. Setting this to true is an explicit, reviewable exception for a private network
+    /// until the hosting/TLS decision (G11) is made. Default false.
+    /// </summary>
+    public bool AllowPlaintextPrivateNetwork { get; set; }
 }

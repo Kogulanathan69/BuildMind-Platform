@@ -81,3 +81,5 @@
 2026-11-19 — Final integration 01: CI full-stack smoke + live C#→RAG tests; R-1/R-3 fact-based re-evaluation (doc 27 §6). Evidence EV-20261119-16.
 
 2026-11-19 — Final integration 02: run #72 step-level evidence (full-stack smoke, live RAG); final M4/M7 delivery status (doc 28 §7). Evidence EV-20261119-17.
+
+2026-11-19 — M6-review corrections: human-reviewed constraint provider (contract v0, synthetic), strict raw-JSON validation (C# + Python), token transport enforcement, constraint C# port/client. Evidence EV-20261119-19.

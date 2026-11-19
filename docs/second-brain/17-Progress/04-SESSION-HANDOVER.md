@@ -236,3 +236,8 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Final M4/M7 delivery status: doc 28 §7.
 - PR #32 ready for independent review.
 - Remaining work needs decisions or other members.
+
+## 2026-11-19 — M6-review corrections
+- Constraint provider (v0, synthetic), strict JSON and auth/transport hardening on `feature/m7-regulatory-constraints`.
+- Revised M6 submission: doc 29 §9.
+- Approvals needed: see open decisions.

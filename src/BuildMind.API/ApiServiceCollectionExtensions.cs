@@ -24,6 +24,9 @@ public static class ApiServiceCollectionExtensions
 
         // C3/C5: RFC 9457 Problem Details with BuildMind code, type and traceId conventions.
         services.AddProblemDetails(options => options.CustomizeProblemDetails = ProblemDetailsDefaults.Apply);
+
+        // M6-review correction: a JSON body with duplicate properties is malformed (400), never "last one wins".
+        services.ConfigureHttpJsonOptions(options => options.SerializerOptions.AllowDuplicateProperties = false);
         services.AddExceptionHandler<GlobalExceptionHandler>();
 
         // C10: the framework middleware's own exception diagnostics (which include the full exception) are
@@ -73,6 +76,8 @@ public static class ApiServiceCollectionExtensions
             .ConfigurePrimaryHttpMessageHandler(CreateInternalServiceHandler)
             .RemoveAllLoggers();
         services.AddTransient<BuildMind.Application.Abstractions.Regulations.IRegulationEvidenceSource>(
+            provider => provider.GetRequiredService<RagServiceClient>());
+        services.AddTransient<BuildMind.Application.Abstractions.Regulations.IRegulatoryConstraintSource>(
             provider => provider.GetRequiredService<RagServiceClient>());
 
         // BE-M4-D04: do not advertise the server implementation. This only affects Kestrel; a reverse proxy

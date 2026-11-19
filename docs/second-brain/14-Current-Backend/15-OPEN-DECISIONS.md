@@ -156,3 +156,5 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
   - python-services authentication with its maintainer.
 
 - 2026-11-19 (cross-member integration, doc 29 §12): M4/M7-owned H4-R1 items are closed or proposed for closure: revision width, strict typing, no-reflection errors, two-setting auth opt-out, live synthetic acceptance. **Still needed:** M6 + lead answers to §11 items 1–4; M6 runtime consumer; M2/M5 condition-value sources; evidence pack id in M6 jobs (M4 + M6); G06 real registry/tables; python-services auth; G11; G19.
+
+- 2026-11-19 (final acceptance, doc 29 §14): **new decision for the python-services maintainer, M6 and the lead:** `shapely` is in no python-services requirements file, so M6 D02 geometry/feasibility tests are skipped (locally confirmed; CI very likely). Either pin `shapely` or make the D02 tests fail rather than skip in CI. Still open: §11 items 1–4, M6 pack-id propagation, G06, python-services auth, G11, G19, R-1/R-3.

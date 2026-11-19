@@ -91,3 +91,5 @@
 2026-11-19 — Cross-member integration: Int64 bounded revisions, strict C# internal typing, fixed 422 bodies, two-setting RAG auth opt-out, test-only acceptance service + C# live acceptance (AC01–AC04) in CI. Evidence EV-20261119-22.
 
 2026-11-19 — PR #41 CI corrections: structured problem-details leakage check, distinct CI loopback ports with guards and a regression test, rag-service workload bounds (C10). Evidence EV-20261119-23.
+
+2026-11-19 — Final cross-member acceptance: synthetic registry-version prefix parity, CI live token rotation and cancellation acceptance, C10 real-engine evidence, M4/M7 acceptance matrix (doc 29 §14), `shapely` skip finding. Evidence EV-20261119-24.

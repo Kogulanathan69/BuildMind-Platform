@@ -255,3 +255,35 @@ CI on candidate `58d793a` (merge `2b70062`), as reported by the lead from the ac
 - **C# mapping:** 503 → `Unavailable`, 504 → `Timeout`, which is the existing safe mapping.
 - **Tests:** 11, covering timeout, busy refusal, recovery, constraint lookups, normal work and configuration bounds.
 - **Out of scope:** process-level limits (uvicorn `--limit-concurrency`, container CPU and memory) remain deployment items (G11).
+
+## 14. Final cross-member acceptance evidence (2026-11-19, after PRs #41 and #42)
+**Merges:**
+- **PR #42 (M6 D02, footprint and feasibility)** → `9bbed47`.
+- **PR #41 (M4/M7)** → `0c61f49`. Its tree differs from the head `2beacad` only because #42 merged first. The PR's patch ID equals the merged change (`88d90d67…`), so #41 landed byte-identically, and no file was touched by both PRs. **0 independent reviews** on either PR (G19).
+- **CI:** #90 (PR #42), #92 (PR #41 head) and **post-merge #93**: all jobs succeeded, including the acceptance-service start and stop, C# tests, rag-service tests and the full-stack smoke (step metadata).
+
+### M4/M7 items closed on `feature/m7-final-acceptance`
+| Condition (M6 D02 reassessment) | Item | Correction | Evidence |
+|---|---|---|---|
+| C11 | "An isolated synthetic registry with a non-prefixed version was accepted by Python, while the C# receipt policy requires the `synthetic-` prefix" | Python now refuses any registry whose version prefix disagrees with its `synthetic` flag, in both directions | M6's exact case refused; parity test: **every pack Python can serve** (all 6 scenarios plus an in-memory real-shaped table and registry) satisfies the C# receipt prefix rules for table version, registry version, reviewer ids and references |
+| C09/C10 | Credential operations unverified | Live rotation window in CI: the acceptance service runs with a **current and a next** random token. Both are masked and both are in the credential scan | AC05: both tokens return the same verified pack; a retired token gets 401 |
+| C10 | Production resource and cancellation behaviour | Live caller cancellation through the production client, and a **real-engine** overload run | AC06: cancellation is not a dependency failure and the next call succeeds. Local real corpus at capacity 1 with 16 concurrent searches: 11×200 and 5×503 `SERVICE_BUSY`, no other status, no unhandled error, healthy afterwards, token absent from the log |
+| C08 | Int32 vs Int64 revision | **Closed in #41** (M6 D02 assessed #40) | AC04 + bounds tests |
+
+### Acceptance status (M4/M7 scope)
+| Condition | M4/M7 status | Remaining owner and item |
+|---|---|---|
+| C01, C05, C06, C07 | Met (synthetic scope) | M6 + lead: final mandatory kinds |
+| C02 | Met for provenance mechanics | Lead/G06: clause identity, legal currency, domain sign-off |
+| C03 | Met for overlap without precedence | M2/M5/M6: parcel facts, edge assignment; lead: authority precedence |
+| C04 | Met for authorization mechanics | Lead/G06: real reviewer appointments, table custody, real values |
+| C08 | Met for C# binding, digest and Int64 | **M6 + M4:** propagate the verified `evidence_pack_id` and revision through D02 results and jobs (needs §11 item 3) |
+| C09 | Met for client and RAG controls | python-services maintainer: inbound auth; lead/G11: hosting, TLS, Staging policy |
+| C10 | Met for client deadline, server bounds, rotation and cancellation | G11: process-level limits (uvicorn connection cap, container CPU and memory) |
+| C11 | Met for canonical, scenario and prefix parity | **M6 + lead:** reviewer UUID vs string; kind-to-edge mapping (§11 items 1–2) |
+| C12 | Synthetic live end to end met (AC01–AC06) | Real rules, approved corpus in an approved environment, persisted jobs |
+
+### New cross-member finding: M6 D02 tests are skipped without `shapely`
+`python-services/tests/m6_contract/test_d02_{feasibility,footprint,parcel}.py` use `importorskip("shapely")`. `shapely` is in **no** python-services requirements file, which is what CI installs. Locally the three modules are reported as SKIPPED (639 passed, 3 skipped), and CI most likely skips them too, while the job shows green. M6's D02 report states that "Shapely 2.1.2 was already available in the approved local environment".
+
+**Decision needed (dependency change, owned by the python-services maintainer and M6):** either pin `shapely` in the python-services requirements, so the D02 engine is tested in CI and available at runtime, or make the D02 tests fail rather than skip in CI. Not changed here: dependency changes require approval.

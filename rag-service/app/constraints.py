@@ -53,6 +53,7 @@ CONDITION_RULES: dict[str, tuple[str, tuple[float, float]]] = {
 }
 MAX_PROJECT_REVISION = 999_999_999_999_999
 SYNTHETIC_REVIEWER_PREFIX = "synthetic:"
+SYNTHETIC_VERSION_PREFIX = "synthetic-"
 SYNTHETIC_REFERENCE_PREFIX = "SYN-"
 
 DocumentId = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
@@ -292,6 +293,9 @@ class ConstraintProvider:
             raise ValueError("duplicate reviewer_id in reviewer registry")
         if any(r.startswith(SYNTHETIC_REVIEWER_PREFIX) != self.registry.synthetic for r in registered):
             raise ValueError("reviewer ids must be synthetic exactly when the registry is synthetic")
+        if self.registry.registry_version.startswith(SYNTHETIC_VERSION_PREFIX) != self.registry.synthetic:
+            # Parity with the C# receipt policy (M6 D02 C11): synthetic registries use synthetic- versions, real never.
+            raise ValueError("reviewer registry version must start with synthetic- exactly when the registry is synthetic")
         self.table = ConstraintTable.model_validate(table)
         sealed = table_digest(table)
         if sealed != self.table.integrity.sha256:
@@ -300,14 +304,14 @@ class ConstraintProvider:
         if t.synthetic:
             if not allow_synthetic:
                 raise ValueError("synthetic constraint tables are allowed only in isolated development/testing")
-            if not t.table_version.startswith("synthetic-"):
+            if not t.table_version.startswith(SYNTHETIC_VERSION_PREFIX):
                 raise ValueError("synthetic tables must use a synthetic- version")
         else:
             if expected_version is None or expected_sha256 is None or expected_reviewers_sha256 is None:
                 raise ValueError("a real constraint table requires version, table digest and reviewer registry digest pins")
             if self.registry.synthetic:
                 raise ValueError("a real constraint table cannot be authorized by a synthetic reviewer registry")
-            if t.table_version.startswith("synthetic-"):
+            if t.table_version.startswith(SYNTHETIC_VERSION_PREFIX):
                 raise ValueError("a real table must not use a synthetic version")
         if t.synthetic and not self.registry.synthetic:
             raise ValueError("a synthetic table must not be signed against the real reviewer registry")

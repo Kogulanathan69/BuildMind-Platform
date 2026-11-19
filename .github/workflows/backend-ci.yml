@@ -273,13 +273,17 @@ jobs:
           token="$(openssl rand -hex 24)"
           echo "::add-mask::${token}"
           echo "BM_RAG_ACCEPTANCE_TOKEN=${token}" >> "$GITHUB_ENV"
+          # Rotation evidence (C09/C10): the service accepts the current AND the next token during a rotation window.
+          next="$(openssl rand -hex 24)"
+          echo "::add-mask::${next}"
+          echo "BM_RAG_ACCEPTANCE_TOKEN_NEXT=${next}" >> "$GITHUB_ENV"
           # Own port (the smoke API uses 8097): refuse to start if anything already listens on 8094.
           if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:8094/ || true)" != "000" ]; then
             echo "Port 8094 is already in use; refusing to share it" >&2
             exit 1
           fi
           cd rag-service
-          BUILDMIND_ACCEPTANCE_SYNTHETIC=1 BUILDMIND_RAG_INTERNAL_TOKENS="$token" nohup python -B -m uvicorn acceptance_app:app \
+          BUILDMIND_ACCEPTANCE_SYNTHETIC=1 BUILDMIND_RAG_INTERNAL_TOKENS="${token},${next}" nohup python -B -m uvicorn acceptance_app:app \
             --app-dir tests --host 127.0.0.1 --port 8094 --log-level warning > "$RUNNER_TEMP/rag-acceptance.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/rag-acceptance.pid"
           probe=http://127.0.0.1:8094/scenario/north-baseline/internal/v1/regulations/constraints
@@ -308,6 +312,7 @@ jobs:
           BUILDMIND_TEST_RAG_TOKEN: ${{ env.BM_RAG_TOKEN }}
           BUILDMIND_TEST_RAG_ACCEPTANCE_URL: http://127.0.0.1:8094
           BUILDMIND_TEST_RAG_ACCEPTANCE_TOKEN: ${{ env.BM_RAG_ACCEPTANCE_TOKEN }}
+          BUILDMIND_TEST_RAG_ACCEPTANCE_TOKEN_NEXT: ${{ env.BM_RAG_ACCEPTANCE_TOKEN_NEXT }}
         run: >-
           dotnet test "$SPIKE_PROJECT"
           --configuration Release
@@ -344,7 +349,7 @@ jobs:
         if: always()
         run: |
           mkdir -p TestResults
-          for secret in "$BM_ROOT_PASSWORD" "$BM_TEST_PASSWORD" "$BM_RUNTIME_PASSWORD" "$BM_RAG_TOKEN" "$BM_RAG_ACCEPTANCE_TOKEN"; do
+          for secret in "$BM_ROOT_PASSWORD" "$BM_TEST_PASSWORD" "$BM_RUNTIME_PASSWORD" "$BM_RAG_TOKEN" "$BM_RAG_ACCEPTANCE_TOKEN" "$BM_RAG_ACCEPTANCE_TOKEN_NEXT"; do
             [ -n "$secret" ] || continue
             if grep -rqF -- "$secret" TestResults; then
               echo "A credential was found in the test results; artifact upload is blocked." >&2

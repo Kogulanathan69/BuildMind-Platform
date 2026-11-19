@@ -91,3 +91,6 @@ C# configuration: `Services__Rag__Enabled=true`, `Services__Rag__BaseUrl=http://
 - a slot is freed only when its work has actually finished.
 
 Invalid values fail start-up.
+
+## Version prefix parity
+A synthetic reviewer registry must use a `synthetic-` registry version, and a real one must not. This matches the C# receipt policy.

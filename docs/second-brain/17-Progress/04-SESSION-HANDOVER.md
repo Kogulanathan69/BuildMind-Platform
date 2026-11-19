@@ -269,3 +269,8 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 ## 2026-11-19 — Shapely pin and mandatory-test guard
 - `chore/m4-m6-shapely-geometry-ci`: `shapely==2.1.2` (approved) and a CI guard against skipped mandatory tests; locally 717/0/0 with 89/89 D02.
 - Next: CI counts for this branch and for `feature/m7-final-acceptance` (AC05/AC06), read from the JUnit artifacts or job logs.
+
+## 2026-11-19 — Final M4/M7 verdict
+- Doc 34: DELIVERED for MVP development scope, NOT production-ready.
+- Open items by member are in doc 34 §4, including an M1 migration and JWT packages needing M4 and dependency review.
+- R-1/R-3, G06, G11 and G19 stay open.

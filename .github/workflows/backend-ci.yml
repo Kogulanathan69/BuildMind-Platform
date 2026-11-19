@@ -239,17 +239,62 @@ jobs:
           echo "Python service did not become ready within 30 s" >&2
           tail -n 50 "$RUNNER_TEMP/python-service.log" >&2
           exit 1
+      # M7 full-stack smoke (lead-approved 2026-11-19): the REAL rag-service, loopback only, random per-run internal
+      # token (G11 MVP), NO regulation corpus (the corpus never enters CI).
+      - name: Start the RAG service (loopback only, per-run token, bounded readiness)
+        run: |
+          token="$(openssl rand -hex 24)"
+          echo "::add-mask::${token}"
+          echo "BM_RAG_TOKEN=${token}" >> "$GITHUB_ENV"
+          python -m pip install --disable-pip-version-check -r rag-service/requirements.txt
+          cd rag-service
+          BUILDMIND_RAG_INTERNAL_TOKENS="$token" nohup python -B -m uvicorn app.main:app --host 127.0.0.1 --port 8098 \
+            --log-level warning > "$RUNNER_TEMP/rag-service.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/rag-service.pid"
+          for attempt in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://127.0.0.1:8098/health > /dev/null; then
+              echo "RAG service ready on 127.0.0.1:8098"
+              exit 0
+            fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/rag-service.pid")" 2>/dev/null; then
+              echo "RAG service exited during startup" >&2
+              tail -n 50 "$RUNNER_TEMP/rag-service.log" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "RAG service did not become ready within 30 s" >&2
+          tail -n 50 "$RUNNER_TEMP/rag-service.log" >&2
+          exit 1
       - name: Run MySQL compatibility tests
         env:
           BUILDMIND_TEST_MYSQL: Server=127.0.0.1;Port=3306;User ID=bm_test;SslMode=Required;Password=${{ env.BM_TEST_PASSWORD }}
           BUILDMIND_TEST_MYSQL_RUNTIME: Server=127.0.0.1;Port=3306;Database=buildmind_dev;User ID=bm_runtime;SslMode=Required;Password=${{ env.BM_RUNTIME_PASSWORD }}
           BUILDMIND_TEST_PYTHON_URL: http://127.0.0.1:8099
+          BUILDMIND_TEST_RAG_URL: http://127.0.0.1:8098
+          BUILDMIND_TEST_RAG_TOKEN: ${{ env.BM_RAG_TOKEN }}
         run: >-
           dotnet test "$SPIKE_PROJECT"
           --configuration Release
           --logger "trx;LogFileName=mysql-compatibility.trx"
           --logger "console;verbosity=normal"
           --results-directory TestResults
+      - name: Full-stack smoke (API + MySQL + Python + RAG)
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          Database__Enabled: 'true'
+          ConnectionStrings__BuildMind: Server=127.0.0.1;Port=3306;Database=buildmind_dev;User ID=bm_runtime;SslMode=Required;Password=${{ env.BM_RUNTIME_PASSWORD }}
+          Services__Python__Enabled: 'true'
+          Services__Python__BaseUrl: http://127.0.0.1:8099/
+          Services__Rag__Enabled: 'true'
+          Services__Rag__BaseUrl: http://127.0.0.1:8098/
+          Services__Rag__AuthToken: ${{ env.BM_RAG_TOKEN }}
+          API_PORT: '8097'
+          SMOKE_OUT: TestResults/smoke
+          SMOKE_EXPECT_MYSQL: Healthy:reachable
+          SMOKE_EXPECT_PYTHON: Healthy:reachable
+          SMOKE_EXPECT_RAG: Degraded:unavailable   # live, authenticated, but no corpus in CI
+        run: bash tools/smoke/full-stack-smoke.sh
       - name: Verify disposable databases were removed
         if: always()
         run: |
@@ -264,7 +309,8 @@ jobs:
         if: always()
         run: |
           mkdir -p TestResults
-          for secret in "$BM_ROOT_PASSWORD" "$BM_TEST_PASSWORD" "$BM_RUNTIME_PASSWORD"; do
+          for secret in "$BM_ROOT_PASSWORD" "$BM_TEST_PASSWORD" "$BM_RUNTIME_PASSWORD" "$BM_RAG_TOKEN"; do
+            [ -n "$secret" ] || continue
             if grep -rqF -- "$secret" TestResults; then
               echo "A credential was found in the test results; artifact upload is blocked." >&2
               exit 1
@@ -279,6 +325,7 @@ jobs:
             TestResults/*.trx
             TestResults/generated-spike-migration-*.sql
             TestResults/buildmind-migration/
+            TestResults/smoke/
           retention-days: 14
           if-no-files-found: warn
       - name: Stop the Python service
@@ -288,6 +335,14 @@ jobs:
             kill "$(cat "$RUNNER_TEMP/python-service.pid")" 2>/dev/null || true
             sleep 1
             kill -9 "$(cat "$RUNNER_TEMP/python-service.pid")" 2>/dev/null || true
+          fi
+      - name: Stop the RAG service
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/rag-service.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/rag-service.pid")" 2>/dev/null || true
+            sleep 1
+            kill -9 "$(cat "$RUNNER_TEMP/rag-service.pid")" 2>/dev/null || true
           fi
       - name: Remove disposable MySQL container
         if: always()

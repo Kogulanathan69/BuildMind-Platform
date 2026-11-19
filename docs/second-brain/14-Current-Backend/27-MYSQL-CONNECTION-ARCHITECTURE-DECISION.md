@@ -45,3 +45,23 @@
 - Doc 25 §16: PR #30 stalled-handshake failure.
 - Doc 25 §17: 10-I operation-scoped ownership.
 - Doc 18: original provider study.
+
+## 6. Fact-based re-evaluation (2026-11-19, final integration step 01)
+**Context:** PR #30 (the strict gate) is merged on `develop`; R-1 and R-3 are open there.
+
+**NuGet facts (queried 2026-11-19):**
+
+| Package | Latest | EF Core support | Consequence |
+|---|---|---|---|
+| MySql.Data | 26.10.0 | n/a (ADO.NET) | **No fixed release** (the race is verified in 26.10.0 IL), so option B isn't available today |
+| MySql.EntityFrameworkCore | 10.0.12 (11.0.0-preview) | EF Core 10 | The current provider; it depends on MySql.Data |
+| MySqlConnector | 3.0.0 | n/a (ADO.NET) | A candidate ADO.NET driver |
+| **Pomelo.EntityFrameworkCore.MySql** | **9.0.0** | **EF Core `[9.0.0, 9.0.999]` only** | **Option D is not viable on EF Core 10.0.12**; it would need an EF Core 9 downgrade across all projects, migrations and tests (high risk, not recommended) |
+
+**Already-present mitigation for R-3 (option F, partly in place):** MySQL readiness opens its connection through the same process-wide gate. A stalled handshake that holds the gate makes the MySQL readiness probe exceed its 3 s deadline → `Unhealthy/timeout` → `/health/ready` **503**. A hosting platform that removes or restarts instances failing readiness therefore already recovers from R-3. What's still missing is the hosting/orchestrator policy (G11 hosting) and a liveness-vs-readiness restart rule.
+
+**Revised recommendation (for the lead; nothing implemented):**
+1. **Keep A (strict gate)** for the MVP.
+2. **Adopt F operationally** once hosting is chosen: route traffic on readiness, restart after N consecutive readiness 503s. This needs no provider change.
+3. **Track upstream** (B, report approval pending) and **Pomelo EF Core 10** (re-evaluate D when a Pomelo 10.x release exists).
+4. **E (circuit breaker)** only if production telemetry shows queued opens. The lease (H) stays excluded.

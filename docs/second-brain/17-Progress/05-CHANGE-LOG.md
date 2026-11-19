@@ -95,3 +95,5 @@
 2026-11-19 — Final cross-member acceptance: synthetic registry-version prefix parity, CI live token rotation and cancellation acceptance, C10 real-engine evidence, M4/M7 acceptance matrix (doc 29 §14), `shapely` skip finding. Evidence EV-20261119-24.
 
 2026-11-19 — Pinned `shapely==2.1.2` for M6 D02 (lead-approved) and added a CI guard so mandatory python-services tests cannot silently skip. Evidence EV-20261119-25.
+
+2026-11-19 — Final M4/M7 MVP delivery verdict (doc 34) after PR #45 (`2b277f9`). Evidence EV-20261119-26.

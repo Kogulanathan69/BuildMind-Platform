@@ -71,3 +71,5 @@
 2026-11-19 — M7 MVP: rag-service FastAPI (evidence contract v1) reusing the verified STEP 4/6 engine (code-only copy); C# `IRegulationEvidenceSource`/`RagServiceClient`; shared contract example; real-corpus and E2E evidence. Evidence EV-20261119-10..11.
 
 2026-11-19 â€” M7 phase 02: real RAG readiness (`RagReadinessCheck`, shared `BoundedServiceProbe`); M6 integration audit (blocked); consolidated MVP status/dependencies (doc 28). Evidence EV-20261119-12.
+
+2026-11-19 — Phase 03: PR #32 CI fix verified green, `develop` merged into the M7 branch; M6–M7 regulatory constraint contract proposal (doc 29); local runbook (doc 30); final MVP status (doc 28 §5). Evidence EV-20261119-13.

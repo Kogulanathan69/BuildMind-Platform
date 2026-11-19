@@ -132,3 +132,5 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
   **Still open:** G11 internal authentication and transport; CI workflow integration of the rag-service tests; a real RAG readiness probe; the M6 evidence consumer (D05); legal currency of the 3 sources (G06).
 
 - 2026-11-19 (M7 phase 02): **M7-D05 blocked**. No M6 code or contract exists on any branch; M6's plan requires "M7 sourced rules/constraints". A structured regulatory-constraint contract (reviewed constraints with provenance, consumed by M6's deterministic validator) needs **M6 + M7 + lead approval**; it was not invented. Consolidated dependency list: [28](28-MVP-STATUS-AND-DEPENDENCIES.md).
+
+- 2026-11-19 (phase 03): **record:** PR #30 merged to `develop` (`d5db6f8`) with 0 reviews and **without** the approved 5-consecutive-verified-run evidence (only public-metadata green runs). R-1/R-3 open on `develop` (G19 applies). **New proposal for decision:** M6–M7 regulatory constraint contract, doc 29 (needs M6 + M7 + lead).

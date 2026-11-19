@@ -50,3 +50,36 @@ See the evidence register (EV-20261119-12). Local results:
 - no vulnerable packages.
 
 C# test execution happens only in CI.
+
+## 5. Phase 03 update (2026-11-19): final MVP handover state
+
+**Repository facts (GitHub API, verified):**
+- **PR #30** (MySQL open gate, `b221024`) was **merged into `develop` as `d5db6f8`** on 2026-11-19T05:57Z, with **0 reviews**.
+  - Pre-merge: run #59 attempts 1–2 succeeded, by public metadata only; their artifacts were never read in this session.
+  - Post-merge: run #66 (push, `d5db6f8`) succeeded, also by metadata.
+  - The approved 5-consecutive-verified-runs criterion was **not demonstrated** before the merge (G19). **R-1 and R-3 are now on `develop`**, still unresolved production blockers (doc 27).
+- **PR #31 (M3)** and **#33 (M5)** were also merged.
+- **PR #32 (M7):**
+  - run #61 (`43f779b`, merge `45679ff`) **failed 2 tests**. Verified from the lead's job-log archive (SHA-256 `a44187eb…`): Infrastructure 448/450; all other suites green (Reports 54, Workflow 123, Requirements 233, Application 128, MySQL 56, Python 54, rag-service 44). Cause: the tests read request content after disposal. Fixed in `54108a8`.
+  - run #64 (`f5a0753`) **succeeded on all jobs**, by metadata; counts unverified until the artifacts are read.
+  - `develop` was then merged into the branch (`ea60f3c`; append-only Second Brain conflicts resolved by keeping both entries). **PR #32 now merges cleanly.**
+
+**D07 item 02 (start C# + FastAPI and verify health), 2026-11-19, local:**
+- python-services `/health` ✅;
+- rag-service `/health` ✅ with the real corpus loaded (`corpus_loaded:true`);
+- **C# API blocked by Windows Smart App Control** ("An Application Control policy has blocked this file (0x800711C7)"). Not bypassed (G17).
+- API readiness against live services is therefore verified only in Linux CI: live Python 7/7, and RAG through stubbed-transport readiness tests.
+
+**New documents:**
+- [29: M6–M7 regulatory constraint contract (PROPOSAL)](29-M6-M7-REGULATORY-CONSTRAINT-CONTRACT-PROPOSAL.md), for team coordination; nothing implemented;
+- [30: local backend runbook](30-LOCAL-BACKEND-RUNBOOK.md).
+
+**Final MVP verdict:**
+- **Functional, tested backend MVP for:** shared infrastructure (M4 D01–D06) and regulation retrieval (M7 D02–D04).
+- **Not production-ready.** Blockers:
+  - R-1/R-3 (MySQL provider);
+  - G11 (no authentication between services, no hosting decision);
+  - no end-user auth/CORS (A1/A2, C6);
+  - M6 absent (generation, feasibility and M7-D05);
+  - G06 (legal currency);
+  - **0 independent reviews** on merged PRs (G19).

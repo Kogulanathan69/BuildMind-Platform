@@ -199,3 +199,13 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - M6 evidence integration blocked (no M6 code or contract).
 - Consolidated M4/M7 status and dependencies: doc 28.
 - **Uncommitted, on `feature/m7-rag-retrieval-service`.** PR #30 and the M4 branches untouched. M7 PR still to be opened by the lead.
+
+## 2026-11-19 — Fast-track phase 03 (final MVP handover)
+- **PR #32:** CI fixed (run #64 green), `develop` merged in, mergeable.
+- **PR #30:** merged by the lead (0 reviews; R-1/R-3 now on `develop`).
+- **Docs:** 29 (M6–M7 contract proposal), 30 (runbook), 28 §5 (final status).
+- **Local stack:** Python and RAG healthy; C# API blocked by Smart App Control.
+- **Next:**
+  - lead downloads the run #64 artifacts (count verification);
+  - independent review of PR #32;
+  - M6 coordination on doc 29.

@@ -172,3 +172,9 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
   - lead approval of CI workflow integration + commit;
   - RAG readiness probe;
   - M6 evidence consumer (D05).
+
+## 2026-11-19 â€” Accelerated MVP phase 02
+- RAG readiness implemented (real probe).
+- M6 evidence integration blocked (no M6 code or contract).
+- Consolidated M4/M7 status and dependencies: doc 28.
+- **Uncommitted, on `feature/m7-rag-retrieval-service`.** PR #30 and the M4 branches untouched. M7 PR still to be opened by the lead.

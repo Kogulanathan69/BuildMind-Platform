@@ -58,3 +58,5 @@ Start-up failure tests must prove the failure is an `OptionsValidationException`
 - (STEP 10-B) Abandoned readiness probes are cancelled with `CancelAsync()`: cancellation callbacks never run on the readiness thread, so a blocking callback cannot delay `/health/ready`. Callback failures are dropped, never logged.
 
 - (M7 MVP) `rag-service`: internal only (loopback or private network; G11 open). Interactive docs and OpenAPI are disabled; bodies are limited to 16 KB; validation errors don't echo input; unexpected errors are a generic 500 with only the exception type logged. The corpus stays outside the public repo and is identity-verified by SHA-256 at start-up. The C# client rejects any response claiming verified legal status, a generated answer, unsupported passages or path-bearing source titles. Retrieved text, including embedded instructions, is treated as data and never executed or followed.
+
+- (M7 phase 02) RAG readiness reports reasons only: no URL, exception text or response body. Its probe is bounded to 3 s even if the transport ignores cancellation, and it has its own single-flight gate, separate from Python and MySQL.

@@ -51,3 +51,13 @@ Static inspection only; no RAG code executed, no external file modified. Full ev
 - legal currency and amendment verification;
 - embeddings (not planned for the MVP);
 - independent review.
+
+### Phase 02 (2026-11-19): RAG readiness
+The `rag` readiness check now really probes rag-service `/health` (`RagReadinessCheck`, sharing the bounded single-flight probe with Python):
+- **Healthy:** only when the identity is `buildmind-rag`, the contract version is `1` and the corpus is loaded.
+- **Degraded `unavailable`:** no verified corpus.
+- **Degraded `unverified`:** wrong identity or contract.
+- **Degraded `unreachable`/`timeout`/`not_configured`/`check_in_progress`:** otherwise.
+- **Never Unhealthy:** RAG is instance-optional (C11b).
+
+This replaces the placeholder "unverified" check. M6 evidence integration is **blocked**: no M6 code or contract exists. See [28](28-MVP-STATUS-AND-DEPENDENCIES.md).

@@ -56,8 +56,8 @@ public static class ApiServiceCollectionExtensions
                 "mysql", HealthStatus.Unhealthy, [Readiness.Tag], Readiness.RegistrationTimeout)
             .AddCheck<PythonReadinessCheck>(
                 "python", HealthStatus.Degraded, [Readiness.Tag], Readiness.RegistrationTimeout)
-            .AddTypeActivatedCheck<InternalServiceReadinessCheck>(
-                "rag", HealthStatus.Degraded, [Readiness.Tag], Readiness.RegistrationTimeout, "rag");
+            .AddCheck<RagReadinessCheck>(
+                "rag", HealthStatus.Degraded, [Readiness.Tag], Readiness.RegistrationTimeout);
 
         // BE-M4-D05: hardened typed client for the private Python service (only confirmed routes; G11 auth open).
         services.AddSingleton<InternalServiceBulkhead>(); // STEP 08-C: bounded in-flight + queued calls per dependency

@@ -66,6 +66,15 @@ public static class ApiServiceCollectionExtensions
             .ConfigurePrimaryHttpMessageHandler(CreateInternalServiceHandler)
             .RemoveAllLoggers(); // framework request logs would record internal URLs
 
+        // BE-M7 (evidence contract v1, lead-approved 2026-11-19): private regulation retrieval service, same hardened
+        // transport and bulkhead. Exposed to the Application layer only through IRegulationEvidenceSource.
+        services.AddHttpClient<RagServiceClient>()
+            .ConfigureHttpClient(client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(CreateInternalServiceHandler)
+            .RemoveAllLoggers();
+        services.AddTransient<BuildMind.Application.Abstractions.Regulations.IRegulationEvidenceSource>(
+            provider => provider.GetRequiredService<RagServiceClient>());
+
         // BE-M4-D04: do not advertise the server implementation. This only affects Kestrel; a reverse proxy
         // or load balancer in front of the API may add its own headers and must be configured separately.
         services.Configure<KestrelServerOptions>(options => options.AddServerHeader = false);

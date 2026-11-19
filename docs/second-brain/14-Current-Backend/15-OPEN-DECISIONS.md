@@ -114,3 +114,11 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
 - 2026-11-18 (STEP 09-B): **lead approved** the D06 database-failure fallback mapping (409 `REVISION_CONFLICT` / 409 `CONFLICT` / 503 for unreachable, deadlock and lock-wait / 504 command timeout / 500 for unknown commit, unconfirmed rollback and unexpected) with no automatic write retries. Still open: idempotency (C2/C5b), the production database account policy, the M1 rehydration factories, the M2/M3/M6 job and revision contracts, the M5 report snapshot, G11, G17 and G19 (independent human review still required).
 
 - 2026-11-19 (STEP 10-A): approvals still needed before M4 can be called production-ready: A1/A2, C6, C7, C2/C5b, G11, the hosting posture (AllowedHosts, HTTPS/HSTS), request size and rate limits, GitHub Actions SHA pinning, the production database account policy, and independent review of PRs #8–#27 (G19). See [25-M4-FINAL-QA-REPORT.md](25-M4-FINAL-QA-REPORT.md).
+
+- 2026-11-19 (M7 MVP): **lead approved** (explicit in-session answers):
+  - G10: code-only copy into `rag-service/`; the canonical engine is confirmed as the source of the copy, and its workspace stays the corpus location;
+  - G11 (RAG hosting only): a separate private FastAPI service;
+  - BE-M7-D03: evidence contract v1 frozen;
+  - a read-only baseline run.
+
+  **Still open:** G11 internal authentication and transport; CI workflow integration of the rag-service tests; a real RAG readiness probe; the M6 evidence consumer (D05); legal currency of the 3 sources (G06).

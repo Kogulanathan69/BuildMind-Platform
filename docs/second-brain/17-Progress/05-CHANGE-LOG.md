@@ -59,3 +59,5 @@
 2026-11-19 — STEP 10-A: run #52 evidence verified; M4 final QA report (doc 25); readiness abandoned-probe cancellation fix. Evidence EV-20261119-01..02.
 
 2026-11-19 — STEP 10-B: readiness cancellation no longer runs callbacks inline (`ProbeDeadline`); M4 final handover (doc 26). Evidence EV-20261119-03.
+
+2026-11-19 — M7 MVP: rag-service FastAPI (evidence contract v1) reusing the verified STEP 4/6 engine (code-only copy); C# `IRegulationEvidenceSource`/`RagServiceClient`; shared contract example; real-corpus and E2E evidence. Evidence EV-20261119-10..11.

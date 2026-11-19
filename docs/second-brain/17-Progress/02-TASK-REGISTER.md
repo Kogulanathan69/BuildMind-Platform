@@ -56,3 +56,6 @@ Initial planning register; reconcile actual current code before marking status. 
 | BE-M7-D05 | M7 | 5 | M6 evidence integration | NOT STARTED | — |
 | BE-M7-D06 | M7 | 6 | Cross-service QA and review | NOT STARTED | — |
 | BE-M7-D07 | M7 | 7 | E2E and delivery gate | NOT STARTED | — |
+| BE-M7-D02 | M7 | 2 | Verify corpus metadata, extraction and retrieval tests | **DONE (evidence) — 2026-11-19.** Existing suite 93/93 run read-only; real corpus 3 docs / 2,629 chunks; real-corpus suite 6/6; workspace unchanged | EV-20261119-11 |
+| BE-M7-D03 | M7 | 3 | Freeze evidence interface and jurisdiction status | **DONE — contract v1 lead-approved and implemented**; no-hit, unknown-jurisdiction, unknown-source, partial-coverage and ambiguous tests | EV-20261119-11 |
+| BE-M7-D04 | M7 | 4 | Integrate existing RAG with C# and Python through approved adapter | **IN PROGRESS — `feature/m7-rag-retrieval-service` (uncommitted).** rag-service FastAPI + `IRegulationEvidenceSource`/`RagServiceClient` with contract validation; shared contract example; real local HTTP E2E. Open: CI workflow integration (approval), RAG readiness probe, G11 auth | EV-20261119-11 |

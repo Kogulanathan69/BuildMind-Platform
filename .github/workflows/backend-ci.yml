@@ -48,6 +48,11 @@ jobs:
       - run: python -m pip install -r python-services/requirements-dev.txt
       # STEP 08-C (lead-approved): JUnit XML so the Python count can be verified from the artifact.
       - run: cd python-services && python -m pytest -q --junitxml=../TestResults/python/pytest-junit.xml
+      # M7 (lead-approved 2026-11-19): private regulation retrieval service, synthetic corpus only (no PDFs/indexes in CI).
+      - name: Run rag-service tests
+        run: |
+          python -m pip install -r rag-service/requirements-dev.txt
+          cd rag-service && python -B -m pytest -q -p no:cacheprovider --junitxml=../TestResults/python/rag-service-junit.xml
       - name: Upload Python test results
         if: always()
         uses: actions/upload-artifact@v4

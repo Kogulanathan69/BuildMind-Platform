@@ -164,3 +164,11 @@ Latest working branch/hash: UNKNOWN. Owner: confirm M4 + M7. Next active task: B
 - Inventory: 417 / 56 / 54 → 1,258 compiled (1,253 executed in run #52).
 - Next: CI on the draft PR → verify 1,258 → independent QA review.
 - M4 is not complete and not production-ready. M7/RAG not started.
+
+## 2026-11-19 — Accelerated MVP: M7 retrieval service
+- **M4:** run #59 green by metadata only; artifacts need an authenticated download → 5-run count 0/5 verified. PR #30 preserved; R-1/R-3 open.
+- **M7:** `feature/m7-rag-retrieval-service` from `develop` `2ad74d1`. rag-service (contract v1) with the reused engine; C# port and client; tests 44 CI + 6 real-corpus; real E2E. **Uncommitted.**
+- **Next:**
+  - lead approval of CI workflow integration + commit;
+  - RAG readiness probe;
+  - M6 evidence consumer (D05).

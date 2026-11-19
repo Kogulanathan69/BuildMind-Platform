@@ -70,3 +70,35 @@
 - Local C# test execution is blocked by Windows Smart App Control (G17, kept enabled). Linux CI is the verification path: download `dotnet-test-results`, `mysql-compatibility-results` and `python-test-results`, and check their digests against the run.
 - Setup steps and environment variable names: doc 25 §8.
 - No real secrets in the repository. CI passwords are random per run and masked.
+
+## 7. STEP 10-E update (2026-11-19): final QA failed, correction pending
+Post-merge run #55 failed one MySQL test because of a confirmed **MySql.Data 26.10.0 defect**: static TLS dictionaries are mutated outside the provider's lock (doc 25 §14).
+
+- **Correction:** `MySqlConnectionOpenGate` serializes connection opening process-wide, with TLS unchanged. It is on `feature/m4-mysql-ssl-concurrency-fix` and **uncommitted, awaiting review**.
+- **Outstanding work (adds to §5):**
+  - **13.** Verify the fix with ≥ 5 consecutive green `database-compatibility` runs.
+  - **14.** Track upstream Connector/NET for a real fix; remove the gate only after IL verification.
+  - **15.** Measure the connection-open latency impact under load once real endpoints exist.
+- **M4 production readiness remains BLOCKED.**
+
+## 8. STEP 10-F update (2026-11-19)
+- The workaround was **lead-approved**. The audit found and fixed two critical gate defects: **G1** (a cancelled open leaked the gate, deadlocking all opens) and **G2** (unbounded gate wait).
+- **Residual risk R-1:** MySql.Data's internal `KILL QUERY` connection bypasses the gate.
+- **Outstanding:** 5 consecutive green database runs on the candidate commit (doc 25 §15), then independent review, then a separately verified post-merge CI run.
+- **Final QA OPEN; production readiness BLOCKED.**
+
+## 9. STEP 10-H update (2026-11-19)
+- PR #30's first CI attempt **failed** (48 database tests): a stalled test handshake held the process-wide open gate for the whole run (doc 25 §16).
+- Corrected within the existing design: per-connection gate ownership (no self-deadlock), and an isolated, bounded SSL03.
+- **Lead deferred the gate-semantics decision.** Risk **R-3** (one stalled handshake blocks all opens) is OPEN and blocks production readiness.
+- **Outstanding:**
+  - 16. Decide R-3 (bounded lease vs strict hold vs other).
+  - 17. 5 consecutive green database runs on the corrected commit.
+- **Final QA OPEN; M4 not production-ready.**
+
+## 10. STEP 10-I update (2026-11-19)
+- Gate ownership is now per open operation: no concurrent opens of one connection, and no foreign releases. SSL03 cleanup is guaranteed.
+- Architecture alternatives: doc 27 (proposed). **Production NOT approved; R-1 and R-3 open.**
+- **Outstanding:**
+  - 18. 5 consecutive green database attempts on the 10-I commit.
+  - 19. Lead decision on doc 27 (provider spike, stall detection, upstream report).

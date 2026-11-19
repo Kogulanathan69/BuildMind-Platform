@@ -89,7 +89,7 @@ public static partial class PersistenceErrorClassifier
                 return false;
             }
 
-            isDatabaseFailure |= current is MySqlException or DbUpdateException;
+            isDatabaseFailure |= current is MySqlException or DbUpdateException or Connections.MySqlConnectionGateTimeoutException;
         }
 
         failure = isDatabaseFailure ? Classify(exception) : null!;
@@ -113,6 +113,9 @@ public static partial class PersistenceErrorClassifier
             {
                 case DbUpdateConcurrencyException:
                     return Failure(PersistenceFailureKind.ConcurrencyConflict, null, null);
+                case Connections.MySqlConnectionGateTimeoutException:
+                    // STEP 10-F: the connection could not even start (open gate wait expired): an availability failure.
+                    return Failure(PersistenceFailureKind.ConnectionFailure, null, null);
                 case MySqlException mySql:
                     return mySql.InnerException is TimeoutException
                         ? Failure(PersistenceFailureKind.CommandTimeout, mySql.Number, null)

@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using MySql.Data.MySqlClient;
 using Xunit.Abstractions;
+using BuildMind.Infrastructure.Persistence.Connections;
 
 namespace BuildMind.Persistence.IntegrationTests;
 
@@ -397,7 +398,7 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
         var instant = new DateTimeOffset(2026, 11, 18, 10, 20, 30, TimeSpan.Zero).AddTicks(1_234_560);
 
         await using var connection = new MySqlConnection(database.ConnectionString);
-        await connection.OpenAsync();
+        await MySqlConnectionOpenGate.OpenAsync(connection);
         await ExecuteAsync(connection, "CREATE TABLE ts_probe (id INT PRIMARY KEY, ts DATETIME(6) NOT NULL);");
 
         // 1. Direct SQL literal with six fractional digits.
@@ -523,7 +524,7 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
     {
         await using var database = await DisposableMySqlDatabase.CreateAsync();
         await using var connection = new MySqlConnection(database.ConnectionString);
-        await connection.OpenAsync();
+        await MySqlConnectionOpenGate.OpenAsync(connection);
 
         var version = await SessionStatusAsync(connection, "Ssl_version");
         var cipher = await SessionStatusAsync(connection, "Ssl_cipher");
@@ -543,7 +544,7 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
         };
 
         await using var connection = new MySqlConnection(plaintext.ConnectionString);
-        var refused = await Assert.ThrowsAnyAsync<MySqlException>(() => connection.OpenAsync());
+        var refused = await Assert.ThrowsAnyAsync<MySqlException>(() => MySqlConnectionOpenGate.OpenAsync(connection));
 
         output.WriteLine($"Plaintext connection refused with provider error {refused.Number}");
     }
@@ -556,7 +557,7 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
         var locked = await SeedOwnerAsync(database, "owner-locked");
 
         await using var blocker = new MySqlConnection(database.ConnectionString);
-        await blocker.OpenAsync();
+        await MySqlConnectionOpenGate.OpenAsync(blocker);
         await using var blockerTransaction = await blocker.BeginTransactionAsync();
         await using (var lockRow = new MySqlCommand("SELECT id FROM spike_owners WHERE id = @id FOR UPDATE;", blocker, blockerTransaction))
         {
@@ -641,7 +642,7 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
         runtime.Database = string.Empty;
 
         await using var connection = new MySqlConnection(runtime.ConnectionString);
-        await connection.OpenAsync();
+        await MySqlConnectionOpenGate.OpenAsync(connection);
         var grants = new List<string>();
         await using (var command = new MySqlCommand("SHOW GRANTS FOR CURRENT_USER();", connection))
         await using (var reader = await command.ExecuteReaderAsync())
@@ -672,7 +673,7 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
         output.WriteLine(context.Items.Where(i => i.OwnerId == owner.Id).ToQueryString());
 
         await using var connection = new MySqlConnection(database.ConnectionString);
-        await connection.OpenAsync();
+        await MySqlConnectionOpenGate.OpenAsync(connection);
         await using var command = new MySqlCommand("EXPLAIN SELECT id FROM spike_items WHERE owner_id = @owner;", connection);
         command.Parameters.AddWithValue("@owner", owner.Id);
         await using var reader = await command.ExecuteReaderAsync();
@@ -744,7 +745,7 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
     private static async Task<object?> ScalarAsync(string connectionString, string sql, params (string Name, object Value)[] parameters)
     {
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
+        await MySqlConnectionOpenGate.OpenAsync(connection);
         await using var command = new MySqlCommand(sql, connection);
         foreach (var (name, value) in parameters)
         {
@@ -775,7 +776,7 @@ public sealed class ProviderCompatibilityTests(ITestOutputHelper output)
     private static async Task RunScriptAsync(string connectionString, string script)
     {
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
+        await MySqlConnectionOpenGate.OpenAsync(connection);
         await new MySqlScript(connection, script).ExecuteAsync();
     }
 }

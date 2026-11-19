@@ -39,6 +39,19 @@ internal sealed class TestRequirementRevisionPort(
         handler(projectId, revisionId, cancellationToken);
 }
 
+/// <summary>Test-only authorization-aware requirement dependency.</summary>
+internal sealed class TestAuthorizedRequirementRevisionPort(
+    Func<Guid, Guid, Guid, CancellationToken, Task<RequirementRevisionAccessResult>> handler)
+    : IAuthorizedRequirementRevisionPort
+{
+    public Task<RequirementRevisionAccessResult> GetAsync(
+        Guid projectId,
+        Guid revisionId,
+        Guid authenticatedActorId,
+        CancellationToken cancellationToken) =>
+        handler(projectId, revisionId, authenticatedActorId, cancellationToken);
+}
+
 internal sealed class TestPlanEditorComputeClient(
     Func<PlanEditorComputeRequest, CancellationToken, Task<PlanEditResultDto>> handler)
     : IPlanEditorComputeClient

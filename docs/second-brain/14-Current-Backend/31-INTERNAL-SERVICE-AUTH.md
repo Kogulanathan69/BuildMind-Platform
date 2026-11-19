@@ -48,3 +48,11 @@
 - **Transport enforcement (outside Development):** a service with `AuthToken` must use `https` or a loopback address. Plaintext to a network host fails start-up unless `Services:<Name>:AllowPlaintextPrivateNetwork=true` is set explicitly, as a reviewable exception until hosting/TLS (G11) is decided.
 - **Strict internal JSON:** responses are validated raw before deserialization (duplicates, comments, trailing commas, depth, object root). Unknown members are rejected; API input rejects duplicate properties (400).
 - **Verified by tests:** rotation (Python), timeout and cancellation (C# constraint client), and safe 503/504 mapping.
+
+## Production transport and synthetic isolation (2026-11-19, constraint integrity)
+- **Production:** every enabled internal service (token or not) must use `https` or a loopback address; `AllowPlaintextPrivateNetwork=true` fails start-up. Staging keeps the explicit exception until G11.
+- **Synthetic constraint evidence:** `Services:Rag:AllowSyntheticConstraints` only in Development/Testing (`Testing` environment name); never for Python.
+- **python-services authentication:** coordination item with the python-services maintainer (M6 bootstrap owner). The C# transport rules already cover Python.
+
+## RAG auth opt-out needs two settings (2026-11-19, M6 H4-R1 C09)
+`BUILDMIND_RAG_AUTH=disabled` is honoured **only** together with `BUILDMIND_RAG_ENVIRONMENT=development`; otherwise rag-service refuses to start. Any other mode value still means authentication is required. Validation errors return a fixed body (`{"code":"VALIDATION_FAILED"}`) and never reflect submitted names or values.

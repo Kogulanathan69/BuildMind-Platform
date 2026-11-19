@@ -83,6 +83,19 @@ def test_invalid_token_configuration_is_rejected_without_echo(tokens):
     assert all(t not in str(error.value) for t in tokens)
 
 
+@pytest.mark.parametrize("environment", [None, "", "production", "staging", "dev"])
+def test_a_single_setting_can_never_disable_auth_outside_declared_development(monkeypatch, environment):
+    """M6 H4-R1 C09: the opt-out needs BUILDMIND_RAG_ENVIRONMENT=development as a second, explicit declaration."""
+    monkeypatch.setenv("BUILDMIND_RAG_AUTH", "disabled")
+    if environment is None:
+        monkeypatch.delenv("BUILDMIND_RAG_ENVIRONMENT", raising=False)
+    else:
+        monkeypatch.setenv("BUILDMIND_RAG_ENVIRONMENT", environment)
+
+    with pytest.raises(RuntimeError, match="requires BUILDMIND_RAG_ENVIRONMENT=development"):
+        InternalAuth.from_environment()
+
+
 def test_environment_defaults_to_required(monkeypatch):
     monkeypatch.delenv("BUILDMIND_RAG_AUTH", raising=False)
     monkeypatch.setenv("BUILDMIND_RAG_INTERNAL_TOKENS", f" {TEST_TOKEN} , {ROTATED} ")
@@ -96,6 +109,7 @@ def test_environment_defaults_to_required(monkeypatch):
 def test_environment_opt_out_must_be_explicit(monkeypatch):
     monkeypatch.setenv("BUILDMIND_RAG_AUTH", "disabled")
     monkeypatch.delenv("BUILDMIND_RAG_INTERNAL_TOKENS", raising=False)
+    monkeypatch.setenv("BUILDMIND_RAG_ENVIRONMENT", "development")
     assert InternalAuth.from_environment().required is False
 
     monkeypatch.setenv("BUILDMIND_RAG_AUTH", "off")  # anything else stays required

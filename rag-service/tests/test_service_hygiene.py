@@ -113,3 +113,16 @@ def test_filters_are_passed_exactly_as_requested():
 @pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
 def test_interactive_docs_and_schema_are_not_exposed(path):
     assert authed_client(None).get(path).status_code == 404
+
+
+@pytest.mark.parametrize("path", [SEARCH, "/internal/v1/regulations/constraints"])
+def test_validation_errors_never_reflect_submitted_names_or_values(path):
+    """M6 H4-R1 C09: a fixed 422 body; attacker-chosen property names and values never come back."""
+    body = {"query": "rear space", "zz_injected_property_name": "zz-injected-value", "kinds": "zz-injected-kind"}
+
+    response = authed_client(RecordingEngine()).post(path, json=body)
+
+    assert response.status_code in (422, 503)
+    assert "zz_injected" not in response.text and "zz-injected" not in response.text
+    if response.status_code == 422:
+        assert response.json() == {"code": "VALIDATION_FAILED"}

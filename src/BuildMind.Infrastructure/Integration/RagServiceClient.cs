@@ -20,6 +20,10 @@ public sealed partial class RagServiceClient(HttpClient http, IOptions<ServicesO
     public const string ServiceIdentity = "buildmind-rag";
     internal const string SearchPath = "internal/v1/regulations/search";
 
+    // Synthetic constraint packs are test data: accepted only where start-up validation allowed them (Development or
+    // Testing environments), never in Staging or Production.
+    private readonly bool allowSyntheticConstraints = options.Value.Rag.AllowSyntheticConstraints;
+
     public async Task<RagHealthResponse> CheckHealthAsync(CancellationToken cancellationToken) =>
         await GetJsonAsync<RagHealthResponse>(
             "health", h => h.Service == ServiceIdentity && h.Status == "ok" && h.ContractVersion == "1", cancellationToken)

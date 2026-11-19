@@ -142,3 +142,22 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
 - 2026-11-19 (final integration 01): **lead approved** (explicit in-session answer) the CI full-stack smoke: rag-service started live in `database-compatibility` (loopback, random per-run token, no corpus), live C#→RAG tests, and a built API + MySQL + Python + RAG `/health/ready` smoke (`tools/smoke/full-stack-smoke.sh`). R-1/R-3 re-evaluated (doc 27 §6): Pomelo has no EF Core 10 release, so D isn't viable now; the recommendation is A + operational F.
 
 - 2026-11-19 (M6-review corrections): constraints contract **v0 implemented with synthetic fixtures** (doc 29 §9); **approval needed from M6 + lead:** kind set/units, condition-field sources, domain reviewer and table location for real values (G06), Gazette/council precedence. **Security decisions to confirm:** strict unknown-member rejection on internal responses; transport enforcement outside Development with the explicit `AllowPlaintextPrivateNetwork` exception (G11).
+
+- 2026-11-19 (constraint integrity, doc 29 §11): **for M6 + lead:**
+  - reviewer identity type (GUID vs pseudonymous string);
+  - parcel-edge mapping owned by M6;
+  - add `regulatoryEvidencePackId` to M6 feasibility results;
+  - mandatory kinds for the initial feasibility check;
+  - adopt BM-JCS-1 as the shared digest format.
+  **For the lead:**
+  - the real reviewer registry owner and process (G06);
+  - conservative revocation (all of a revoked reviewer's sign-offs become invalid);
+  - Production allows no plaintext exception (Staging keeps it until G11);
+  - python-services authentication with its maintainer.
+
+- 2026-11-19 (cross-member integration, doc 29 §12): M4/M7-owned H4-R1 items are closed or proposed for closure: revision width, strict typing, no-reflection errors, two-setting auth opt-out, live synthetic acceptance. **Still needed:** M6 + lead answers to §11 items 1–4; M6 runtime consumer; M2/M5 condition-value sources; evidence pack id in M6 jobs (M4 + M6); G06 real registry/tables; python-services auth; G11; G19.
+
+- 2026-11-19 (final acceptance, doc 29 §14): **new decision for the python-services maintainer, M6 and the lead:** `shapely` is in no python-services requirements file, so M6 D02 geometry/feasibility tests are skipped (locally confirmed; CI very likely). Either pin `shapely` or make the D02 tests fail rather than skip in CI. Still open: §11 items 1–4, M6 pack-id propagation, G06, python-services auth, G11, G19, R-1/R-3.
+- 2026-11-19 **RESOLVED (lead, for M6 + python-services maintainer):** pin `shapely==2.1.2` in `python-services/requirements.txt` (runtime import by M6 D02; exact M6-verified environment, GEOS 3.13.1). Approved together with a CI guard that fails on any skipped python-services test or on any `test_d02_*` module without a passing test. **Follow-up for the maintainer:** `numpy` arrives transitively via Shapely and is unpinned (resolved to 2.5.5 locally); decide whether to constrain it.
+
+- 2026-11-19 (doc 34 §4): **New review request for M1:** `feature/m1-day02-day06-checkpoint` (no PR) adds EF migration `AddProjectAuthorizationVersion` + model snapshot (M4 single-writer review) and `JwtBearer 10.0.15` / `System.IdentityModel.Tokens.Jwt 8.23.0` (dependency approval and vulnerability review). Other items are unchanged, see doc 34 §4.

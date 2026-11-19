@@ -24,6 +24,14 @@ BASE="http://127.0.0.1:${API_PORT}"
 mkdir -p "$SMOKE_OUT"
 log="$(mktemp)"
 
+# The API must own its port: if anything already answers there, the readiness checks below would silently test
+# another service (the 8097 clash with the acceptance service in PR #41 CI).
+if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$BASE/" || true)" != "000" ]; then
+  echo "Port ${API_PORT} is already in use; the smoke API must not share it" >&2
+  rm -f "$log"
+  exit 1
+fi
+
 ASPNETCORE_URLS="$BASE" dotnet "$API_DLL" > "$log" 2>&1 &
 api_pid=$!
 cleanup() {

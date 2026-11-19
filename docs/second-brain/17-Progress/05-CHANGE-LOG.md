@@ -75,3 +75,5 @@
 2026-11-19 — Phase 03: PR #32 CI fix verified green, `develop` merged into the M7 branch; M6–M7 regulatory constraint contract proposal (doc 29); local runbook (doc 30); final MVP status (doc 28 §5). Evidence EV-20261119-13.
 
 2026-11-19 — Phase 04: G11 MVP internal token authentication (rag-service + C# client, fail closed, default-deny); MVP acceptance evidence (doc 32); M6 coordination message. Evidence EV-20261119-14.
+
+2026-11-19 — Phase 05: integration audit (no conflicts), backend integration checklist with M6 shared-auth plan (doc 33), full local regression. Evidence EV-20261119-15.

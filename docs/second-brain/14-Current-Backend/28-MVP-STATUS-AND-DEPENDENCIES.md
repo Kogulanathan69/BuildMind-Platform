@@ -83,3 +83,9 @@ C# test execution happens only in CI.
   - M6 absent (generation, feasibility and M7-D05);
   - G06 (legal currency);
   - **0 independent reviews** on merged PRs (G19).
+
+## 6. Phase 05 (2026-11-19)
+- **CI:** PR #32 run **#69** (`ad46382`, first run with the G11 C# auth tests) succeeded on all 3 jobs (metadata; artifacts unread).
+- **Members:** `develop` unchanged (`d5db6f8`). Member PRs #31 and #33 and the unmerged M5 commit touch **no** M4/M7-owned files, and no member code consumes the internal clients yet, so there's no integration conflict.
+- **Local regression (all green):** build 0 warnings; python-services 54; rag-service 68; real corpus 6; existing engine 93; workspace unchanged.
+- **New:** [33: backend integration checklist](33-BACKEND-INTEGRATION-CHECKLIST.md), covering rules, per-member status, the M6 shared-auth coordination plan and the final integration gate.

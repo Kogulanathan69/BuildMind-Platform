@@ -156,3 +156,5 @@ Until resolution, mark relevant work BLOCKED or PROPOSED; test fixtures must be 
   - python-services authentication with its maintainer.
 
 - 2026-11-19 (cross-member integration, doc 29 §12): M4/M7-owned H4-R1 items are closed or proposed for closure: revision width, strict typing, no-reflection errors, two-setting auth opt-out, live synthetic acceptance. **Still needed:** M6 + lead answers to §11 items 1–4; M6 runtime consumer; M2/M5 condition-value sources; evidence pack id in M6 jobs (M4 + M6); G06 real registry/tables; python-services auth; G11; G19.
+
+- 2026-11-19 **RESOLVED (lead, for M6 + python-services maintainer):** pin `shapely==2.1.2` in `python-services/requirements.txt` (runtime import by M6 D02; exact M6-verified environment, GEOS 3.13.1). Approved together with a CI guard that fails on any skipped python-services test or on any `test_d02_*` module without a passing test. **Follow-up for the maintainer:** `numpy` arrives transitively via Shapely and is unpinned (resolved to 2.5.5 locally); decide whether to constrain it.

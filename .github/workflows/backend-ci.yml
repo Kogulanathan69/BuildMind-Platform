@@ -47,7 +47,14 @@ jobs:
           python-version: '3.13'
       - run: python -m pip install -r python-services/requirements-dev.txt
       # STEP 08-C (lead-approved): JUnit XML so the Python count can be verified from the artifact.
-      - run: cd python-services && python -m pytest -q --junitxml=../TestResults/python/pytest-junit.xml
+      - run: cd python-services && python -m pytest -q -rs --junitxml=../TestResults/python/pytest-junit.xml
+      # Lead-approved 2026-11-19 with the Shapely pin: mandatory tests must RUN. Fails on any skipped python-services
+      # test and on any M6 D02 geometry module without a passing test (import-time skips or missing collection).
+      - name: Verify no mandatory python-services tests were skipped
+        run: >-
+          python -I tools/ci/check_pytest_junit.py TestResults/python/pytest-junit.xml
+          --require-module test_d02_area --require-module test_d02_feasibility
+          --require-module test_d02_footprint --require-module test_d02_parcel
       # M7 (lead-approved 2026-11-19): private regulation retrieval service, synthetic corpus only (no PDFs/indexes in CI).
       - name: Run rag-service tests
         run: |
@@ -266,6 +273,43 @@ jobs:
           echo "RAG service did not become ready within 30 s" >&2
           tail -n 50 "$RUNNER_TEMP/rag-service.log" >&2
           exit 1
+      # M4/M6/M7 cross-service acceptance: the TEST-ONLY synthetic acceptance service (rag-service/tests/acceptance_app.py),
+      # the real FastAPI app per shared scenario, loopback only, its own random per-run token. Synthetic evidence only.
+      - name: Start the synthetic constraint acceptance service (loopback only, per-run token)
+        run: |
+          token="$(openssl rand -hex 24)"
+          echo "::add-mask::${token}"
+          echo "BM_RAG_ACCEPTANCE_TOKEN=${token}" >> "$GITHUB_ENV"
+          # Rotation evidence (C09/C10): the service accepts the current AND the next token during a rotation window.
+          next="$(openssl rand -hex 24)"
+          echo "::add-mask::${next}"
+          echo "BM_RAG_ACCEPTANCE_TOKEN_NEXT=${next}" >> "$GITHUB_ENV"
+          # Own port (the smoke API uses 8097): refuse to start if anything already listens on 8094.
+          if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:8094/ || true)" != "000" ]; then
+            echo "Port 8094 is already in use; refusing to share it" >&2
+            exit 1
+          fi
+          cd rag-service
+          BUILDMIND_ACCEPTANCE_SYNTHETIC=1 BUILDMIND_RAG_INTERNAL_TOKENS="${token},${next}" nohup python -B -m uvicorn acceptance_app:app \
+            --app-dir tests --host 127.0.0.1 --port 8094 --log-level warning > "$RUNNER_TEMP/rag-acceptance.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/rag-acceptance.pid"
+          probe=http://127.0.0.1:8094/scenario/north-baseline/internal/v1/regulations/constraints
+          for attempt in $(seq 1 30); do
+            # Unauthenticated probe: ready when the real auth layer answers 401.
+            if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 -X POST "$probe")" = "401" ]; then
+              echo "Acceptance service ready on 127.0.0.1:8094"
+              exit 0
+            fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/rag-acceptance.pid")" 2>/dev/null; then
+              echo "Acceptance service exited during startup" >&2
+              tail -n 50 "$RUNNER_TEMP/rag-acceptance.log" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "Acceptance service did not become ready within 30 s" >&2
+          tail -n 50 "$RUNNER_TEMP/rag-acceptance.log" >&2
+          exit 1
       - name: Run MySQL compatibility tests
         env:
           BUILDMIND_TEST_MYSQL: Server=127.0.0.1;Port=3306;User ID=bm_test;SslMode=Required;Password=${{ env.BM_TEST_PASSWORD }}
@@ -273,6 +317,9 @@ jobs:
           BUILDMIND_TEST_PYTHON_URL: http://127.0.0.1:8099
           BUILDMIND_TEST_RAG_URL: http://127.0.0.1:8098
           BUILDMIND_TEST_RAG_TOKEN: ${{ env.BM_RAG_TOKEN }}
+          BUILDMIND_TEST_RAG_ACCEPTANCE_URL: http://127.0.0.1:8094
+          BUILDMIND_TEST_RAG_ACCEPTANCE_TOKEN: ${{ env.BM_RAG_ACCEPTANCE_TOKEN }}
+          BUILDMIND_TEST_RAG_ACCEPTANCE_TOKEN_NEXT: ${{ env.BM_RAG_ACCEPTANCE_TOKEN_NEXT }}
         run: >-
           dotnet test "$SPIKE_PROJECT"
           --configuration Release
@@ -309,7 +356,7 @@ jobs:
         if: always()
         run: |
           mkdir -p TestResults
-          for secret in "$BM_ROOT_PASSWORD" "$BM_TEST_PASSWORD" "$BM_RUNTIME_PASSWORD" "$BM_RAG_TOKEN"; do
+          for secret in "$BM_ROOT_PASSWORD" "$BM_TEST_PASSWORD" "$BM_RUNTIME_PASSWORD" "$BM_RAG_TOKEN" "$BM_RAG_ACCEPTANCE_TOKEN" "$BM_RAG_ACCEPTANCE_TOKEN_NEXT"; do
             [ -n "$secret" ] || continue
             if grep -rqF -- "$secret" TestResults; then
               echo "A credential was found in the test results; artifact upload is blocked." >&2
@@ -343,6 +390,14 @@ jobs:
             kill "$(cat "$RUNNER_TEMP/rag-service.pid")" 2>/dev/null || true
             sleep 1
             kill -9 "$(cat "$RUNNER_TEMP/rag-service.pid")" 2>/dev/null || true
+          fi
+      - name: Stop the synthetic constraint acceptance service
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/rag-acceptance.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/rag-acceptance.pid")" 2>/dev/null || true
+            sleep 1
+            kill -9 "$(cat "$RUNNER_TEMP/rag-acceptance.pid")" 2>/dev/null || true
           fi
       - name: Remove disposable MySQL container
         if: always()

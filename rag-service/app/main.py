@@ -14,7 +14,6 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from starlette.concurrency import run_in_threadpool
 
 from .auth import AUTH_HEADER, REQUIRED_WITHOUT_TOKENS, InternalAuth
 from .constraints import ConstraintProvider, ConstraintsRequest
@@ -22,9 +21,11 @@ from .contracts import CONTRACT_VERSION, SearchRequest, SourcesResponse
 from .engine import EngineSettings, RetrievalEngine, Step6Engine
 from .mapping import to_search_response, to_sources
 from .strict_json import MAX_BODY_BYTES, RequestRejected, read_json_object
+from .workload import WorkLimiter
 
 SERVICE_NAME = "buildmind-rag"
 CONSTRAINTS_VARIABLE = "BUILDMIND_RAG_CONSTRAINTS"
+REVIEWERS_VARIABLE = "BUILDMIND_RAG_REVIEWERS"
 logger = logging.getLogger(SERVICE_NAME)
 
 
@@ -35,16 +36,14 @@ def _problem(status: int, code: str, errors: list[dict[str, Any]] | None = None)
     return JSONResponse(status_code=status, content=body)
 
 
-def _validation_errors(errors) -> list[dict[str, Any]]:
-    # Location and message only: the offending input is never echoed back.
-    return [{"loc": [str(part) for part in error.get("loc", ())], "msg": error.get("msg", "")} for error in errors]
-
-
 def create_app(
     engine: RetrievalEngine | None,
     auth: InternalAuth = REQUIRED_WITHOUT_TOKENS,
     constraints: ConstraintProvider | None = None,
+    limiter: WorkLimiter | None = None,
 ) -> FastAPI:
+    # C10: bounded concurrent engine work with a per-request time budget (503 SERVICE_BUSY / 504 WORK_TIMEOUT).
+    limiter = limiter or WorkLimiter.from_environment()
     app = FastAPI(title="BuildMind regulation retrieval", docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.middleware("http")
@@ -66,11 +65,11 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def validation_failed(_: Request, exc: RequestValidationError) -> JSONResponse:
-        return _problem(422, "VALIDATION_FAILED", _validation_errors(exc.errors()))
+        return _problem(422, "VALIDATION_FAILED")  # fixed body: submitted names/values are never reflected
 
     @app.exception_handler(ValidationError)
     async def model_validation_failed(_: Request, exc: ValidationError) -> JSONResponse:
-        return _problem(422, "VALIDATION_FAILED", _validation_errors(exc.errors()))
+        return _problem(422, "VALIDATION_FAILED")
 
     @app.exception_handler(RequestRejected)
     async def rejected(_: Request, exc: RequestRejected) -> JSONResponse:
@@ -97,7 +96,7 @@ def create_app(
         if request.document_ids is not None and len(request.document_ids) == 1:
             filters["document_id"] = request.document_ids[0]
         try:
-            result = await run_in_threadpool(engine.search, request.query, request.k, filters, request.document_ids)
+            result = await limiter.run(engine.search, request.query, request.k, filters, request.document_ids)
         except ValueError:
             # Engine-side validation (for example an unsupported filter combination). Message deliberately dropped.
             return _problem(422, "VALIDATION_FAILED")
@@ -115,7 +114,7 @@ def create_app(
         request = ConstraintsRequest.model_validate(await read_json_object(http))
         if constraints is None:
             return _problem(503, "CONSTRAINTS_UNAVAILABLE")
-        return constraints.lookup(request)
+        return await limiter.run(constraints.lookup, request)
 
     return app
 
@@ -136,7 +135,20 @@ def _load_constraints(engine: RetrievalEngine | None) -> ConstraintProvider | No
     if engine is None:
         # Provenance cannot be verified without the hash-verified corpus: never serve unverifiable constraints.
         raise RuntimeError("A constraint table requires the regulation corpus for provenance verification")
-    return ConstraintProvider(json.loads(Path(path).read_text(encoding="utf-8")), engine.page_text)
+    reviewers = os.environ.get(REVIEWERS_VARIABLE, "").strip()
+    if not reviewers:
+        # Reviewer authorization cannot be verified without the registry: never serve unauthorizable constraints.
+        raise RuntimeError("A constraint table requires the reviewer registry (BUILDMIND_RAG_REVIEWERS)")
+    # Synthetic tables only with an explicit isolated-testing opt-in; real tables require version and digest pins.
+    return ConstraintProvider(
+        json.loads(Path(path).read_text(encoding="utf-8")),
+        engine.page_text,
+        json.loads(Path(reviewers).read_text(encoding="utf-8")),
+        expected_reviewers_sha256=os.environ.get("BUILDMIND_RAG_REVIEWERS_SHA256", "").strip() or None,
+        allow_synthetic=os.environ.get("BUILDMIND_RAG_ALLOW_SYNTHETIC_CONSTRAINTS", "").strip() == "1",
+        expected_version=os.environ.get("BUILDMIND_RAG_CONSTRAINTS_VERSION", "").strip() or None,
+        expected_sha256=os.environ.get("BUILDMIND_RAG_CONSTRAINTS_SHA256", "").strip() or None,
+    )
 
 
 _engine = _load_engine()

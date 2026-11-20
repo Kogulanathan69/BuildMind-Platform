@@ -98,7 +98,7 @@ public sealed class SecurityInfrastructureTests
             new Dictionary<string, string?>
             {
                 ["Services:Python:Enabled"] = "true",
-                ["Services:Python:BaseUrl"] = "http://python-services.internal:8000",
+                ["Services:Python:BaseUrl"] = "https://python-services.internal:8000",
                 ["Services:Rag:Enabled"] = "true",
                 ["Services:Rag:BaseUrl"] = "https://rag.internal:8001",
                 ["Services:Rag:AuthToken"] = "synthetic-internal-token-0123456789abcdef",

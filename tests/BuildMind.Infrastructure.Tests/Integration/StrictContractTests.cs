@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using BuildMind.Application.Abstractions.Errors;
 using BuildMind.Application.Abstractions.Regulations;
@@ -35,16 +36,36 @@ public sealed class StrictContractTests
         [RegulatoryConstraintKind.RearSpaceMin, RegulatoryConstraintKind.SideSpaceMin, RegulatoryConstraintKind.FloorAreaRatioMax],
         Binding);
 
-    private static RagServiceClient Client(StubHttpHandler handler, int timeoutSeconds = 5) =>
+    /// <param name="allowSynthetic">The shared example is SYNTHETIC; only an explicitly isolated test client may accept it.</param>
+    private static RagServiceClient Client(StubHttpHandler handler, int timeoutSeconds = 5, bool allowSynthetic = true) =>
         new(new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan },
-            Options.Create(new ServicesOptions { Rag = new InternalServiceOptions { Enabled = true, BaseUrl = Base, TimeoutSeconds = timeoutSeconds } }),
+            Options.Create(new ServicesOptions
+            {
+                Rag = new InternalServiceOptions { Enabled = true, BaseUrl = Base, TimeoutSeconds = timeoutSeconds, AllowSyntheticConstraints = allowSynthetic },
+            }),
             new InternalServiceBulkhead());
 
-    private static string Tamper(Action<JsonObject> change)
+    /// <summary>
+    /// Applies a change and, by default, RESEALS the pack (recomputes evidence_pack_id with BM-JCS-1), so the
+    /// structural rule under test, not the digest check, is what must reject it.
+    /// </summary>
+    private static string Tamper(Action<JsonObject> change, bool reseal = true)
     {
         var node = JsonNode.Parse(Example)!.AsObject();
         change(node);
+        if (reseal)
+        {
+            Reseal(node);
+        }
+
         return node.ToJsonString();
+    }
+
+    internal static void Reseal(JsonObject node)
+    {
+        using var document = JsonDocument.Parse(node.ToJsonString());
+        node["evidence_pack_id"] = CanonicalJson.TrySha256(document.RootElement, excludeRootMember: "evidence_pack_id")
+            ?? throw new InvalidOperationException("not canonicalizable");
     }
 
     private static JsonObject Kind(JsonObject pack, int index) => pack["kinds"]![index]!.AsObject();
@@ -122,6 +143,10 @@ public sealed class StrictContractTests
         var rear = Assert.Single(pack.Kinds[0].Constraints);
         Assert.Equal((">=", 3.0, "m", "HUMAN_REVIEWED"), (rear.Comparator, rear.Value, rear.Unit, rear.ReviewStatus));
         Assert.Equal(64, pack.EvidencePackId.Length);
+        Assert.Equal(("synthetic:reviewer-north", "SYN-2026-001"), (rear.ReviewerId, rear.ReviewReference));
+        Assert.Equal("synthetic-reviewers-0.1", pack.ReviewerRegistryVersion);
+        Assert.Equal(64, pack.TableSha256.Length);
+        Assert.Equal(64, pack.ReviewerRegistrySha256.Length);
     }
 
     [Fact]
@@ -154,9 +179,43 @@ public sealed class StrictContractTests
         Tamper(p => Kind(p, 0)["constraints"]![0]!["comparator"] = "<="),                             // comparator/kind mismatch
         Tamper(p => Kind(p, 0)["constraints"]![0]!["source"]!["page"] = 0),
         Tamper(p => Kind(p, 0)["constraints"]![0]!["reviewer_role"] = null),                          // reviewed without reviewer
-        Tamper(p => p["evidence_pack_id"] = "not-a-hash"),
+        Tamper(p => p["evidence_pack_id"] = "not-a-hash", reseal: false),
         Tamper(p => p["unexpected"] = "field"),                                                       // unknown member
+        // constraint integrity corrections (M6 conditional approval)
+        Tamper(p => p["digest_algorithm"] = "SHA-256/JSON"),
+        Tamper(p => p["table_sha256"] = "not-a-hash"),
+        Tamper(p => p["reviewer_registry_sha256"] = null),
+        Tamper(p => p["reviewer_registry_version"] = "council-reviewers-1"),                          // real registry in a synthetic pack
+        Tamper(p => p["table_version"] = "council-2026.1"),                                           // synthetic flag/version disagree
+        Tamper(p => p["synthetic"] = false),                                                          // synthetic table relabelled as real
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["value"] = 101),                                   // outside the kind's range
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["value"] = -0.5),
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["kind"] = "SIDE_SPACE_MIN"),                       // constraint filed under another kind
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["reviewer_id"] = null),
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["reviewer_id"] = "Jane Perera"),                   // a personal name is never an id
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["reviewer_id"] = "reviewer-north"),                // real identity in a synthetic pack
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["review_reference"] = "BMR-2026-001"),             // real reference in a synthetic pack
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["review_reference"] = "review 1"),
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["reviewed_at"] = "2999-01-01"),                    // review in the future
+        Tamper(p => Kind(p, 1)["constraints"]![0]!["reviewer_id"] = "synthetic:reviewer-north"),      // unreviewed with review details
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["conditions"] = JsonNode.Parse(
+            "[{\"field\":\"floors\",\"comparator\":\">=\",\"value\":2,\"unit\":\"m\"}]")),           // condition unit mismatch
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["conditions"] = JsonNode.Parse(
+            "[{\"field\":\"floors\",\"comparator\":\">=\",\"value\":500,\"unit\":\"count\"}]")),     // condition out of range
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["conditions"] = JsonNode.Parse(
+            "[{\"field\":\"floors\",\"comparator\":\"<\",\"value\":2,\"unit\":\"count\"},{\"field\":\"floors\",\"comparator\":\">\",\"value\":3,\"unit\":\"count\"}]")), // unsatisfiable
+        Tamper(p => HiddenConflict(p)),                                                               // VERIFIED hiding an overlapping disagreement
+        Tamper(p => Kind(p, 0)["status"] = "CONFLICTING"),                                            // CONFLICTING without a real conflict
+        Tamper(p => Kind(p, 0)["constraints"]!.AsArray().Add(Kind(p, 0)["constraints"]![0]!.DeepClone())), // duplicate constraint id
     };
+
+    private static void HiddenConflict(JsonObject pack)
+    {
+        var clone = Kind(pack, 0)["constraints"]![0]!.DeepClone().AsObject();
+        clone["constraint_id"] = "syn.north.rear-space-2";
+        clone["value"] = 4;
+        Kind(pack, 0)["constraints"]!.AsArray().Add(clone); // status stays VERIFIED
+    }
 
     [Theory]
     [MemberData(nameof(TamperedPacks))]
@@ -174,6 +233,8 @@ public sealed class StrictContractTests
         ExampleQuery with { Kinds = [] },
         ExampleQuery with { Kinds = [RegulatoryConstraintKind.RearSpaceMin, RegulatoryConstraintKind.RearSpaceMin] },
         ExampleQuery with { Binding = Binding with { ProjectRevision = 0 } },
+        ExampleQuery with { Binding = Binding with { ProjectRevision = ConstraintBinding.MaxProjectRevision + 1 } }, // outside BM-JCS-1
+        ExampleQuery with { Binding = Binding with { ProjectRevision = long.MaxValue } },
         ExampleQuery with { Binding = Binding with { LandRevisionId = Guid.Empty } },
     };
 
@@ -185,6 +246,98 @@ public sealed class StrictContractTests
 
         await Assert.ThrowsAsync<ArgumentException>(() => Client(handler).GetConstraintsAsync(query, CancellationToken.None));
         Assert.Equal(0, handler.Calls);
+    }
+
+    [Fact]
+    public async Task Resealing_a_harmless_change_is_accepted_so_the_digest_is_genuinely_recomputed()
+    {
+        var resealed = Tamper(p => p["warnings"]!.AsArray().Add("extra warning"));
+
+        var pack = await Client(StubHttpHandler.Json(resealed)).GetConstraintsAsync(ExampleQuery, CancellationToken.None);
+
+        Assert.Contains("extra warning", pack.Warnings);
+    }
+
+    public static TheoryData<string> UnsealedTampering => new()
+    {
+        Tamper(p => p["warnings"]!.AsArray().Add("extra warning"), reseal: false),                    // any edit after sealing
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["value"] = 2.5, reseal: false),                     // a plausible, valid value
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["source"]!["excerpt"] = "A minimum rear space of two metres", reseal: false),
+        Tamper(p => p["evidence_pack_id"] = new string('0', 64), reseal: false),
+        Tamper(p => p.Remove("digest_algorithm"), reseal: false),
+    };
+
+    [Theory]
+    [MemberData(nameof(UnsealedTampering))]
+    public async Task Tampered_packs_fail_independent_digest_recomputation(string json)
+    {
+        var failure = await Assert.ThrowsAsync<DependencyFailureException>(() =>
+            Client(StubHttpHandler.Json(json)).GetConstraintsAsync(ExampleQuery, CancellationToken.None));
+
+        Assert.Equal(DependencyFailureKind.MalformedResponse, failure.Kind);
+    }
+
+    [Fact]
+    public async Task Example_digest_matches_the_independent_csharp_recomputation()
+    {
+        using var document = JsonDocument.Parse(Example);
+
+        Assert.Equal(
+            document.RootElement.GetProperty("evidence_pack_id").GetString(),
+            CanonicalJson.TrySha256(document.RootElement, excludeRootMember: "evidence_pack_id"));
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task Synthetic_packs_are_rejected_unless_explicitly_allowed()
+    {
+        var failure = await Assert.ThrowsAsync<DependencyFailureException>(() =>
+            Client(StubHttpHandler.Json(Example), allowSynthetic: false).GetConstraintsAsync(ExampleQuery, CancellationToken.None));
+
+        Assert.Equal(DependencyFailureKind.MalformedResponse, failure.Kind);
+    }
+
+    [Theory]
+    [InlineData(3_000_000_000L)]                          // beyond Int32: Project.Revision is Int64 (M6 H4-R1 C08)
+    [InlineData(ConstraintBinding.MaxProjectRevision)]
+    public async Task Int64_project_revisions_are_bound_and_verified(long revision)
+    {
+        var resealed = Tamper(p => p["binding"]!["project_revision"] = revision);
+
+        var pack = await Client(StubHttpHandler.Json(resealed))
+            .GetConstraintsAsync(ExampleQuery with { Binding = Binding with { ProjectRevision = revision } }, CancellationToken.None);
+
+        Assert.Equal(revision, pack.Binding.ProjectRevision);
+    }
+
+    public static TheoryData<string> LenientTyping => new()
+    {
+        Tamper(p => p["binding"]!["project_revision"] = "3"),                    // number as string (Web default would accept)
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["value"] = "3"),
+        Tamper(p => Kind(p, 0)["constraints"]![0]!["source"]!["page"] = "1"),
+        Tamper(p => { var v = p["overall_status"]; p.Remove("overall_status"); p["Overall_Status"] = v!.DeepClone(); }), // wrong case
+        Tamper(p => { var v = p["synthetic"]; p.Remove("synthetic"); p["Synthetic"] = v!.DeepClone(); }),
+    };
+
+    [Theory]
+    [MemberData(nameof(LenientTyping))]
+    public async Task Internal_contracts_are_exact_case_and_strictly_typed(string json)
+    {
+        var failure = await Assert.ThrowsAsync<DependencyFailureException>(() =>
+            Client(StubHttpHandler.Json(json)).GetConstraintsAsync(ExampleQuery, CancellationToken.None));
+
+        Assert.Equal(DependencyFailureKind.MalformedResponse, failure.Kind);
+    }
+
+    [Theory]
+    [InlineData("{\"Service\":\"buildmind-rag\",\"status\":\"ok\",\"contract_version\":\"1\",\"corpus_loaded\":true}")]
+    [InlineData("{\"service\":\"buildmind-rag\",\"status\":\"ok\",\"contract_version\":\"1\",\"corpus_loaded\":\"true\"}")]
+    public async Task Health_contract_is_exact_case_and_strictly_typed(string body)
+    {
+        var failure = await Assert.ThrowsAsync<DependencyFailureException>(() =>
+            Client(StubHttpHandler.Json(body)).CheckHealthAsync(CancellationToken.None));
+
+        Assert.Equal(DependencyFailureKind.MalformedResponse, failure.Kind);
     }
 
     [Fact]

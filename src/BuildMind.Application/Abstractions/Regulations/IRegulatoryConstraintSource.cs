@@ -32,7 +32,12 @@ public enum ConstraintKindStatus
 }
 
 /// <summary>The exact revisions an evidence pack is bound to (never inferred by the provider).</summary>
-public sealed record ConstraintBinding(Guid ProjectId, int ProjectRevision, Guid LandRevisionId, Guid RequirementRevisionId);
+/// <param name="ProjectRevision">The project's Int64 revision (<c>Project.Revision</c>), 1 to <see cref="MaxProjectRevision"/>.</param>
+public sealed record ConstraintBinding(Guid ProjectId, long ProjectRevision, Guid LandRevisionId, Guid RequirementRevisionId)
+{
+    /// <summary>Largest revision that canonical JSON (BM-JCS-1) represents exactly in both languages (below 1e15).</summary>
+    public const long MaxProjectRevision = 999_999_999_999_999;
+}
 
 public sealed record RegulatoryConstraintQuery(
     string Jurisdiction,
@@ -40,9 +45,16 @@ public sealed record RegulatoryConstraintQuery(
     ConstraintBinding Binding,
     bool ResidentialOnly = false);
 
+/// <param name="EvidencePackId">SHA-256 (BM-JCS-1) of the pack without this field, recomputed and verified on receipt.</param>
+/// <param name="TableSha256">Integrity digest of the sealed, human-reviewed constraint table that produced the pack.</param>
+/// <param name="ReviewerRegistrySha256">Integrity digest of the reviewer registry that authorized every sign-off.</param>
+/// <param name="Synthetic">True only for test tables; accepted only where synthetic evidence is explicitly allowed.</param>
 public sealed record RegulatoryConstraintPack(
     string EvidencePackId,
     string TableVersion,
+    string TableSha256,
+    string ReviewerRegistryVersion,
+    string ReviewerRegistrySha256,
     bool Synthetic,
     string Jurisdiction,
     ConstraintBinding Binding,
@@ -53,6 +65,8 @@ public sealed record RegulatoryConstraintPack(
 public sealed record ConstraintKindResult(RegulatoryConstraintKind Kind, ConstraintKindStatus Status, IReadOnlyList<RegulatoryConstraint> Constraints);
 
 /// <param name="ReviewStatus"><c>HUMAN_REVIEWED</c> or <c>UNREVIEWED</c> (rejected constraints are never returned).</param>
+/// <param name="ReviewerId">Pseudonymous reviewer identifier (never a personal name); null when unreviewed.</param>
+/// <param name="ReviewReference">Review record reference (for example <c>BMR-2026-001</c>); null when unreviewed.</param>
 public sealed record RegulatoryConstraint(
     string ConstraintId,
     string Comparator,
@@ -62,6 +76,8 @@ public sealed record RegulatoryConstraint(
     IReadOnlyList<ConstraintCondition> Conditions,
     string ReviewStatus,
     string? ReviewerRole,
+    string? ReviewerId,
+    string? ReviewReference,
     DateOnly? ReviewedAt,
     ConstraintSource Source);
 

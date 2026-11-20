@@ -38,9 +38,11 @@ def test_constraints_citing_passages_absent_from_the_real_corpus_are_refused(eng
 
     from app.constraints import ConstraintProvider
 
-    synthetic = json.loads((Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "synthetic_constraints.v0.json").read_text(encoding="utf-8"))
+    fixtures = Path(__file__).resolve().parents[1] / "tests" / "fixtures"
+    synthetic = json.loads((fixtures / "synthetic_constraints.v0.json").read_text(encoding="utf-8"))
+    reviewers = json.loads((fixtures / "synthetic_reviewers.v0.json").read_text(encoding="utf-8"))
     with pytest.raises(ValueError, match="does not reconstruct"):
-        ConstraintProvider(synthetic, engine.page_text)
+        ConstraintProvider(synthetic, engine.page_text, reviewers, allow_synthetic=True)
 
 
 def test_exactly_the_three_approved_sources_are_served(client):

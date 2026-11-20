@@ -14,6 +14,61 @@ namespace BuildMind.Infrastructure.Tests;
 public sealed class RequirementsSectionsEndpointTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Day05Routes_RejectUntrustedIdentity(bool otherCustomer)
+    {
+        var flow = CreateFlow(); await using var app = await RequirementsEndpointTests.CreateSectionTestHost(flow);
+        using var client = otherCustomer ? RequirementsEndpointTests.SectionAuthenticatedClient(app) : app.GetTestClient();
+        if (otherCustomer) client.DefaultRequestHeaders.Add("X-Requirements-Test-Subject", "90000000-0000-0000-0000-000000000009");
+        using var summary = await client.GetAsync($"/api/v1/projects/{flow.Project.Id}/requirements/summary");
+        await AssertProblem(summary, otherCustomer ? 404 : 401);
+        using var method = await client.PutAsJsonAsync($"/api/v1/projects/{flow.Project.Id}/design-method",
+            new { expectedRevisionId = Guid.NewGuid(), catalogueVersion = "synthetic-policy", designMethod = "METHOD_A" });
+        await AssertProblem(method, otherCustomer ? 404 : 401);
+        Assert.Empty(flow.Store.History);
+        Assert.Equal(0, flow.Store.Reads);
+    }
+
+    [Theory]
+    [InlineData("{}", 400)]
+    [InlineData("{\"designMethod\":null}", 200)]
+    [InlineData("{\"designMethod\":\"UNKNOWN\"}", 422)]
+    public async Task MethodBindingAndPolicy_RejectInvalidInput(string selection, int status)
+    {
+        var flow = CreateFlow(); await using var app = await RequirementsEndpointTests.CreateSectionTestHost(flow);
+        using var client = RequirementsEndpointTests.SectionAuthenticatedClient(app);
+        var first = await Seed(client, flow);
+        var body = JsonNode.Parse(selection)!.AsObject();
+        body["expectedRevisionId"] = first.ToString();
+        body["catalogueVersion"] = "synthetic-policy";
+        using var response = await client.PutAsJsonAsync($"/api/v1/projects/{flow.Project.Id}/design-method", body);
+        Assert.Equal(status, (int)response.StatusCode);
+        Assert.Equal(status == 200 ? 2 : 1, flow.Store.History.Count);
+        if (status == 200) Assert.Null(JsonNode.Parse(await response.Content.ReadAsStringAsync())!["designMethod"]);
+    }
+
+    [Fact]
+    public async Task SummaryAndMethod_PreserveExactHistory()
+    {
+        var flow = CreateFlow(); await using var app = await RequirementsEndpointTests.CreateSectionTestHost(flow);
+        using var client = RequirementsEndpointTests.SectionAuthenticatedClient(app);
+        var first = await Seed(client, flow);
+        using var response = await client.PutAsJsonAsync($"/api/v1/projects/{flow.Project.Id}/design-method",
+            new { expectedRevisionId = first, catalogueVersion = "synthetic-policy", designMethod = "METHOD_A" });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var saved = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+        Assert.NotEqual(first, saved["revisionId"]!.GetValue<Guid>());
+        Assert.Equal(2L, saved["revisionNumber"]!.GetValue<long>());
+        using var summary = await client.GetAsync($"/api/v1/projects/{flow.Project.Id}/requirements/summary");
+        Assert.Equal(HttpStatusCode.OK, summary.StatusCode);
+        Assert.True(summary.Headers.CacheControl?.NoStore);
+        Assert.Equal(flow.Project.Id, JsonNode.Parse(await summary.Content.ReadAsStringAsync())!["projectId"]!.GetValue<Guid>());
+        Assert.Equal("METHOD_A", flow.Store.History[first].Content.DesignMethod);
+        Assert.Equal(2, flow.Store.History.Count);
+    }
+
+    [Theory]
     [InlineData("spaces")]
     [InlineData("relationships")]
     public async Task ClearSection_PreservesOtherFieldsAndExactHistory(string section)

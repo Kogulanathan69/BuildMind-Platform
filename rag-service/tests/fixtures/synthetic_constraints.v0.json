@@ -1,6 +1,6 @@
 {
   "contract_version": "constraints-0",
-  "table_version": "synthetic-0.1",
+  "table_version": "synthetic-0.2",
   "synthetic": true,
   "constraints": [
     {
@@ -14,6 +14,8 @@
       "conditions": [],
       "review_status": "HUMAN_REVIEWED",
       "reviewer_role": "synthetic_test_reviewer",
+      "reviewer_id": "synthetic:reviewer-north",
+      "review_reference": "SYN-2026-001",
       "reviewed_at": "2026-11-19",
       "source": {
         "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -52,6 +54,8 @@
       "conditions": [],
       "review_status": "HUMAN_REVIEWED",
       "reviewer_role": "synthetic_test_reviewer",
+      "reviewer_id": "synthetic:reviewer-north",
+      "review_reference": "SYN-2026-002",
       "reviewed_at": "2026-11-19",
       "source": {
         "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -72,6 +76,8 @@
       "conditions": [],
       "review_status": "HUMAN_REVIEWED",
       "reviewer_role": "synthetic_test_reviewer",
+      "reviewer_id": "synthetic:reviewer-south",
+      "review_reference": "SYN-2026-003",
       "reviewed_at": "2026-11-19",
       "source": {
         "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -91,6 +97,10 @@
       "applies_to": "residential",
       "conditions": [],
       "review_status": "REJECTED",
+      "reviewer_role": "synthetic_test_reviewer",
+      "reviewer_id": "synthetic:reviewer-south",
+      "review_reference": "SYN-2026-004",
+      "reviewed_at": "2026-11-19",
       "source": {
         "document_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "page": 1,
@@ -99,5 +109,9 @@
         "excerpt": "One parking space shall be provided for each dwelling unit"
       }
     }
-  ]
+  ],
+  "integrity": {
+    "algorithm": "SHA-256/BM-JCS-1",
+    "sha256": "52d396d0b3582bab97f7108d55f32b27cdfa1895af384f1698ddf2bb50de3201"
+  }
 }

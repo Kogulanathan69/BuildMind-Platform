@@ -1,6 +1,10 @@
 {
   "contract_version": "constraints-0",
-  "table_version": "synthetic-0.1",
+  "digest_algorithm": "SHA-256/BM-JCS-1",
+  "table_version": "synthetic-0.2",
+  "table_sha256": "52d396d0b3582bab97f7108d55f32b27cdfa1895af384f1698ddf2bb50de3201",
+  "reviewer_registry_version": "synthetic-reviewers-0.1",
+  "reviewer_registry_sha256": "7eb66074adf5fb56f1bfcbe16fe40da315a6baa0d30fe9d563d847136f25b84a",
   "synthetic": true,
   "jurisdiction": "Synthetic North Council planning area",
   "building_use": null,
@@ -25,6 +29,8 @@
           "conditions": [],
           "review_status": "HUMAN_REVIEWED",
           "reviewer_role": "synthetic_test_reviewer",
+          "reviewer_id": "synthetic:reviewer-north",
+          "review_reference": "SYN-2026-001",
           "reviewed_at": "2026-11-19",
           "source": {
             "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -50,6 +56,8 @@
           "conditions": [],
           "review_status": "UNREVIEWED",
           "reviewer_role": null,
+          "reviewer_id": null,
+          "review_reference": null,
           "reviewed_at": null,
           "source": {
             "document_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -69,10 +77,11 @@
   ],
   "overall_status": "INCOMPLETE",
   "legal_status_verified": false,
-  "evidence_pack_id": "72412f61ae8ee6a057e05cf84708dfedb7d0c1cc8ae0e608f28a65419f57418e",
   "warnings": [
     "Legal currency and amendments are not verified.",
     "Only HUMAN_REVIEWED constraints may block; UNVERIFIED, CONFLICTING and MISSING kinds require review.",
+    "No precedence is applied: overlapping reviewed constraints with different requirements are CONFLICTING.",
     "SYNTHETIC_TABLE: test values only, not real regulations."
-  ]
+  ],
+  "evidence_pack_id": "3377322f4cee6b25ad729b1ca6a9939e801e302fe6b78282cf3a1cdd634290e6"
 }

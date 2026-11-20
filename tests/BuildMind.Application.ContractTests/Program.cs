@@ -1468,6 +1468,7 @@ CommandFingerprintContractScenarios.Register(Run);
 F02SecurityContractScenarios.Register(Run);
 MutationFingerprintContractScenarios.Register(Run);
 AtomicPlanMutationContractScenarios.Register(Run);
+AtomicPlanMutationConsumerContractScenarios.Register(Run);
 DiagnosticContractScenarios.Register(Run);
 PersistenceContractScenarios.Register(Run);
 AdvancedGeometryContractScenarios.Register(Run);

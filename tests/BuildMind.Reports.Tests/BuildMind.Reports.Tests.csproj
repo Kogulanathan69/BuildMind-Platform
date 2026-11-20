@@ -19,5 +19,6 @@
   <ItemGroup>
     <ProjectReference Include="../../src/BuildMind.Domain/BuildMind.Domain.csproj" />
     <ProjectReference Include="../../src/BuildMind.Application/BuildMind.Application.csproj" />
+    <ProjectReference Include="../../src/BuildMind.Infrastructure/BuildMind.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

@@ -67,8 +67,12 @@ public sealed class RequirementsSectionApplicationService : IRequirementsSection
         token.ThrowIfCancellationRequested();
         var saved = await _requirements.SaveAsync(projectId, snapshot, token).ConfigureAwait(false);
         // Do not reclassify confirmed saves as cancellation. Unknown transaction outcomes propagate.
-        if (saved is null || saved.Status == RequirementsOperationStatus.NoSavedRevision
-            || (saved.Status == RequirementsOperationStatus.Success && saved.Revision!.ProjectId != projectId))
+        if (saved is null || saved.Status == RequirementsOperationStatus.NoSavedRevision)
+            return new(RequirementsOperationStatus.InvalidDependencyResponse);
+        if (saved.Revision is { } revision
+            && (revision.ProjectId != projectId
+                || revision.RevisionId == expectedRevisionId
+                || revision.RevisionNumber - 1 != current.Revision.RevisionNumber))
             return new(RequirementsOperationStatus.InvalidDependencyResponse);
         return saved;
     }

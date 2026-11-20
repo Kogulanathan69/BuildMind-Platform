@@ -266,6 +266,30 @@ public sealed class RequirementsSectionApplicationServiceTests
         Assert.Equal(RequirementsOperationStatus.InvalidDependencyResponse, (await Replace(new(fake), F.ProjectId, F.RevisionId, true)).Status);
     }
 
+    [Theory]
+    [InlineData(false, 2, RequirementsOperationStatus.Success)]
+    [InlineData(true, 2, RequirementsOperationStatus.InvalidDependencyResponse)]
+    [InlineData(false, 1, RequirementsOperationStatus.InvalidDependencyResponse)]
+    [InlineData(false, 3, RequirementsOperationStatus.InvalidDependencyResponse)]
+    public async Task SuccessfulReplacement_RequiresNewConsecutiveRevision(
+        bool reuseBaseId, long savedNumber, RequirementsOperationStatus expected)
+    {
+        var revisionId = reuseBaseId ? F.RevisionId : Guid.NewGuid();
+        var revision = new RequirementRevision(revisionId, F.ProjectId, savedNumber,
+            F.Schema, F.Version, F.Content(), F.Timestamp);
+        var receipt = new RequirementsOperationResult(RequirementsOperationStatus.Success, new RequirementRevisionDto(revision));
+        var fake = new StubService { SaveResult = receipt };
+
+        var result = await Replace(new(fake), F.ProjectId, F.RevisionId, true);
+
+        Assert.Equal(expected, result.Status);
+        Assert.Equal(1, fake.Saves);
+        if (expected == RequirementsOperationStatus.Success)
+            Assert.Same(receipt, result);
+        else
+            Assert.Null(result.Revision);
+    }
+
     private static Task<RequirementsOperationResult> Replace(RequirementsSectionApplicationService service, Guid project, Guid revision,
         bool spaces, CancellationToken token = default) => spaces
         ? service.SaveSpacesAsync(project, new(revision, F.Version, []), token)

@@ -576,10 +576,21 @@ internal static class F02SecurityContractScenarios
                 "AtomicPlanMutationContracts.cs"));
             Check(File.Exists(authorizedAtomicContractPath),
                 "The approved atomic mutation contract consumer is missing.");
+            var authorizedAtomicApplicationConsumerPath = Path.GetFullPath(Path.Combine(
+                repositoryRoot,
+                "src",
+                "BuildMind.Application",
+                "Features",
+                "PlanEditor",
+                "Mutations",
+                "AtomicPlanMutationConsumer.cs"));
+            Check(File.Exists(authorizedAtomicApplicationConsumerPath),
+                "The approved atomic mutation application consumer is missing.");
 
             var authorizedConsumers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 authorizedAtomicContractPath,
+                authorizedAtomicApplicationConsumerPath,
             };
             var consumerPaths = Directory
                 .EnumerateFiles(Path.Combine(repositoryRoot, "src"), "*.cs", SearchOption.AllDirectories)
@@ -589,6 +600,8 @@ internal static class F02SecurityContractScenarios
                 .ToArray();
             Check(consumerPaths.Contains(authorizedAtomicContractPath, StringComparer.OrdinalIgnoreCase),
                 "The approved atomic mutation contract no longer consumes the protected F02 foundation.");
+            Check(consumerPaths.Contains(authorizedAtomicApplicationConsumerPath, StringComparer.OrdinalIgnoreCase),
+                "The approved atomic mutation application consumer no longer consumes the protected F02 foundation.");
 
             var unexpectedConsumers = consumerPaths
                 .Where(path => !authorizedConsumers.Contains(path))
@@ -607,7 +620,6 @@ internal static class F02SecurityContractScenarios
             Check(!authorizedConsumers.Contains(unauthorizedProbePath),
                 "The exact consumer allowlist admitted an unauthorized additional source file.");
 
-            var authorizedConsumerText = File.ReadAllText(authorizedAtomicContractPath);
             var forbiddenActivationMarkers = new[]
             {
                 "IServiceCollection",
@@ -623,8 +635,9 @@ internal static class F02SecurityContractScenarios
                 "MapDelete",
                 "BackgroundService",
             };
-            Check(forbiddenActivationMarkers.All(marker =>
-                    !authorizedConsumerText.Contains(marker, StringComparison.Ordinal)),
+            var authorizedConsumerTexts = authorizedConsumers.Select(File.ReadAllText).ToArray();
+            Check(authorizedConsumerTexts.All(text => forbiddenActivationMarkers.All(marker =>
+                    !text.Contains(marker, StringComparison.Ordinal))),
                 "The approved contract-only consumer contains production activation, endpoint or persistence markers.");
             // This textual guard cannot prove isolation from reflection activation, generated code, aliases or
             // indirect consumption, convention-based registration, compiled architectural dependencies, runtime

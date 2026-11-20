@@ -15,6 +15,10 @@ public sealed class RequirementsSectionsEndpointModule : IApiEndpointModule
         var group = apiV1.MapGroup("/projects/{id}/requirements").WithTags("Requirements").RequireAuthorization();
         group.MapGet("/spaces", GetAsync).WithName("GetRequirementSpaces");
         group.MapGet("/relationships", GetAsync).WithName("GetRequirementRelationships");
+        // Provisional summary is the complete persisted DTO, not a readiness certification.
+        group.MapGet("/summary", GetAsync).WithName("GetRequirementsSummary");
+        apiV1.MapPut("/projects/{id}/design-method", PutDesignMethodAsync)
+            .WithTags("Requirements").RequireAuthorization().WithName("ReplaceRequirementDesignMethod");
         group.MapPut("/spaces", PutSpacesAsync).WithName("ReplaceRequirementSpaces");
         group.MapPut("/relationships", PutRelationshipsAsync).WithName("ReplaceRequirementRelationships");
     }
@@ -25,6 +29,10 @@ public sealed class RequirementsSectionsEndpointModule : IApiEndpointModule
         if (!Guid.TryParse(id, out var project) || project == Guid.Empty) return RequirementsEndpointModule.InvalidProject();
         return RequirementsEndpointModule.Map(await service.GetAsync(project, cancellationToken), project);
     }
+
+    private static Task<IResult> PutDesignMethodAsync(string id, HttpContext context, IRequirementsSectionApplicationService service, CancellationToken token) =>
+        PutAsync<PutDesignMethodHttpRequest>(id, context,
+            (project, request, cancellation) => service.SaveDesignMethodAsync(project, request.ToApplicationRequest(), cancellation), token);
 
     private static Task<IResult> PutSpacesAsync(string id, HttpContext context, IRequirementsSectionApplicationService service, CancellationToken token) =>
         PutAsync<PutAdditionalSpacesHttpRequest>(id, context,

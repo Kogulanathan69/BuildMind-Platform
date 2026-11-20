@@ -10,6 +10,30 @@ namespace BuildMind.Requirements.Tests.Services;
 public sealed class RequirementsSectionApplicationServiceTests
 {
     [Theory]
+    [InlineData("METHOD_A", RequirementsOperationStatus.Success)]
+    [InlineData("UNKNOWN", RequirementsOperationStatus.ValidationFailed)]
+    public async Task MethodReplacement_PreservesSnapshotAndUsesPolicy(string method, RequirementsOperationStatus expected)
+    {
+        var setup = new Setup(); var initial = await Seed(setup);
+        var service = new RequirementsSectionApplicationService(setup.Service);
+        var result = await service.SaveDesignMethodAsync(setup.Project.Id, new(initial.RevisionId, F.Version, method), default);
+        Assert.Equal(expected, result.Status);
+        Assert.Equal("METHOD_A", setup.Store.History[initial.RevisionId].Content.DesignMethod);
+        if (result.Revision is { } saved)
+        {
+            Assert.NotEqual(initial.RevisionId, saved.RevisionId);
+            Assert.Equal(initial.FloorCount, saved.FloorCount);
+            Assert.Equal(initial.GroundFloorRooms, saved.GroundFloorRooms);
+            Assert.Equal(initial.AdditionalSpaces, saved.AdditionalSpaces);
+            Assert.Equal(initial.Relationships, saved.Relationships);
+            Assert.Equal(method, saved.DesignMethod);
+            var stale = await service.SaveDesignMethodAsync(setup.Project.Id, new(initial.RevisionId, F.Version, method), default);
+            Assert.Equal(RequirementsOperationStatus.RevisionConflict, stale.Status);
+        }
+        else Assert.Equal(initial.RevisionId, setup.Store.Current!.Id);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Replacement_PreservesCoreOtherSectionAndHistory(bool spaces)

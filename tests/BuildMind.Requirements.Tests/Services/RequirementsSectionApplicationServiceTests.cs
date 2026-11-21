@@ -2,6 +2,7 @@ using BuildMind.Application.Features.Requirements.Abstractions;
 using BuildMind.Application.Features.Requirements.Contracts;
 using BuildMind.Application.Features.Requirements.Services;
 using BuildMind.Domain.Entities;
+using BuildMind.Domain.ValueObjects;
 using F = BuildMind.Requirements.Tests.Fixtures.SyntheticRequirementFixtures;
 using Setup = BuildMind.Requirements.Tests.Services.RequirementsApplicationServiceTests.Setup;
 

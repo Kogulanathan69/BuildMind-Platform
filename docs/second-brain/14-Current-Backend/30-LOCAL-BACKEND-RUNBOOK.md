@@ -90,6 +90,12 @@ dotnet run --project src/BuildMind.API -c Release
     ```
   - Invalid entries stop start-up with a message naming the entry. Outside Development only `https` origins are accepted.
   - Without any origin, the API answers same-origin only.
+- **Allowed hosts:** the API answers only requests whose `Host` is `localhost`, `127.0.0.1` or `[::1]` (any port). Other hosts get the framework's `400 Bad Request – Invalid Hostname` page.
+  - To reach the API through another name or address in Development (for example the WSL IP), widen the list locally without editing tracked files:
+    ```powershell
+    $env:AllowedHosts = 'localhost;127.0.0.1;[::1];172.25.230.10'   # Development may also use '*'
+    ```
+  - Outside Development, start-up fails unless `AllowedHosts` lists exact host names (no `*`, no wildcards, no scheme, port or path).
 - **Smart App Control (G17):** on the lead's machine, run the API from WSL2 Ubuntu (`/home/buildmind/projects/BuildMind-Platform`, .NET SDK 10.0.1xx), which was used for STEP 05 verification. The Windows MySQL84 service is reachable from WSL through the WSL gateway address (`ip route | awk '/default/{print $3}'`).
 
 ## 6. Tests

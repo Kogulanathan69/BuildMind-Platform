@@ -12,10 +12,10 @@ public sealed class ProfileServiceTests
 
     private readonly FakeRepository _repository = new();
 
-    private ProfileService CreateService(bool authenticated = true)
+    private ProfileService CreateService(bool authenticated = true, Guid? subject = null)
         => new(
             _repository,
-            new FakeCurrentUser(authenticated ? _userId : null));
+            new FakeCurrentUser(authenticated ? subject ?? _userId : null));
 
     private void Seed(bool active = true, Guid? id = null)
     {
@@ -67,6 +67,21 @@ public sealed class ProfileServiceTests
         var result = await CreateService().GetAsync(default);
 
         Assert.Equal(ProfileOperationStatus.NotFound, result.Status);
+    }
+
+    [Fact]
+    public async Task EmptyAuthenticatedSubject_CannotReadOrUpdateProfile()
+    {
+        Seed();
+        var service = CreateService(subject: Guid.Empty);
+
+        var read = await service.GetAsync(default);
+        var update = await service.UpdateAsync(Request(), default);
+
+        Assert.Equal(ProfileOperationStatus.Unauthenticated, read.Status);
+        Assert.Equal(ProfileOperationStatus.Unauthenticated, update.Status);
+        Assert.Equal(0, _repository.ReadCount);
+        Assert.Equal(0, _repository.UpdateCount);
     }
 
     [Fact]

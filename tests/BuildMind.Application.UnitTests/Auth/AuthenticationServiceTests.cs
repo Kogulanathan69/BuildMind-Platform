@@ -149,6 +149,22 @@ public sealed class AuthenticationServiceTests
     }
 
     [Fact]
+    public async Task InactiveAccount_WithCorrectPassword_DoesNotReceiveToken()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Registration(), CancellationToken.None);
+        var user = Assert.Single(_users.Users);
+        _users.Users[0] = User.Restore(
+            user.Id, user.Email, user.NormalizedEmail, user.PasswordHash,
+            user.FullName, user.PhoneNumber, isActive: false, createdAtUtc: user.CreatedAtUtc);
+
+        var result = await service.LoginAsync(Login(), CancellationToken.None);
+
+        Assert.Null(result);
+        Assert.Equal(0, _tokens.IssuedCount);
+    }
+
+    [Fact]
     public async Task Login_ShouldIgnoreEmailCase()
     {
         var service = CreateService();

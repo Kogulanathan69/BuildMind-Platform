@@ -74,6 +74,22 @@ public sealed class PasswordRecoveryServiceTests
     }
 
     [Fact]
+    public async Task InactiveAccount_ShouldReturnSameResponseAsUnknownAccount()
+    {
+        _users.DeactivateAccount();
+        var service = CreateService();
+
+        var inactive = await service.ForgotPasswordAsync(Forgot(), default);
+        var unknown = await service.ForgotPasswordAsync(
+            Forgot("unknown@example.com"), default);
+
+        Assert.Equal(PasswordRecoveryService.GenericResponse, unknown);
+        Assert.Equal(unknown, inactive);
+        Assert.Null(_resets.Token);
+        Assert.Equal(0, _emails.SentCount);
+    }
+
+    [Fact]
     public async Task InvalidEmail_ShouldReturnGenericResponse()
     {
         var result = await CreateService()
@@ -172,6 +188,19 @@ public sealed class PasswordRecoveryServiceTests
         Assert.False(await CreateService()
             .ResetPasswordAsync(
                 Reset(email: "unknown@example.com"), default));
+    }
+
+    [Fact]
+    public async Task AccountDeactivatedAfterIssuance_ShouldRejectMatchingToken()
+    {
+        var service = CreateService();
+        await service.ForgotPasswordAsync(Forgot(), default);
+        var issuedToken = Assert.IsType<PasswordResetTokenRecord>(_resets.Token);
+        _users.DeactivateAccount();
+
+        Assert.False(await service.ResetPasswordAsync(Reset(), default));
+        Assert.Null(_resets.UpdatedPasswordHash);
+        Assert.Same(issuedToken, _resets.Token);
     }
 
     [Fact]
@@ -293,12 +322,25 @@ public sealed class PasswordRecoveryServiceTests
 
     private sealed class UserStore : IUserRepository
     {
-        public User Account { get; } = new()
+        public User Account { get; private set; } = new()
         {
             Email = "customer@example.com",
             NormalizedEmail = "CUSTOMER@EXAMPLE.COM",
             PasswordHash = "synthetic-test-hash"
         };
+
+        public void DeactivateAccount()
+        {
+            Account = User.Restore(
+                Account.Id,
+                Account.Email,
+                Account.NormalizedEmail,
+                Account.PasswordHash,
+                Account.FullName,
+                Account.PhoneNumber,
+                isActive: false,
+                createdAtUtc: Account.CreatedAtUtc);
+        }
 
         public Task<User?> GetByIdAsync(
             Guid id, CancellationToken cancellationToken)

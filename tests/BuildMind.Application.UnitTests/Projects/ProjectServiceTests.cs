@@ -144,6 +144,7 @@ public sealed class ProjectServiceTests
         Assert.Equal(ProjectOperationStatus.Success, result.Status);
         Assert.Equal("Updated House", result.Value!.Name);
         Assert.Equal(2L, result.Value.Revision);
+        Assert.Equal(project.Status, result.Value.Status);
     }
 
     [Fact]

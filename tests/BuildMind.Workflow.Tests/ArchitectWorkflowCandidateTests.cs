@@ -17,6 +17,7 @@ public sealed class ArchitectWorkflowCandidateTests
         public ArchitectBoundaryStatus Status {get;set;}=ArchitectBoundaryStatus.Accepted;
         public bool Throw {get;set;}
         public bool WrongActor {get;set;}
+        public bool WrongProject {get;set;}
         public bool WrongReceipt {get;set;}
         public IReadOnlyList<ArchitectRequest>? OverrideList {get;set;}
         public CancellationTokenSource? CancelAfter {get;set;}
@@ -28,7 +29,7 @@ public sealed class ArchitectWorkflowCandidateTests
         public Task<ArchitectReceipt> ReadAsync(Guid actor,Guid project,Guid request,CancellationToken token)
         {Called();return Task.FromResult(new ArchitectReceipt(Status,ReceiptActor(actor),Status==ArchitectBoundaryStatus.Accepted?Stored:null));}
         public Task<ArchitectListReceipt> ListAsync(Guid actor,Guid project,int maximum,CancellationToken token)
-        {Called();Assert.Equal(100,maximum);return Task.FromResult(new ArchitectListReceipt(Status,ReceiptActor(actor),project,Status==ArchitectBoundaryStatus.Accepted?(OverrideList??(Stored is null?Array.Empty<ArchitectRequest>():new[]{Stored!})):null));}
+        {Called();Assert.Equal(100,maximum);return Task.FromResult(new ArchitectListReceipt(Status,ReceiptActor(actor),WrongProject?Guid.NewGuid():project,Status==ArchitectBoundaryStatus.Accepted?(OverrideList??(Stored is null?Array.Empty<ArchitectRequest>():new[]{Stored!})):null));}
         public Task<ArchitectReceipt> WithdrawAsync(Guid actor,Guid project,Guid request,long version,CancellationToken token)
         {Called();if(Status!=ArchitectBoundaryStatus.Accepted)return Task.FromResult(new ArchitectReceipt(Status,ReceiptActor(actor)));var prior=Stored!;Stored=prior.ProposeWithdrawal(version,Now.AddMinutes(1));return Task.FromResult(new ArchitectReceipt(Status,ReceiptActor(actor),WrongReceipt?Pending():Stored,prior));}
     }
@@ -56,5 +57,79 @@ public sealed class ArchitectWorkflowCandidateTests
     [Fact] public async Task StaleVersionNeverDispatches(){var p=Pending();var b=new Boundary{Stored=p};Assert.Equal(ArchitectOutcome.Conflict,(await S(b).WithdrawAsync(Actor,Project,p.Id,2)).Outcome);Assert.Equal(0,b.Calls);}
     [Fact] public async Task UnsupportedWithdrawalNoMutation(){var p=Pending();var b=new Boundary{Stored=p,Status=ArchitectBoundaryStatus.NotEligible};Assert.Equal(ArchitectOutcome.NotEligible,(await S(b).WithdrawAsync(Actor,Project,p.Id,1)).Outcome);Assert.Same(p,b.Stored);}
     [Fact] public async Task WrongWithdrawalReceiptIsUnknown(){var p=Pending();var b=new Boundary{Stored=p,WrongReceipt=true};Assert.Equal(ArchitectOutcome.OutcomeUnknown,(await S(b).WithdrawAsync(Actor,Project,p.Id,1)).Outcome);Assert.Equal(1,b.Calls);}
+    [Fact] public async Task CreateWrongActorReceiptFailsClosed(){var b=new Boundary{WrongActor=true};var r=await S(b).CreateAsync(Actor,Project,Input());Assert.Equal(ArchitectOutcome.OutcomeUnknown,r.Outcome);Assert.Null(r.Request);Assert.Equal(1,b.Calls);}
+    [Fact] public async Task ListWrongActorReceiptFailsClosed(){var b=new Boundary{WrongActor=true,Stored=Pending()};var r=await S(b).ListAsync(Actor,Project);Assert.Equal(ArchitectOutcome.Unavailable,r.Outcome);Assert.Null(r.Requests);Assert.Equal(1,b.Calls);}
+    [Fact] public async Task ListWrongProjectReceiptFailsClosed(){var b=new Boundary{WrongProject=true,Stored=Pending()};var r=await S(b).ListAsync(Actor,Project);Assert.Equal(ArchitectOutcome.Unavailable,r.Outcome);Assert.Null(r.Requests);Assert.Equal(1,b.Calls);}
+    [Fact]
+    public async Task EmptyActorReadDoesNotDispatch()
+    {
+        var b = new Boundary();
+        var r = await S(b).GetAsync(Guid.Empty, Project, Guid.NewGuid());
+        Assert.Equal(ArchitectOutcome.Hidden, r.Outcome);
+        Assert.Equal(0, b.Calls);
+    }
+
+    [Fact]
+    public async Task EmptyActorListDoesNotDispatch()
+    {
+        var b = new Boundary();
+        var r = await S(b).ListAsync(Guid.Empty, Project);
+        Assert.Equal(ArchitectOutcome.Hidden, r.Outcome);
+        Assert.Equal(0, b.Calls);
+    }
+
+    [Fact]
+    public async Task EmptyActorWithdrawDoesNotDispatch()
+    {
+        var b = new Boundary();
+        var r = await S(b).WithdrawAsync(Guid.Empty, Project, Guid.NewGuid(), 1);
+        Assert.Equal(ArchitectOutcome.Hidden, r.Outcome);
+        Assert.Equal(0, b.Calls);
+    }
+
+    [Fact]
+    public async Task PreCancelledCreateDoesNotDispatch()
+    {
+        using var c = new CancellationTokenSource();
+        c.Cancel();
+        var b = new Boundary();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => S(b).CreateAsync(Actor, Project, Input(), c.Token));
+        Assert.Equal(0, b.Calls);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task PreCancelledOtherOperationsDoNotDispatch(int operation)
+    {
+        using var c = new CancellationTokenSource();
+        c.Cancel();
+
+        var b = new Boundary();
+
+        switch (operation)
+        {
+            case 0:
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                    () => S(b).GetAsync(Actor, Project, Guid.NewGuid(), c.Token));
+                break;
+
+            case 1:
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                    () => S(b).ListAsync(Actor, Project, c.Token));
+                break;
+
+            default:
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                    () => S(b).WithdrawAsync(
+                        Actor, Project, Guid.NewGuid(), 1, c.Token));
+                break;
+        }
+
+        Assert.Equal(0, b.Calls);
+    }
+
     [Fact] public void SelectionNeverExtendsToOtherItemsOrRecipients(){var p=Pending();Assert.True(ArchitectConsentSelection.Includes(p,Project,Recipient,Doc,false));Assert.True(ArchitectConsentSelection.Includes(p,Project,Recipient,Pdf,true));Assert.False(ArchitectConsentSelection.Includes(p,Project,Guid.NewGuid(),Doc,false));Assert.False(ArchitectConsentSelection.Includes(p,Project,Recipient,Pdf,false));Assert.False(ArchitectConsentSelection.Includes(p,Guid.NewGuid(),Recipient,Doc,false));Assert.False(ArchitectConsentSelection.Includes(p,Project,Recipient,Guid.NewGuid(),false));}
 }

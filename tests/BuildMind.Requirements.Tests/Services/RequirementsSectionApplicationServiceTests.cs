@@ -336,6 +336,36 @@ public sealed class RequirementsSectionApplicationServiceTests
         Assert.Equal(1, fake.Saves);
     }
 
+    [Theory]
+    [InlineData("spaces")]
+    [InlineData("relationships")]
+    [InlineData("design-method")]
+    public async Task EverySectionRejectsSuccessfulReceiptContainingUnchangedBase(string section)
+    {
+        var unchanged = new RequirementRevision(Guid.NewGuid(), F.ProjectId, 2,
+            F.Schema, F.Version, F.Content(), F.Timestamp);
+        var fake = new StubService
+        {
+            SaveResult = new(RequirementsOperationStatus.Success, new RequirementRevisionDto(unchanged))
+        };
+        var service = new RequirementsSectionApplicationService(fake);
+
+        var result = section switch
+        {
+            "spaces" => await service.SaveSpacesAsync(
+                F.ProjectId, new(F.RevisionId, F.Version, []), default),
+            "relationships" => await service.SaveRelationshipsAsync(
+                F.ProjectId, new(F.RevisionId, F.Version, []), default),
+            _ => await service.SaveDesignMethodAsync(
+                F.ProjectId, new(F.RevisionId, F.Version, null), default)
+        };
+
+        Assert.Equal(RequirementsOperationStatus.InvalidDependencyResponse, result.Status);
+        Assert.Null(result.Revision);
+        Assert.Equal(1, fake.Reads);
+        Assert.Equal(1, fake.Saves);
+    }
+
     private static Task<RequirementsOperationResult> Replace(RequirementsSectionApplicationService service, Guid project, Guid revision,
         bool spaces, CancellationToken token = default) => spaces
         ? service.SaveSpacesAsync(project, new(revision, F.Version, []), token)

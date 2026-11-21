@@ -45,15 +45,17 @@ public sealed class ReportGenerationCandidateTests
         public int AcceptCalls, PublishCalls, FailCalls;
         public ReportAcceptanceStatus Status = ReportAcceptanceStatus.Accepted;
         public bool BadHash, PublishThrows, AcceptThrows, FailReturns = true;
+        public CancellationTokenSource? CancelOnPublish;
+        public CancellationTokenSource? CancelOnFail;
         public Report? OverridePending; public CancellationTokenSource? CancelOnAccept;
         public Task<ReportAcceptance> AcceptAsync(Guid actor, ReportGenerationRequest request, CancellationToken token)
         { AcceptCalls++; if(AcceptThrows) throw new TimeoutException(); CancelOnAccept?.Cancel();
           return Task.FromResult(new ReportAcceptance(Status,Status==ReportAcceptanceStatus.Accepted ? OverridePending ?? p : null)); }
         public Task<ReportPublication> PublishAsync(Guid actor, Report pending, ReadOnlyMemory<byte> bytes,string hash,CancellationToken token)
-        { PublishCalls++; if(PublishThrows) throw new TimeoutException(); Assert.Equal(ReportArtifactIntegrity.Hash(bytes.Span),hash);
+        { PublishCalls++; if(PublishThrows) throw new TimeoutException(); Assert.Equal(ReportArtifactIntegrity.Hash(bytes.Span),hash); CancelOnPublish?.Cancel();
           return Task.FromResult(new ReportPublication(ReportPublicationStatus.Published,new ReportArtifact(SyntheticReportFixtures.ArtifactId,"application/pdf",bytes.Length,BadHash ? "invalid" : hash,SyntheticReportFixtures.Time.AddMinutes(3)))); }
         public Task<bool> FailAsync(Guid actor, Report pending,string code,CancellationToken token)
-        { FailCalls++; Assert.Equal("REPORT_RENDER_FAILED",code); return Task.FromResult(FailReturns); }
+        { FailCalls++; Assert.Equal("REPORT_RENDER_FAILED",code); CancelOnFail?.Cancel(); return Task.FromResult(FailReturns); }
     }
     [Fact] public async Task AcceptedUsesExactSnapshotAndPublishesOnce()
     { var p=Pending(); var b=new Boundary(p); var r=new Renderer();
@@ -86,6 +88,42 @@ public sealed class ReportGenerationCandidateTests
     [Fact] public async Task CancellationAfterDispatchIsUnknown()
     { using var c=new CancellationTokenSource(); var p=Pending(); var b=new Boundary(p){CancelOnAccept=c}; var r=new Renderer();
       Assert.Equal(ReportGenerationOutcome.OutcomeUnknown,await new ReportGenerationCandidate(b,r).GenerateAsync(p.RequestedBy,Request(p),c.Token)); Assert.Equal(0,r.Calls); }
+    [Fact]
+    public async Task CancellationAfterPublishDispatchNeverClaimsPublicationOrRetries()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var pending = Pending();
+        var boundary = new Boundary(pending) { CancelOnPublish = cancellation };
+        var renderer = new Renderer();
+
+        var outcome = await new ReportGenerationCandidate(boundary, renderer)
+            .GenerateAsync(pending.RequestedBy, Request(pending), cancellation.Token);
+
+        Assert.Equal(ReportGenerationOutcome.OutcomeUnknown, outcome);
+        Assert.Equal(1, boundary.AcceptCalls);
+        Assert.Equal(1, renderer.Calls);
+        Assert.Equal(1, boundary.PublishCalls);
+        Assert.Equal(0, boundary.FailCalls);
+    }
+
+    [Fact]
+    public async Task CancellationAfterFailedTransitionDispatchNeverClaimsRollback()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var pending = Pending();
+        var boundary = new Boundary(pending) { CancelOnFail = cancellation };
+        var renderer = new Renderer { Throws = true };
+
+        var outcome = await new ReportGenerationCandidate(boundary, renderer)
+            .GenerateAsync(pending.RequestedBy, Request(pending), cancellation.Token);
+
+        Assert.Equal(ReportGenerationOutcome.OutcomeUnknown, outcome);
+        Assert.Equal(1, boundary.AcceptCalls);
+        Assert.Equal(1, renderer.Calls);
+        Assert.Equal(0, boundary.PublishCalls);
+        Assert.Equal(1, boundary.FailCalls);
+    }
+
     [Fact] public async Task PreCancellationDoesNotDispatch()
     { using var c=new CancellationTokenSource(); c.Cancel(); var p=Pending(); var b=new Boundary(p);
       await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>new ReportGenerationCandidate(b,new Renderer()).GenerateAsync(p.RequestedBy,Request(p),c.Token)); Assert.Equal(0,b.AcceptCalls); }

@@ -142,7 +142,7 @@ No deliverable is complete: every M4 PR was merged with 0 independent reviews, a
 | S2 | CORS not configured | C6 |
 | S3 | ~~`AllowedHosts: "*"`~~ **host filtering addressed (STEP 05, 2026-11-21):**<br>• default `localhost;127.0.0.1;[::1]`<br>• outside Development, start-up refuses missing, `*`, wildcard or malformed entries ([17 §23](17-SHARED-CONVENTIONS-PROPOSAL.md))<br>**Still open:** HTTPS redirection, HSTS, forwarded headers and deployment host names | hosting decision (G11 / deployment) |
 | S4 | ~~No global request size policy (Kestrel default 30 MB)~~ **request size addressed (STEP 05 S4-A, 2026-11-21):**<br>• global body limit 1 MiB<br>• outside Development, start-up refuses unset, 0, or more than 8 MiB<br>• oversized bodies → 413 Problem Details `PAYLOAD_TOO_LARGE` ([17 §24](17-SHARED-CONVENTIONS-PROPOSAL.md))<br>**Rate limiting addressed (S4-B):** per-client token buckets, anonymous ceiling, `auth-strict`, expensive-operation concurrency, 429 `RATE_LIMITED` ([17 §25](17-SHARED-CONVENTIONS-PROPOSAL.md))<br>**Still open:** M2 upload limits, proxy limits and trusted forwarding, multi-instance limits (G11) | M2 limits, lead |
-| S5 | GitHub Actions pinned by major tag, not commit SHA | lead approval needed |
+| S5 | ~~GitHub Actions pinned by major tag, not commit SHA~~ **addressed (STEP 05, 2026-11-21):**<br>• every action pinned to the full commit SHA that its major tag pointed to (checkout v4.4.0, setup-dotnet v4.3.1, setup-python v5.6.0, upload-artifact v4.6.2; resolved from the upstream repositories), so CI behaviour is unchanged<br>• `persist-credentials: false` on every checkout<br>**Still open:** automated update proposals (Dependabot) not enabled; updates are manual and must re-resolve SHAs from upstream | — |
 | S6 | FastAPI `/docs` and `/openapi.json` exposed | M6 |
 | S7 | Internal service authentication / transport | G11 |
 | S8 | Every M4 PR merged with 0 reviews | G19 |
@@ -197,7 +197,7 @@ Failures map to 503/504 Problem Details. Readiness reports Python as Degraded on
 - G11 (internal transport, auth and hosting).
 - Hosting: AllowedHosts, HTTPS/HSTS.
 - Request size and rate limits.
-- Action SHA pinning.
+- ~~Action SHA pinning~~ (S5 addressed 2026-11-21).
 - Production database account policy.
 - G03, G12, G17, G19 (independent reviews of PRs #8–#27), G20.
 

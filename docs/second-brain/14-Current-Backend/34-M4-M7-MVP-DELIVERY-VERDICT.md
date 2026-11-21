@@ -96,3 +96,25 @@ C# tests run only in CI, because Smart App Control blocks local execution.
 - No production deployment.
 - No independent QA.
 - No hosted per-test counts read from CI artifacts.
+
+## 6. Public regulation retrieval module (isolated; 2026-11-21)
+
+`POST /api/v1/regulations/retrieve` is implemented as `RegulationRetrievalEndpointModule`
+(`src/BuildMind.API/Endpoints/Regulations/`) but is **not registered** by the production composition root. Only
+`AddIsolatedRegulationRetrievalFeature`, which refuses any environment except Testing, adds it.
+
+| Aspect | Behaviour |
+|---|---|
+| Access | `RequireAuthorization()`; expensive operation (S4-B: 2 concurrent per user, 8 overall) |
+| Request | `query` (1–500 after trim), optional `jurisdiction` (1–200), `documentIds` (1–3 distinct, 64 lowercase hex), `maxResults` (1–10, default 5). Unknown members and wrong JSON types → 400 `VALIDATION_FAILED`; non-JSON → 415. The rules match `RagServiceClient` exactly |
+| Response | `contractVersion`, `status` (`EVIDENCE_FOUND`, `NO_MATCHING_EVIDENCE`, `INSUFFICIENT_JURISDICTION_EVIDENCE`, `INSUFFICIENT_SOURCE_EVIDENCE`, `AMBIGUOUS_EVIDENCE`), `passages` (document id, title, jurisdiction, 1-based PDF page, char span, excerpt, `lexicalScore`, evidence status, warnings), `warnings`, `legalStatusVerified: false`, `answerGenerated: false`, `disclaimer`; `Cache-Control: no-store` |
+| Failures | rag-service failures → 503 `DEPENDENCY_UNAVAILABLE` / 504 `DEPENDENCY_TIMEOUT` (global handler); caller abort cancels the internal call |
+| Privacy | The query and the caller identity are neither logged nor echoed in errors |
+| Not included | Project scoping (`projectId`) is deferred until M1/M3 ownership checks exist; no generated answers, legal-currency claims or compliance decisions |
+
+**Before public registration:**
+1. lead approval of this contract;
+2. M1 authentication merged, with `UseAuthentication` → `UseRateLimiter` → `UseAuthorization` in `Program.cs`;
+3. one composition-root line in `Program.cs` (M4).
+
+Tests: `RegulationRetrievalEndpointTests`.

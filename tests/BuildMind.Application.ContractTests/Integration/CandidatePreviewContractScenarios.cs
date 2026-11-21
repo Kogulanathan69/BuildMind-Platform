@@ -99,6 +99,84 @@ internal static class CandidatePreviewContractScenarios
                 scenario.Persistence.RevisionCount == 1, "Expiration boundary produced incorrect side effects.");
         });
 
+        run("trusted facade authenticated apply creates one revision", () =>
+        {
+            var scenario = new Scenario();
+            var candidate = scenario.Preview().Candidate!;
+            var actor = new TrustedActionCurrentUserDouble(scenario.OwnerId);
+            var facade = new TrustedCandidateActionFacade(actor, scenario.Service);
+
+            var result = facade.ApplyAsync(new ApplyCandidateCommand(
+                candidate.CandidateId, scenario.ProjectId, scenario.PlanId, true,
+                "trusted facade apply")).GetAwaiter().GetResult();
+
+            Check(result.Status == CandidateActionStatus.Applied,
+                "Trusted facade apply did not succeed.");
+            Check(result.Revision is not null,
+                "Trusted facade apply returned no revision.");
+            Check(scenario.Persistence.RevisionCount == 2,
+                "Trusted facade apply did not create exactly one revision.");
+            Check(scenario.Persistence.ApplyCalls == 1,
+                "Trusted facade apply did not use the atomic transaction.");
+            Check(actor.RequiredUserCalls == 1,
+                "Trusted facade apply did not resolve actor exactly once.");
+        });
+
+        run("trusted facade authenticated reject creates no revision", () =>
+        {
+            var scenario = new Scenario();
+            var candidate = scenario.Preview().Candidate!;
+            var actor = new TrustedActionCurrentUserDouble(scenario.OwnerId);
+            var facade = new TrustedCandidateActionFacade(actor, scenario.Service);
+
+            var result = facade.RejectAsync(new CandidateActionCommand(
+                candidate.CandidateId, scenario.ProjectId, scenario.PlanId))
+                .GetAwaiter().GetResult();
+
+            Check(result.Status == CandidateActionStatus.Rejected,
+                "Trusted facade reject did not succeed.");
+            Check(scenario.Persistence.RevisionCount == 1,
+                "Trusted facade reject created an unexpected revision.");
+            Check(scenario.Persistence.RejectCalls == 1,
+                "Trusted facade reject did not use the atomic transaction.");
+            Check(actor.RequiredUserCalls == 1,
+                "Trusted facade reject did not resolve actor exactly once.");
+        });
+
+        run("trusted facade wrong actor cannot apply or reject", () =>
+        {
+            var applyScenario = new Scenario();
+            var applyCandidate = applyScenario.Preview().Candidate!;
+            var wrongApplyActor = new TrustedActionCurrentUserDouble(Guid.NewGuid());
+            var applyFacade = new TrustedCandidateActionFacade(
+                wrongApplyActor, applyScenario.Service);
+
+            var apply = applyFacade.ApplyAsync(new ApplyCandidateCommand(
+                applyCandidate.CandidateId, applyScenario.ProjectId,
+                applyScenario.PlanId, true)).GetAwaiter().GetResult();
+
+            Check(apply.Status == CandidateActionStatus.Unauthorized,
+                "Wrong actor was allowed to apply.");
+            Check(applyScenario.Persistence.RevisionCount == 1 &&
+                  applyScenario.Persistence.ApplyCalls == 0,
+                "Wrong actor reached apply mutation.");
+
+            var rejectScenario = new Scenario();
+            var rejectCandidate = rejectScenario.Preview().Candidate!;
+            var wrongRejectActor = new TrustedActionCurrentUserDouble(Guid.NewGuid());
+            var rejectFacade = new TrustedCandidateActionFacade(
+                wrongRejectActor, rejectScenario.Service);
+
+            var reject = rejectFacade.RejectAsync(new CandidateActionCommand(
+                rejectCandidate.CandidateId, rejectScenario.ProjectId,
+                rejectScenario.PlanId)).GetAwaiter().GetResult();
+
+            Check(reject.Status == CandidateActionStatus.Unauthorized,
+                "Wrong actor was allowed to reject.");
+            Check(rejectScenario.Persistence.RevisionCount == 1 &&
+                  rejectScenario.Persistence.RejectCalls == 0,
+                "Wrong actor reached reject mutation.");
+        });
         run("candidate duplicate apply is idempotently rejected", () =>
         {
             var scenario = new Scenario();
@@ -2244,6 +2322,24 @@ internal static class CandidatePreviewContractScenarios
         throw new Exception($"Expected {typeof(T).Name}.");
     }
 
+    private sealed class TrustedActionCurrentUserDouble(Guid? userId)
+        : BuildMind.Application.Abstractions.ICurrentUser
+    {
+        public bool IsAuthenticated => userId is not null && userId != Guid.Empty;
+        public Guid? UserId => IsAuthenticated ? userId : null;
+        public IReadOnlySet<string> Roles { get; } = new HashSet<string>();
+        public int RequiredUserCalls { get; private set; }
+
+        public Guid GetRequiredUserId()
+        {
+            RequiredUserCalls++;
+
+            if (!IsAuthenticated)
+                throw new BuildMind.Application.Abstractions.Errors.UnauthenticatedAccessException();
+
+            return userId!.Value;
+        }
+    }
     private sealed class Scenario
     {
         public Guid OwnerId { get; } = Guid.NewGuid();

@@ -275,8 +275,11 @@ public sealed class RequirementsSectionApplicationServiceTests
         bool reuseBaseId, long savedNumber, RequirementsOperationStatus expected)
     {
         var revisionId = reuseBaseId ? F.RevisionId : Guid.NewGuid();
+        var original = F.Content();
+        var matchingContent = new RequirementContent(original.FloorCount, original.GroundFloorRooms,
+            [], original.Relationships, original.DesignMethod);
         var revision = new RequirementRevision(revisionId, F.ProjectId, savedNumber,
-            F.Schema, F.Version, F.Content(), F.Timestamp);
+            F.Schema, F.Version, matchingContent, F.Timestamp);
         var receipt = new RequirementsOperationResult(RequirementsOperationStatus.Success, new RequirementRevisionDto(revision));
         var fake = new StubService { SaveResult = receipt };
 
@@ -288,6 +291,48 @@ public sealed class RequirementsSectionApplicationServiceTests
             Assert.Same(receipt, result);
         else
             Assert.Null(result.Revision);
+    }
+
+    [Theory]
+    [InlineData("catalogue")]
+    [InlineData("floor-count")]
+    [InlineData("rooms")]
+    [InlineData("spaces")]
+    [InlineData("relationships")]
+    [InlineData("design-method")]
+    public async Task SuccessfulReceiptWithDifferentSubmittedContentFailsClosed(string mismatch)
+    {
+        var original = F.Content();
+        var rooms = original.GroundFloorRooms.AsEnumerable();
+        var spaces = Enumerable.Empty<BuildMind.Domain.ValueObjects.AdditionalSpaceSelection>();
+        var relationships = original.Relationships.AsEnumerable();
+        var method = original.DesignMethod;
+        var floors = original.FloorCount;
+        var catalogue = F.Version;
+
+        switch (mismatch)
+        {
+            case "catalogue": catalogue = "wrong-catalogue"; break;
+            case "floor-count": floors = 2; break;
+            case "rooms": rooms = [new("ROOM_A", 2), new("ROOM_B", 1)]; break;
+            case "spaces": spaces = original.AdditionalSpaces; break;
+            case "relationships": relationships = []; break;
+            case "design-method": method = null; break;
+        }
+
+        var content = new RequirementContent(floors, rooms, spaces, relationships, method);
+        var revision = new RequirementRevision(Guid.NewGuid(), F.ProjectId, 2,
+            F.Schema, catalogue, content, F.Timestamp);
+        var fake = new StubService
+        {
+            SaveResult = new(RequirementsOperationStatus.Success, new RequirementRevisionDto(revision))
+        };
+
+        var outcome = await Replace(new(fake), F.ProjectId, F.RevisionId, true);
+
+        Assert.Equal(RequirementsOperationStatus.InvalidDependencyResponse, outcome.Status);
+        Assert.Null(outcome.Revision);
+        Assert.Equal(1, fake.Saves);
     }
 
     private static Task<RequirementsOperationResult> Replace(RequirementsSectionApplicationService service, Guid project, Guid revision,

@@ -103,6 +103,17 @@ dotnet run --project src/BuildMind.API -c Release
     ```
   - Outside Development the value must be between 1 byte and 8 MiB, or start-up fails.
   - Endpoints that need more (for example M2 uploads) get their own per-endpoint limit, approved by the owner and M4. The global value is never raised for them.
+- **Rate limiting** (`RateLimiting:*`):
+  - **Limits:**
+    - anonymous clients 120 requests/min per IP (IPv6 grouped by /64), all anonymous traffic together 3,000/min;
+    - signed-in users 300/min per user;
+    - endpoints with the `auth-strict` policy 10/min per IP;
+    - endpoints marked as expensive 2 in flight per client and 8 overall.
+  - **Rejections:** `429` Problem Details `RATE_LIMITED` with `Retry-After`.
+  - **Not limited:** `/health`, `/health/ready` and Swagger.
+  - **Local load testing:** in Development you may set `RateLimiting__Enabled=false` (refused elsewhere) or raise the numbers through environment variables.
+  - **Forwarded headers:** `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` is refused outside Development, because it would trust forwarded headers from any sender. Trusted proxies are a hosting (G11) decision.
+  - **Behind a proxy without trusted forwarding**, every anonymous client appears as the proxy and shares one bucket. Resolve this before go-live.
 - **Smart App Control (G17):** on the lead's machine, run the API from WSL2 Ubuntu (`/home/buildmind/projects/BuildMind-Platform`, .NET SDK 10.0.1xx), which was used for STEP 05 verification. The Windows MySQL84 service is reachable from WSL through the WSL gateway address (`ip route | awk '/default/{print $3}'`).
 
 ## 6. Tests

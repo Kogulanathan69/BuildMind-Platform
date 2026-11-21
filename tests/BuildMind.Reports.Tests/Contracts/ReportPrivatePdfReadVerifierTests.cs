@@ -109,6 +109,49 @@ public sealed class ReportPrivatePdfReadVerifierTests
                 stream, Metadata(Pdf), ReportPrivatePdfReadVerifier.AbsoluteMaximumBytes + 1));
     }
 
+    [Fact]
+    public async Task ChunkedPrivateStreamReturnsExactVerifiedBytes()
+    {
+        using var stream = new ChunkedStream(Pdf);
+        var result = await ReportPrivatePdfReadVerifier.ReadVerifiedAsync(
+            stream, Metadata(Pdf), Pdf.Length);
+
+        Assert.Equal(Pdf, result);
+        Assert.True(stream.Reads > 2);
+        Assert.True(stream.LargestRequestedBytes <= Pdf.Length);
+    }
+
+    [Fact]
+    public async Task CancellationAfterFirstChunkCannotReturnPartialArtifact()
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var stream = new ChunkedStream(Pdf, cancellation.Cancel);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            ReportPrivatePdfReadVerifier.ReadVerifiedAsync(
+                stream, Metadata(Pdf), Pdf.Length, cancellation.Token));
+
+        Assert.Equal(1, stream.Reads);
+    }
+
+    private sealed class ChunkedStream(byte[] bytes, Action? afterFirstRead = null) : MemoryStream(bytes)
+    {
+        public int Reads { get; private set; }
+        public int LargestRequestedBytes { get; private set; }
+
+        public override async ValueTask<int> ReadAsync(
+            Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            LargestRequestedBytes = Math.Max(LargestRequestedBytes, buffer.Length);
+            var count = await base.ReadAsync(
+                buffer[..Math.Min(3, buffer.Length)], cancellationToken).ConfigureAwait(false);
+            Reads++;
+            if (Reads == 1)
+                afterFirstRead?.Invoke();
+            return count;
+        }
+    }
+
     private sealed class FailingStream(byte[] bytes) : MemoryStream(bytes)
     {
         public int Attempts { get; private set; }

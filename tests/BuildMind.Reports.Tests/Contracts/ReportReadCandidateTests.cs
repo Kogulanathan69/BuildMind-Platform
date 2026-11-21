@@ -15,6 +15,7 @@ public sealed class ReportReadCandidateTests
     private sealed class Boundary(ReportReadReceipt receipt) : IReportReadBoundaryCandidate
     {
         public int Calls;
+        public ReportReadReceipt Response { get; set; } = receipt;
         public bool Throw;
         public CancellationTokenSource? Cancel;
         public bool? RequestedDownload;
@@ -29,7 +30,7 @@ public sealed class ReportReadCandidateTests
             ReceivedToken = token;
             if (Throw) throw new TimeoutException();
             Cancel?.Cancel();
-            return Task.FromResult(receipt);
+            return Task.FromResult(Response);
         }
     }
     private static ReportReadReceipt Found(Report report, byte[]? bytes = null) => new(ReportReadStatus.Found, SyntheticReportFixtures.User, report, bytes);
@@ -83,7 +84,7 @@ public sealed class ReportReadCandidateTests
     {
         const int maximumBytes = 1024;
         var report = Ready();
-        var boundary = new Boundary(Found(report, Pdf));
+        var boundary = new Boundary(Found(report));
         var candidate = new ReportReadCandidate(boundary, maximumBytes);
 
         var status = await candidate.GetStatusAsync(report.RequestedBy, report.ProjectId, report.Id);
@@ -91,6 +92,7 @@ public sealed class ReportReadCandidateTests
         Assert.Equal(false, boundary.RequestedDownload);
         Assert.Equal(maximumBytes, boundary.RequestedMaximumBytes);
 
+        boundary.Response = Found(report, Pdf);
         var download = await candidate.DownloadAsync(report.RequestedBy, report.ProjectId, report.Id);
         Assert.Equal(ReportAccessOutcome.Available, download.Outcome);
         Assert.Equal(true, boundary.RequestedDownload);

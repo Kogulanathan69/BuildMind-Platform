@@ -97,4 +97,108 @@ public sealed class PreliminaryPdfRendererTests
         var bytes=await new PreliminaryPdfRenderer().RenderAsync(data,default);
         Assert.StartsWith("%PDF-",Encoding.ASCII.GetString(bytes,0,8));
     }
+
+    public sealed class IndependentPdfFactAttribute : FactAttribute
+    {
+        public IndependentPdfFactAttribute()
+        {
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("BUILDMIND_PDF_QA_PYTHON")))
+                Skip = "Set BUILDMIND_PDF_QA_PYTHON to the approved Python executable with pypdf.";
+        }
+    }
+
+    [IndependentPdfFact]
+    public async Task IndependentParserVerifiesExactSyntheticReport()
+    {
+        var data = Data();
+        var snapshot = data.Snapshot;
+        var bytes = await new PreliminaryPdfRenderer(maximumPages: 3).RenderAsync(data, default);
+        Assert.InRange(bytes.Length, 1000, 10 * 1024 * 1024);
+
+        const string script = """
+            import json, sys
+            from io import BytesIO
+            from pypdf import PdfReader
+            from pypdf.errors import PdfReadError
+
+            try:
+                PdfReader(BytesIO(b"%PDF-1.7\n"), strict=True)
+            except PdfReadError:
+                pass
+            else:
+                raise AssertionError("Header-only PDF was accepted")
+
+            reader = PdfReader(BytesIO(sys.stdin.buffer.read()), strict=True)
+            print(json.dumps([
+                [float(page.mediabox.width), float(page.mediabox.height), page.extract_text()]
+                for page in reader.pages
+            ]))
+            """;
+        var start = new System.Diagnostics.ProcessStartInfo(
+            Environment.GetEnvironmentVariable("BUILDMIND_PDF_QA_PYTHON")!)
+        {
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardInputEncoding = new UTF8Encoding(false)
+        };
+        foreach (var argument in new[] { "-I", "-B", "-c", script })
+            start.ArgumentList.Add(argument);
+
+        using var process = System.Diagnostics.Process.Start(start)
+            ?? throw new InvalidOperationException("Could not start the independent PDF parser.");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var output = process.StandardOutput.ReadToEndAsync(timeout.Token);
+        var error = process.StandardError.ReadToEndAsync(timeout.Token);
+        try
+        {
+            await process.StandardInput.BaseStream.WriteAsync(bytes.AsMemory(), timeout.Token);
+            process.StandardInput.Close();
+            await process.WaitForExitAsync(timeout.Token);
+            await Task.WhenAll(output, error);
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                try { process.Kill(); }
+                catch (InvalidOperationException) when (process.HasExited) { }
+                await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            }
+        }
+
+        Assert.True(process.ExitCode == 0, await error);
+        using var result = JsonDocument.Parse(await output);
+        var pages = result.RootElement;
+        Assert.Equal(3, pages.GetArrayLength());
+        foreach (var page in pages.EnumerateArray())
+        {
+            Assert.InRange(page[0].GetDouble(), 594d, 596d);
+            Assert.InRange(page[1].GetDouble(), 841d, 843d);
+        }
+
+        static string Normalize(string text) =>
+            System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
+
+        var cover = Normalize(pages[0][2].GetString()!);
+        Assert.Contains($"Project: {snapshot.ProjectId}", cover);
+        Assert.Contains($"Requirements revision: {snapshot.Requirements.Id}", cover);
+        Assert.Contains($"Land revision: {snapshot.Plan.LandRevisionId}", cover);
+        Assert.Contains($"Plan: {snapshot.Plan.PlanId}", cover);
+        Assert.Contains($"Plan revision: {snapshot.Plan.RevisionId} / version {snapshot.Plan.VersionNumber}", cover);
+        Assert.Contains($"Confirmation: {snapshot.Confirmation.ConfirmationId}", cover);
+        var hash = System.Text.RegularExpressions.Regex.Match(cover, @"Geometry hash:\s*(.*?)\s*Snapshot UTC:");
+        Assert.True(hash.Success);
+        Assert.Equal(snapshot.Plan.GeometryHash,
+            System.Text.RegularExpressions.Regex.Replace(hash.Groups[1].Value, @"\s+", ""));
+
+        var evidence = Normalize(pages[2][2].GetString()!);
+        Assert.Contains($"Validation: {snapshot.Plan.Validation.ValidationId}; validator: test-validator", evidence);
+        Assert.Contains("Geometry valid: True; blocking issues: False", evidence);
+        Assert.Contains("Requirements match: UNKNOWN", evidence);
+        Assert.Contains("Regulatory evidence: UNKNOWN", evidence);
+        Assert.Contains("Warnings acknowledged: True", evidence);
+        Assert.Contains($"Disclaimer version: {snapshot.Disclaimer.Version} {snapshot.Disclaimer.Text}", evidence);
+    }
 }

@@ -59,9 +59,11 @@ public sealed class RequirementReadinessService : IRequirementReadinessSource
         if (codes.Count != 0)
             return new(RequirementReadinessStatus.Incomplete, null, codes.Distinct(StringComparer.Ordinal));
 
+        var capturedAtUtc = _clock.GetUtcNow();
+        cancellationToken.ThrowIfCancellationRequested();
         return new(RequirementReadinessStatus.Ready,
             new RequirementReadinessSnapshot(projectId, context.ConfirmedLandRevisionId!.Value,
-                revision!, _clock.GetUtcNow()), []);
+                revision!, capturedAtUtc), []);
     }
 
     private static RequirementReadinessResult Unavailable(string code) =>

@@ -509,3 +509,48 @@ Status: **IMPLEMENTED — BUILD VERIFIED; TEST EXECUTION PENDING (Linux CI)** on
 - **Clients:** no current client is known to send more than 1 MiB.
 
 **Tests:** `RequestBodyLimitTests` (30). The Kestrel cases use `WebApplicationFactory.UseKestrel`, because TestServer does not apply Kestrel limits.
+
+## 25. Rate limiting (STEP 05 S4-B, lead decisions R1–R9, 2026-11-21)
+
+**Status:** implemented on `feature/m4-rate-limiting` (not merged). Code in `API/Security/RateLimitingConfiguration.cs`; uses the built-in ASP.NET Core rate limiter (no package).
+
+| Item | Implementation |
+|---|---|
+| Middleware | A single `app.UseRateLimiter()` in `Program.cs`, after `UseRouting` and `UseCors` |
+| Future order with authentication | `UseAuthentication` → `UseRateLimiter` → per-request account-state check → `UseAuthorization`. Feature modules must not call `UseRateLimiter` |
+| Global limiter | A chained partitioned limiter evaluated once per request (see the chain below) |
+| `auth-strict` | Named policy: fixed window per peer address, 10/min, queue 0. Attached by endpoint owners with `.RequireRateLimiting(RateLimitingConfiguration.AuthStrictPolicy)` |
+| Expensive operations | Endpoint marker `.RequireExpensiveOperationLimit()` |
+| Exemptions | `/health` and `/health/ready` (partition guard). Swagger is answered before routing and never reaches the limiter. CORS preflights are answered before the limiter |
+| Rejection | 429; `Retry-After` from the limiter metadata, rounded up and at least 1 s; for concurrency rejections a fixed 2 s. The body is the status-code-pages Problem Details (`RATE_LIMITED`, `traceId`, security headers) |
+| Logging | Endpoint name, trace id and retry seconds only: no IP, user id, query or body |
+| Validation | Outside Development: rate limiting cannot be disabled, and `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` is refused (it trusts forwarded headers from any sender; shown by a Development test where spoofed `X-Forwarded-For` values each got a new bucket). All counts are bounded; per-user concurrency ≤ global; IPv6 prefix 48..128; ceiling ≥ per-IP rate |
+
+**The global chain, in order** (the first rejection stops the chain, and leases already taken are released):
+1. **Anonymous ceiling:** one shared token bucket, 3,000/min.
+2. **Per client:** a token bucket keyed by validated user (`sub` via `HttpContextCurrentUser.ResolveFrom`), 300/min with burst 300; otherwise by TCP peer, 120/min with burst 120. Peer keys:
+   - IPv4 per address;
+   - IPv4-mapped IPv6 normalized to IPv4;
+   - IPv6 grouped by /64;
+   - no address → one shared bucket.
+   - Forwarded headers are **never** read.
+3. **Expensive operations, per client:** concurrency 2.
+4. **Expensive operations, global:** concurrency 8.
+
+**Memory evidence (tests):**
+- Because the ceiling is first, a rejected anonymous request never creates a per-client partition. 2,000 distinct addresses inside one ceiling window created 60–62 partitions, not 2,000.
+- Idle partitions are disposed by the framework about 10 s after their limiter becomes idle. Measured on .NET 10.0.15: 5,000 idle partitions → 0 between 10 and 11 s. A test shows a partition being recreated after idling.
+
+**Limitations:**
+- State is in memory per instance (multiple instances multiply the limits).
+- Behind a proxy without trusted forwarding, all anonymous clients share the proxy's bucket (G11).
+- A token taken by an earlier limiter in the chain is not refunded when a later limiter rejects. Concurrency permits are released.
+- Request-level concurrency does **not** bound background jobs (M6 must bound its own job execution).
+
+**M1 integration requirements (handover):**
+- remove M1's own `UseRateLimiter()` and its `M1Authentication` policy;
+- attach `auth-strict` to register, login, refresh, forgot-password and reset-password;
+- add per-account failed-login throttling in the M1 service;
+- keep the order above.
+
+**Tests:** `RateLimitingTests` (40), including real-Kestrel cases.

@@ -21,6 +21,9 @@ var corsEnabled = builder.Services.AddBuildMindCors(builder.Configuration, build
 // C7 (proposed): OpenAPI document and Swagger UI, Development only. No bearer scheme until end-user auth exists.
 builder.AddBuildMindDevelopmentSwagger(bearerAuthenticationEnabled: false);
 
+// S4-B: rate limiting (global chained limiter + auth-strict policy + expensive-operation concurrency).
+builder.Services.AddBuildMindRateLimiting(builder.Configuration);
+
 var app = builder.Build();
 
 // D04: safe response headers first, so they are also applied to error responses.
@@ -39,6 +42,13 @@ if (corsEnabled)
 {
     app.UseCors(CorsConfiguration.PolicyName);
 }
+
+// S4-B: the single rate-limiter middleware. After routing (endpoint policies and markers are visible) and after CORS
+// (preflights are not counted); Swagger and the exception/status-code pages run earlier. When end-user authentication
+// is integrated it goes here: UseAuthentication() BEFORE UseRateLimiter() (per-user partitions), and the per-request
+// account-state check AFTER it, so floods are throttled before they reach the database. Feature modules must not
+// call UseRateLimiter() themselves.
+app.UseRateLimiter();
 
 // Liveness only: reports that the API process is running. It does not check MySQL, Python or RAG.
 app.MapGet("/health", () => Results.Ok(new { service = "buildmind-api", status = "ok" }));

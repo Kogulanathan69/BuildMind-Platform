@@ -19,13 +19,21 @@ public sealed class ArchitectWorkflowCandidateTests
         public bool WrongActor {get;set;}
         public bool WrongProject {get;set;}
         public bool WrongReceipt {get;set;}
+        public Func<ArchitectRequest, ArchitectRequest>? TransformCreateReceipt { get; set; }
         public IReadOnlyList<ArchitectRequest>? OverrideList {get;set;}
         public CancellationTokenSource? CancelAfter {get;set;}
         public int Calls {get;private set;}
         private void Called(){Calls++;if(Throw)throw new TimeoutException("private fixture failure");CancelAfter?.Cancel();}
         private Guid ReceiptActor(Guid actor)=>WrongActor?Guid.NewGuid():actor;
         public Task<ArchitectReceipt> CreateAsync(Guid actor,ArchitectRequest proposed,CancellationToken token)
-        { Called(); if(Status==ArchitectBoundaryStatus.Accepted) Stored=proposed; return Task.FromResult(new ArchitectReceipt(Status,ReceiptActor(actor),Status==ArchitectBoundaryStatus.Accepted?(WrongReceipt?Pending():proposed):null)); }
+        {
+            Called();
+            if (Status != ArchitectBoundaryStatus.Accepted)
+                return Task.FromResult(new ArchitectReceipt(Status, ReceiptActor(actor)));
+            Stored = proposed;
+            var receipt = WrongReceipt ? Pending() : TransformCreateReceipt?.Invoke(proposed) ?? proposed;
+            return Task.FromResult(new ArchitectReceipt(Status, ReceiptActor(actor), receipt));
+        }
         public Task<ArchitectReceipt> ReadAsync(Guid actor,Guid project,Guid request,CancellationToken token)
         {Called();return Task.FromResult(new ArchitectReceipt(Status,ReceiptActor(actor),Status==ArchitectBoundaryStatus.Accepted?Stored:null));}
         public Task<ArchitectListReceipt> ListAsync(Guid actor,Guid project,int maximum,CancellationToken token)
@@ -129,6 +137,71 @@ public sealed class ArchitectWorkflowCandidateTests
         }
 
         Assert.Equal(0, b.Calls);
+    }
+
+
+    [Theory]
+    [InlineData("policy")]
+    [InlineData("recipient")]
+    [InlineData("document")]
+    public async Task CreateRejectsAcceptedReceiptWithChangedConsent(string field)
+    {
+        var other = Guid.NewGuid();
+        ArchitectRequest? altered = null;
+        var b = new Boundary
+        {
+            TransformCreateReceipt = proposed =>
+            {
+                var c = proposed.Consent;
+                return altered = ArchitectRequest.CreatePending(new ShareConsent(
+                    c.Id, c.RequestId, c.ProjectId, c.GrantedBy,
+                    field == "recipient" ? other : c.RecipientId, c.ReportId,
+                    field == "document" ? new[] { other } : c.DocumentIds,
+                    field == "policy" ? "test-v2" : c.PolicyVersion,
+                    c.GrantedAtUtc, true), proposed.RequestedAtUtc);
+            }
+        };
+
+        var result = await S(b).CreateAsync(Actor, Project, Input(report: Pdf));
+
+        Assert.NotNull(altered);
+        Assert.Equal(ArchitectOutcome.OutcomeUnknown, result.Outcome);
+        Assert.Null(result.Request);
+        Assert.Equal<Guid?>(b.Stored!.Id, result.AttemptId);
+        Assert.Equal(1, b.Calls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReadCancellationAfterDispatchDiscardsValidReceipt(bool list)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var pending = Pending();
+        var b = new Boundary { Stored = pending, CancelAfter = cancellation };
+        var service = S(b);
+
+        var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => list
+            ? (Task)service.ListAsync(Actor, Project, cancellation.Token)
+            : service.GetAsync(Actor, Project, pending.Id, cancellation.Token));
+
+        Assert.Equal(cancellation.Token, error.CancellationToken);
+        Assert.Equal(1, b.Calls);
+    }
+
+    [Fact]
+    public async Task WithdrawalCancellationAfterDispatchReturnsUnknownWithoutRetry()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var pending = Pending();
+        var b = new Boundary { Stored = pending, CancelAfter = cancellation };
+
+        var result = await S(b).WithdrawAsync(Actor, Project, pending.Id, pending.StateVersion, cancellation.Token);
+
+        Assert.Equal(ArchitectOutcome.OutcomeUnknown, result.Outcome);
+        Assert.Null(result.Request);
+        Assert.Equal(1, b.Calls);
+        Assert.Equal(ArchitectRequestStatus.Withdrawn, b.Stored!.Status);
     }
 
     [Fact] public void SelectionNeverExtendsToOtherItemsOrRecipients(){var p=Pending();Assert.True(ArchitectConsentSelection.Includes(p,Project,Recipient,Doc,false));Assert.True(ArchitectConsentSelection.Includes(p,Project,Recipient,Pdf,true));Assert.False(ArchitectConsentSelection.Includes(p,Project,Guid.NewGuid(),Doc,false));Assert.False(ArchitectConsentSelection.Includes(p,Project,Recipient,Pdf,false));Assert.False(ArchitectConsentSelection.Includes(p,Guid.NewGuid(),Recipient,Doc,false));Assert.False(ArchitectConsentSelection.Includes(p,Project,Recipient,Guid.NewGuid(),false));}

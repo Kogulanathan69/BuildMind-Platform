@@ -72,8 +72,20 @@ public sealed class RequirementsSectionApplicationService : IRequirementsSection
         if (saved.Revision is { } revision
             && (revision.ProjectId != projectId
                 || revision.RevisionId == expectedRevisionId
-                || revision.RevisionNumber - 1 != current.Revision.RevisionNumber))
+                || revision.RevisionNumber - 1 != current.Revision.RevisionNumber
+                || !MatchesSubmittedContent(snapshot, revision)))
             return new(RequirementsOperationStatus.InvalidDependencyResponse);
         return saved;
     }
+
+    // A successful receipt must describe the exact submitted section replacement and untouched
+    // base content. A mismatched receipt is an unknown persistence outcome, not proof of rollback;
+    // never retry or expose a fabricated successful revision.
+    private static bool MatchesSubmittedContent(SaveRequirementsRequest submitted, RequirementRevisionDto saved) =>
+        saved.CatalogueVersion == submitted.CatalogueVersion
+        && saved.FloorCount == submitted.FloorCount
+        && saved.DesignMethod == submitted.DesignMethod
+        && saved.GroundFloorRooms.Cast<RoomCountInput?>().SequenceEqual(submitted.GroundFloorRooms ?? [])
+        && saved.AdditionalSpaces.Cast<AdditionalSpaceInput?>().SequenceEqual(submitted.AdditionalSpaces)
+        && saved.Relationships.Cast<RoomRelationshipInput?>().SequenceEqual(submitted.Relationships);
 }

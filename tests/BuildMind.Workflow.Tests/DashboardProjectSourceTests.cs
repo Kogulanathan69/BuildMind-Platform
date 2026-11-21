@@ -31,6 +31,7 @@ public sealed class DashboardProjectSourceTests
         public CancellationToken ReceivedToken { get; private set; }
         public int Calls { get; private set; }
         public Exception? Failure { get; set; }
+        public Action? OnGet { get; set; }
 
         public Task<IReadOnlyList<Project>> GetByOwnerIdAsync(
             Guid ownerId, CancellationToken cancellationToken)
@@ -38,6 +39,7 @@ public sealed class DashboardProjectSourceTests
             Calls++;
             RequestedOwner = ownerId;
             ReceivedToken = cancellationToken;
+            OnGet?.Invoke();
 
             if (Failure is not null)
                 return Task.FromException<IReadOnlyList<Project>>(Failure);
@@ -278,6 +280,26 @@ public sealed class DashboardProjectSourceTests
             () => source.GetForCurrentUserAsync(cts.Token));
 
         Assert.Equal(0, repository.Calls);
+    }
+
+    [Fact]
+    public async Task CancellationAfterRepositoryDispatchDiscardsReturnedProjects()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var repository = new TestRepository
+        {
+            Projects = new[] { CreateProject(OwnerA) },
+            OnGet = cancellation.Cancel
+        };
+        var source = new DashboardProjectSource(
+            new TestCurrentUser(), repository);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => source.GetForCurrentUserAsync(cancellation.Token));
+
+        Assert.Equal(1, repository.Calls);
+        Assert.Equal(OwnerA, repository.RequestedOwner);
+        Assert.Equal(cancellation.Token, repository.ReceivedToken);
     }
 
     [Fact]

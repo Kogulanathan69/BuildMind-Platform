@@ -23,8 +23,8 @@ namespace BuildMind.Infrastructure.Tests.Identity;
 public sealed class ProfileEndpointTests
 {
     private const string Route = "/api/v1/profile";
-    private static readonly User Owner = NewUser("owner@example.test");
-    private static readonly User Other = NewUser("other@example.test");
+    internal static readonly User Owner = NewUser("owner@example.test");
+    internal static readonly User Other = NewUser("other@example.test");
     private static readonly User Missing = NewUser("missing@example.test");
     private static readonly User Inactive = NewUser("inactive@example.test");
     private static readonly JwtOptions Options = new()
@@ -104,6 +104,61 @@ public sealed class ProfileEndpointTests
         using var ownerRead = await client.GetAsync(Route);
         AssertStatus(ownerRead, HttpStatusCode.OK);
         Assert.Equal(updated.FullName, (await ownerRead.Content.ReadFromJsonAsync<ProfileResponse>())?.FullName);
+        using var otherClient = CreateClient(app, Other);
+        using var otherRead = await otherClient.GetAsync(Route);
+        AssertStatus(otherRead, HttpStatusCode.OK);
+        var other = Assert.IsType<ProfileResponse>(await otherRead.Content.ReadFromJsonAsync<ProfileResponse>());
+        Assert.Equal(Other.Id, other.Id);
+        Assert.Equal("Original profile", other.FullName);
+        Assert.Null(other.PhoneNumber);
+    }
+
+    [Theory]
+    [InlineData("unexpectedField", "synthetic-extra")]
+    [InlineData("id", null)]
+    [InlineData("userId", null)]
+    [InlineData("ownerId", null)]
+    [InlineData("role", "synthetic-admin")]
+    [InlineData("roles", "synthetic-admin")]
+    [InlineData("password", "synthetic-new-password")]
+    [InlineData("newPassword", "synthetic-new-password")]
+    [InlineData("passwordHash", "synthetic-replacement-hash")]
+    [InlineData("email", "replacement@example.test")]
+    [InlineData("isActive", "false")]
+    public async Task Update_ExtraJsonFieldsDoNotChangeProtectedProfileData(string field, string? value)
+    {
+        var store = new ProfileStore();
+        await using var app = await StartAsync(store);
+        using var client = CreateClient(app, Owner);
+        var body = new Dictionary<string, object?>
+        {
+            ["fullName"] = "Updated owner",
+            ["phoneNumber"] = "+94770000000",
+            [field] = field switch
+            {
+                "roles" => new[] { value },
+                "isActive" => false,
+                _ => value ?? Other.Id.ToString()
+            }
+        };
+
+        using var response = await client.PutAsJsonAsync(Route, body);
+
+        // Characterize the current binder behavior until strict rejection is agreed.
+        AssertStatus(response, HttpStatusCode.OK);
+        Assert.Equal(1, store.Calls);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var updated = json.RootElement;
+        Assert.Equal(Owner.Id, updated.GetProperty("id").GetGuid());
+        Assert.Equal(Owner.Email, updated.GetProperty("email").GetString());
+        Assert.True(updated.GetProperty("isActive").GetBoolean());
+        Assert.Equal("Updated owner", updated.GetProperty("fullName").GetString());
+        Assert.Equal("+94770000000", updated.GetProperty("phoneNumber").GetString());
+        if (field is not ("id" or "email" or "isActive"))
+            Assert.False(updated.TryGetProperty(field, out _));
+        if (value is not null && field != "isActive")
+            Assert.DoesNotContain(value, updated.GetRawText());
+
         using var otherClient = CreateClient(app, Other);
         using var otherRead = await otherClient.GetAsync(Route);
         AssertStatus(otherRead, HttpStatusCode.OK);
@@ -202,7 +257,7 @@ public sealed class ProfileEndpointTests
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    private sealed class ProfileStore : IUserProfileRepository
+    internal sealed class ProfileStore : IUserProfileRepository
     {
         private readonly Dictionary<Guid, ProfileResponse> _profiles = new()
         {

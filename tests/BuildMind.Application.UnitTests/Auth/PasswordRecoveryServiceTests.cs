@@ -153,14 +153,32 @@ public sealed class PasswordRecoveryServiceTests
         Assert.Null(_resets.UpdatedPasswordHash);
     }
 
-    [Fact]
-    public async Task ExpiredToken_ShouldFail()
+    [Theory]
+    [InlineData('A', 63)]
+    [InlineData('A', 65)]
+    [InlineData('G', 64)]
+    public async Task MalformedToken_IsRejectedBeforeAttemptingReset(char character, int length)
+    {
+        var service = CreateService();
+        await service.ForgotPasswordAsync(Forgot(), default);
+        var issuedToken = Assert.IsType<PasswordResetTokenRecord>(_resets.Token);
+
+        Assert.False(await service.ResetPasswordAsync(Reset(new string(character, length)), default));
+        Assert.Equal(0, _resets.ResetAttempts);
+        Assert.Same(issuedToken, _resets.Token);
+        Assert.Null(_resets.UpdatedPasswordHash);
+    }
+
+    [Theory]
+    [InlineData(15)]
+    [InlineData(16)]
+    public async Task TokenAtOrPastExpiration_ShouldFail(int elapsedMinutes)
     {
         var service = CreateService();
 
         await service.ForgotPasswordAsync(Forgot(), default);
 
-        _clock.Now = _clock.Now.AddMinutes(16);
+        _clock.Now = _clock.Now.AddMinutes(elapsedMinutes);
 
         Assert.False(await service.ResetPasswordAsync(
             Reset(), default));
@@ -283,6 +301,7 @@ public sealed class PasswordRecoveryServiceTests
         public PasswordResetTokenRecord? Token { get; private set; }
 
         public string? UpdatedPasswordHash { get; private set; }
+        public int ResetAttempts { get; private set; }
 
         public bool RejectSave { get; set; }
 
@@ -305,6 +324,7 @@ public sealed class PasswordRecoveryServiceTests
             DateTimeOffset nowUtc,
             CancellationToken cancellationToken)
         {
+            ResetAttempts++;
             if (Token is null ||
                 Token.UserId != userId ||
                 Token.TokenHash != tokenHash ||

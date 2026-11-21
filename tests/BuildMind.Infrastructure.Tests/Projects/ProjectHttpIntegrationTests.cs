@@ -323,7 +323,7 @@ public sealed class ProjectHttpIntegrationTests
         }
     }
 
-    private sealed class InMemoryProjectRepository(
+    internal sealed class InMemoryProjectRepository(
         IEnumerable<Project> projects, bool synchronizeUpdates = false) : IProjectRepository
     {
         private readonly Dictionary<Guid, Project> _projects = projects.ToDictionary(project => project.Id);

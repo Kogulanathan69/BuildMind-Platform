@@ -3,6 +3,17 @@ using BuildMind.Application.Abstractions.Errors;
 
 namespace BuildMind.Application.Features.PlanEditor.Editing;
 
+public interface ITrustedCandidateActionFacade
+{
+    Task<CandidateActionResult> ApplyAsync(
+        ApplyCandidateCommand command,
+        CancellationToken cancellationToken = default);
+
+    Task<CandidateActionResult> RejectAsync(
+        CandidateActionCommand command,
+        CancellationToken cancellationToken = default);
+}
+
 /// <summary>
 /// Unregistered application boundary for authenticated candidate actions.
 /// The actor is resolved exclusively from the trusted current-user context.
@@ -10,7 +21,7 @@ namespace BuildMind.Application.Features.PlanEditor.Editing;
 /// </summary>
 public sealed class TrustedCandidateActionFacade(
     ICurrentUser currentUser,
-    CandidatePreviewService candidatePreviews)
+    CandidatePreviewService candidatePreviews) : ITrustedCandidateActionFacade
 {
     private readonly ICurrentUser currentUser =
         currentUser ?? throw new ArgumentNullException(nameof(currentUser));

@@ -79,6 +79,19 @@ dotnet run --project src/BuildMind.API -c Release
   - MySQL is mandatory: not configured or unreachable → **503**.
   - Python and RAG are Degraded-only (never 503). RAG is Healthy only with the right identity, contract v1 and a loaded corpus.
 
+### 5a. API documentation and browser access (Development only; C6/C7 pending lead approval)
+- **Swagger UI:** `http://<API>/swagger`; document `/swagger/v1/swagger.json`. Mapped only when `ASPNETCORE_ENVIRONMENT=Development`; other environments return 404.
+  - Readiness (`/health/ready`) is a health-check endpoint and does not appear in the document.
+  - Product endpoints appear only once their feature modules are registered (none on `develop` today).
+- **CORS:** browser calls from another origin need `Cors__AllowedOrigins__0` (more with `__1`, …).
+  - The tracked launch profile sets the provisional Angular origin `http://localhost:4200`. When starting with `dotnet run --no-launch-profile` or plain environment variables as above, set it explicitly:
+    ```powershell
+    $env:Cors__AllowedOrigins__0 = 'http://localhost:4200'   # exact origin only: no '*', path or trailing slash
+    ```
+  - Invalid entries stop start-up with a message naming the entry. Outside Development only `https` origins are accepted.
+  - Without any origin, the API answers same-origin only.
+- **Smart App Control (G17):** on the lead's machine, run the API from WSL2 Ubuntu (`/home/buildmind/projects/BuildMind-Platform`, .NET SDK 10.0.1xx), which was used for STEP 05 verification. The Windows MySQL84 service is reachable from WSL through the WSL gateway address (`ip route | awk '/default/{print $3}'`).
+
 ## 6. Tests
 | Suite | Command | Where |
 |---|---|---|

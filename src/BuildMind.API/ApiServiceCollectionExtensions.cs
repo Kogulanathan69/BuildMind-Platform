@@ -90,6 +90,14 @@ public static class ApiServiceCollectionExtensions
         // or load balancer in front of the API may add its own headers and must be configured separately.
         services.Configure<KestrelServerOptions>(options => options.AddServerHeader = false);
 
+        // STEP 05 S4-A: global request-body limit. The host does NOT bind Kestrel:Limits from configuration (verified
+        // 2026-11-21: Kestrel kept its 30,000,000-byte default), so the value is applied here explicitly: 1 MiB when the
+        // key is absent; outside Development at most 8 MiB, validated at start-up.
+        services.Configure<KestrelServerOptions>(options =>
+            options.Limits.MaxRequestBodySize = RequestBodyLimitValidation.ReadConfiguredLimit(configuration));
+        services.AddOptions<KestrelServerOptions>().ValidateOnStart();
+        services.AddSingleton<IValidateOptions<KestrelServerOptions>, RequestBodyLimitValidation>();
+
         return services;
     }
 

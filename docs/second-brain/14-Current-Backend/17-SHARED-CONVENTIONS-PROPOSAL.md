@@ -484,3 +484,28 @@ Status: **IMPLEMENTED — BUILD VERIFIED; TEST EXECUTION PENDING (Linux CI)** on
   - HTTPS redirection, HSTS and certificates;
   - the Host used by health probes.
 - **Tests:** `HostFilteringTests` (40).
+
+## 24. Request-body size limit (STEP 05 S4-A, lead decisions S4-1..S4-4, 2026-11-21)
+
+**Status:** implemented on `feature/m4-request-size-limit` (not merged). Rate limiting (S4-B) is a separate change.
+
+| Decision | Implementation |
+|---|---|
+| S4-1 global limit | Kestrel `Limits.MaxRequestBodySize` = **1 MiB** (1,048,576 bytes). The value is in `appsettings.json` (`Kestrel:Limits:MaxRequestBodySize`) **and applied explicitly** in `ApiServiceCollectionExtensions` (`RequestBodyLimitValidation.ReadConfiguredLimit`). The host does **not** bind `Kestrel:Limits` from configuration by itself: without the explicit code Kestrel kept its 30,000,000-byte default (verified 2026-11-21). An absent or empty key means 1 MiB, never 30 MB; a non-numeric value stops start-up |
+| S4-2 larger bodies | Only per endpoint (request-size metadata on that endpoint), proposed by the owning member and approved by M4. Never by raising the global value |
+| S4-3 ceiling | `RequestBodyLimitValidation` (`IValidateOptions<KestrelServerOptions>` + `ValidateOnStart`). Outside Development the limit must be set and in 1 byte .. 8 MiB. In every environment 0 is refused. Development is otherwise unrestricted |
+| S4-4 connections | `MaxConcurrentConnections` unchanged (unset) until G11 |
+
+**Observed runtime behaviour** (real Kestrel, real composition root):
+- A body of exactly 1,048,576 bytes is accepted.
+- **1,048,577 bytes** → **413**, `application/problem+json`, `code: PAYLOAD_TOO_LARGE`, `type: urn:buildmind:problem:payload-too-large`, with `traceId` and the BuildMind security headers (`nosniff`, `DENY`, `no-referrer`). The body is not echoed.
+- A chunked body (no `Content-Length`) over the limit → the same 413.
+- The limit applies **when the body is read**: an oversized body sent to a route that does not read it gets that route's normal answer (e.g. 405).
+
+**Compatibility risks:**
+- **M2 uploads** (survey PDFs and images) cannot rely on Kestrel's old ~28.6 MiB default. Each upload endpoint needs its own approved limit, streaming to storage, and multipart/form caps. Designed with M2.
+- **M3 full-plan payloads:** the geometry contracts allow up to tens of thousands of walls and openings, which could exceed 1 MiB. If a public M3 endpoint needs more, it gets an endpoint-specific limit.
+- **Reverse proxy (G11):** the proxy body limit (e.g. `client_max_body_size`) must be at most the API limit, and must mirror per-endpoint raises.
+- **Clients:** no current client is known to send more than 1 MiB.
+
+**Tests:** `RequestBodyLimitTests` (30). The Kestrel cases use `WebApplicationFactory.UseKestrel`, because TestServer does not apply Kestrel limits.

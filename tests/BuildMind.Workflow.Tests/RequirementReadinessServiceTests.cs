@@ -130,6 +130,31 @@ public sealed class RequirementReadinessServiceTests
         using var cts = new CancellationTokenSource(); var p = new Provider(Valid()) { OnRead = cts.Cancel };
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new RequirementReadinessService(p, new Clock()).GetAsync(Project, Actor, cts.Token));
     }
+    [Fact] public async Task CancellationDuringCaptureClockCannotReturnReady()
+    {
+        using var cts = new CancellationTokenSource();
+        var provider = new Provider(Valid());
+        var clock = new CancelingClock(cts.Cancel);
+        var service = new RequirementReadinessService(provider, clock);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.GetAsync(Project, Actor, cts.Token));
+
+        Assert.Equal(1, provider.Calls);
+        Assert.Equal(1, clock.Calls);
+    }
+
+    private sealed class CancelingClock(Action cancel) : TimeProvider
+    {
+        public int Calls { get; private set; }
+        public override DateTimeOffset GetUtcNow()
+        {
+            Calls++;
+            cancel();
+            return Now;
+        }
+    }
+
     [Fact] public async Task UnknownFailurePropagatesWithoutRetry()
     {
         var p = new Provider(Valid()) { OnRead = () => throw new InvalidOperationException("synthetic") };

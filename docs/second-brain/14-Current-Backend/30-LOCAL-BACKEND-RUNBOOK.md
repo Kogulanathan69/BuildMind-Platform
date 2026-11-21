@@ -96,6 +96,13 @@ dotnet run --project src/BuildMind.API -c Release
     $env:AllowedHosts = 'localhost;127.0.0.1;[::1];172.25.230.10'   # Development may also use '*'
     ```
   - Outside Development, start-up fails unless `AllowedHosts` lists exact host names (no `*`, no wildcards, no scheme, port or path).
+- **Request body limit:** every request body is limited to **1 MiB** (`Kestrel:Limits:MaxRequestBodySize`, bytes). A larger body gets **413** Problem Details `PAYLOAD_TOO_LARGE`; this happens when the endpoint reads the body.
+  - Development may use any positive value, for example:
+    ```powershell
+    $env:Kestrel__Limits__MaxRequestBodySize = '4194304'
+    ```
+  - Outside Development the value must be between 1 byte and 8 MiB, or start-up fails.
+  - Endpoints that need more (for example M2 uploads) get their own per-endpoint limit, approved by the owner and M4. The global value is never raised for them.
 - **Smart App Control (G17):** on the lead's machine, run the API from WSL2 Ubuntu (`/home/buildmind/projects/BuildMind-Platform`, .NET SDK 10.0.1xx), which was used for STEP 05 verification. The Windows MySQL84 service is reachable from WSL through the WSL gateway address (`ip route | awk '/default/{print $3}'`).
 
 ## 6. Tests

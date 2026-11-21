@@ -56,4 +56,10 @@ Out of scope for this register: 3D and construction cost endpoints (excluded by 
 
 **Readiness (BE-M4-D04, uncommitted):** `GET /health/ready`, anonymous, outside `/api/v1`. 200 when Healthy/Degraded, 503 when Unhealthy. Body `{"status":"Healthy|Degraded|Unhealthy","checks":[{"name":"mysql|python|rag","status":"…","reason":"reachable|not_configured|unreachable|unverified|unavailable"}]}`. Not for frontend business logic. `/health` liveness unchanged.
 
+**CORS and OpenAPI (STEP 05, 2026-11-21, proposed implementation, not merged):**
+- **CORS:** exact-origin allowlist from `Cors:AllowedOrigins`; provisional Development origin `http://localhost:4200`.
+- **OpenAPI:** Development-only Swagger document and UI at `/swagger` (Swashbuckle, pending package and C7 approval).
+- **Product endpoints:** none added.
+- **Details:** [17 §22](second-brain/14-Current-Backend/17-SHARED-CONVENTIONS-PROPOSAL.md).
+
 **Dependency failures (BE-M4-D05, uncommitted):** a feature call whose private dependency fails returns Problem Details **503 `DEPENDENCY_UNAVAILABLE`** (unavailable, disabled, unexpected/malformed/oversized response) or **504 `DEPENDENCY_TIMEOUT`** (timeout); no internal URL or host in the body. Readiness `python` check now verifies Python's `GET /health`. Internal Python routes: only `GET /health` exists; feature routes are owned by M2/M3/M6 and not yet defined.

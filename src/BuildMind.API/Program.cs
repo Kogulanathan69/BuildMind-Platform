@@ -1,4 +1,5 @@
 using BuildMind.API;
+using BuildMind.API.Documentation;
 using BuildMind.API.Health;
 using BuildMind.API.Routing;
 using BuildMind.API.Security;
@@ -14,6 +15,12 @@ builder.Services
     .AddInfrastructure(builder.Configuration)
     .AddBuildMindApiInfrastructure(builder.Configuration);
 
+// C6 (proposed): exact-origin CORS allowlist from configuration. No origins configured => no CORS policy at all.
+var corsEnabled = builder.Services.AddBuildMindCors(builder.Configuration, builder.Environment);
+
+// C7 (proposed): OpenAPI document and Swagger UI, Development only. No bearer scheme until end-user auth exists.
+builder.AddBuildMindDevelopmentSwagger(bearerAuthenticationEnabled: false);
+
 var app = builder.Build();
 
 // D04: safe response headers first, so they are also applied to error responses.
@@ -22,6 +29,16 @@ app.UseMiddleware<SecurityHeadersMiddleware>();
 // C3: safe RFC 9457 responses for unhandled exceptions and for empty 4xx/5xx responses (e.g. unknown routes).
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+
+// Development only; a no-op in every other environment.
+app.UseBuildMindDevelopmentSwagger();
+
+// Order: routing -> CORS (answers preflight before any future authentication).
+app.UseRouting();
+if (corsEnabled)
+{
+    app.UseCors(CorsConfiguration.PolicyName);
+}
 
 // Liveness only: reports that the API process is running. It does not check MySQL, Python or RAG.
 app.MapGet("/health", () => Results.Ok(new { service = "buildmind-api", status = "ok" }));

@@ -8,7 +8,8 @@
       "launchUrl": "health",
       "applicationUrl": "http://localhost:5080",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Cors__AllowedOrigins__0": "http://localhost:4200"
       }
     }
   }

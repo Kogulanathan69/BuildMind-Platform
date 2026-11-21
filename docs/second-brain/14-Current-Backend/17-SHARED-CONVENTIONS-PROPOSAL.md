@@ -439,3 +439,28 @@ Status: **IMPLEMENTED — BUILD VERIFIED; TEST EXECUTION PENDING (Linux CI)** on
 **Delivery status (2026-11-18):** D01c merged to `develop` as `0a4d70a` (PR #11, squash). Test-only corrections after review/CI: `27d320d` (synthetic route rename) and `2d2a474` (start-up validation test lifecycle race). Final PR and post-merge CI runs passed; exact final counts not retrieved; independent review outstanding. Evidence EV-20261118-17..22.
 
 **BE-M4-D04 delivery note (2026-11-18, uncommitted):** C11b readiness implemented as designed (`/health/ready`, `ready` tag; MySQL 503; Python/RAG Degraded until D05). C6, C7, A1/A2 still pending, so not implemented.
+
+## 22. STEP 05 implementation proposal: C6 (CORS) and C7 (OpenAPI), 2026-11-21
+
+**Status: PROPOSED IMPLEMENTATION. Not merged; C6 and C7 lead approval and the C7 package approval are still pending.**
+- **Lead direction (STEP 05, 2026-11-21):** the CORS *design* (configuration-driven exact-origin allowlist; no wildcard; no unrestricted credentials; explicit methods and headers; environment-specific configuration) is approved. `http://localhost:4200` stays the *provisional* Development origin until the frontend confirms it.
+- **Built and tested against `develop` `ed10592`:** full solution 1,579/1,579 C# tests and 413/413 contract checks (scratch run, 2026-11-21). The later Swagger UI test was run with its class only (21/21). CI on the PR is still required.
+
+| Item | Implementation | Source |
+|---|---|---|
+| C6 policy | One named policy `BuildMindFrontend` from `Cors:AllowedOrigins`:<br>• exact `scheme://host[:port]` only;<br>• start-up fails on wildcards, paths, queries, fragments, user information or malformed entries;<br>• `http` accepted only in Development; methods `GET, POST, PUT, PATCH`;<br>• request headers `Authorization, Content-Type`; exposed `Location`;<br>• credentials off; preflight max-age 600 s | `API/Security/CorsConfiguration.cs` |
+| C6 configuration | Development origin from the tracked `Properties/launchSettings.json` (`Cors__AllowedOrigins__0`). `appsettings.Development.json` is git-ignored by design, so it is not used | `launchSettings.json` |
+| C6 order | `UseRouting` → `UseCors` (before any future authentication, so preflight is answered without credentials) | `Program.cs` |
+| C7 | Swagger document `/swagger/v1/swagger.json` and UI `/swagger`, **Development only** (not registered or mapped elsewhere; Production returns 404). A bearer scheme is declared only when end-user authentication exists (not on `develop`) | `API/Documentation/SwaggerConfiguration.cs` |
+| Tests | 20 (`CorsAndSwaggerTests`) plus a test host that applies settings before `Build()` (`StartupSettingsApiFactory`) | `tests/BuildMind.Infrastructure.Tests` |
+
+**Deviations from the C6/C7 recommendations above (§6, §7, §15), for the lead's decision:**
+1. **C7 package:**
+   - The recommendation was option A: first-party `Microsoft.AspNetCore.OpenApi` at `/openapi/v1.json`, no UI.
+   - The proposal uses **option B: Swashbuckle.AspNetCore 11.0.1**, carried over from the lead's local Swagger work, because it provides the UI used for manual endpoint testing.
+   - Option A needs a package download that has not been approved (it is not in the local cache), so it is not built.
+   - Alternatives: A (document only), A plus a UI-only package, or B.
+2. **C6 empty list:** the recommendation was "start-up fails on an empty list outside Development". The proposal registers **no CORS policy** when no origin is configured, so the API is same-origin only. This is safer than an empty policy and keeps hosts that have no browser frontend (tests, internal tools) working. Making origins mandatory outside Development can be added when hosting is decided (G11).
+3. **C6 methods and headers:**
+   - `DELETE`, `Idempotency-Key` and `traceparent` are **not** allowed yet: no current endpoint uses them (Decision 6: explicit *required* methods and headers).
+   - They are added when an approved endpoint needs them (C2/C5b idempotency).

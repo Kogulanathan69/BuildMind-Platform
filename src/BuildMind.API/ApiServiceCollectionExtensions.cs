@@ -52,6 +52,12 @@ public static class ApiServiceCollectionExtensions
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<DatabaseOptions>, DatabaseOptionsValidation>();
 
+        // STEP 05 H1–H4: host-header filtering uses the framework middleware (AllowedHosts). Outside Development the
+        // list must contain exact host names only; validated at start-up so a missing or "*" value cannot ship.
+        services.AddOptions<Microsoft.AspNetCore.HostFiltering.HostFilteringOptions>().ValidateOnStart();
+        services.AddSingleton<
+            IValidateOptions<Microsoft.AspNetCore.HostFiltering.HostFilteringOptions>, AllowedHostsValidation>();
+
         // BE-M4-D04 readiness (C11b): MySQL mandatory; Python/RAG instance-optional (never Healthy before D05).
         services.AddSingleton<ReadinessProbeGate>();
         services.AddHealthChecks()

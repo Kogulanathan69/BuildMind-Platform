@@ -140,7 +140,7 @@ No deliverable is complete: every M4 PR was merged with 0 independent reviews, a
 |---|---|---|
 | S1 | No authentication or authorization middleware: `ICurrentUser` is always anonymous | A1/A2, M1 |
 | S2 | CORS not configured | C6 |
-| S3 | `AllowedHosts: "*"`, no HTTPS redirection or HSTS | hosting decision (G11 / deployment) |
+| S3 | ~~`AllowedHosts: "*"`~~ **host filtering addressed (STEP 05, 2026-11-21):**<br>• default `localhost;127.0.0.1;[::1]`<br>• outside Development, start-up refuses missing, `*`, wildcard or malformed entries ([17 §23](17-SHARED-CONVENTIONS-PROPOSAL.md))<br>**Still open:** HTTPS redirection, HSTS, forwarded headers and deployment host names | hosting decision (G11 / deployment) |
 | S4 | No global request size policy (Kestrel default 30 MB), no rate limiting | M2 limits, lead |
 | S5 | GitHub Actions pinned by major tag, not commit SHA | lead approval needed |
 | S6 | FastAPI `/docs` and `/openapi.json` exposed | M6 |

@@ -464,3 +464,23 @@ Status: **IMPLEMENTED — BUILD VERIFIED; TEST EXECUTION PENDING (Linux CI)** on
 3. **C6 methods and headers:**
    - `DELETE`, `Idempotency-Key` and `traceparent` are **not** allowed yet: no current endpoint uses them (Decision 6: explicit *required* methods and headers).
    - They are added when an approved endpoint needs them (C2/C5b idempotency).
+
+## 23. Host-header filtering (STEP 05, lead decisions H1–H4 and H8, 2026-11-21)
+
+**Status:** implemented on `feature/m4-allowed-hosts` (not merged). Closes the host-filtering part of QA finding S3.
+
+| Decision | Implementation |
+|---|---|
+| H1 default list | `appsettings.json`: `"AllowedHosts": "localhost;127.0.0.1;[::1]"` (the framework host-filtering middleware; ports are not part of the match) |
+| H2 start-up validation | `API/Configuration/AllowedHostsValidation.cs` (`IValidateOptions<HostFilteringOptions>` + `ValidateOnStart`). Outside Development (Testing, Staging, Production, any other environment), start-up fails when the key is missing or empty, because the framework would otherwise fall back to `*`; when it contains `*`; or when an entry has a scheme, port, path, query, fragment or user information, or is not a valid host name or IP (IPv6 must be bracketed) |
+| H3 | No subdomain wildcards (`*.domain`) outside Development |
+| H4 | Development is unrestricted: a developer may set `AllowedHosts` to `*` or add names through an environment variable or user secrets (runbook §5a) |
+| H8 | The framework's standard rejection is kept: **400**, a static 334-byte HTML page "Bad Request - Invalid Hostname". It is written before BuildMind's middleware, so it carries no BuildMind security headers, but it reflects no input and reveals no application detail |
+
+- **Deployment host names are not configured:** Staging and Production must supply them through deployment configuration (G11).
+- **Interplay with CORS:** host filtering runs before CORS, so a request to an unlisted host is rejected before any CORS evaluation. `AllowedHosts` lists the API's own names; frontend origins stay in `Cors:AllowedOrigins`.
+- **Deferred to G11:**
+  - proxy topology and forwarded headers. Recommended: the proxy preserves `Host`; only `X-Forwarded-For`/`X-Forwarded-Proto` are accepted, and only from known proxies;
+  - HTTPS redirection, HSTS and certificates;
+  - the Host used by health probes.
+- **Tests:** `HostFilteringTests` (40).
